@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SCORPION 741 — Farm &amp; Village Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- Splash / Title Overlay -->
+      <div id="start-overlay" class="overlay">
+        <div class="start-card">
+          <div class="brand-strip">
+            <span class="claas-badge">CLAAS</span>
+            <span class="model-name">SCORPION 741</span>
+            <span class="varipower-tag">VARIPOWER</span>
+          </div>
+          <h1>Scorpion 741: Farm &amp; Village</h1>
+          <p class="subtitle">
+            Drive your 8-ton CLAAS Scorpion 741 across the working farmyard and out through the north stone gate
+            into <strong>Scorpion Green Village</strong>. Stack pallets with surgical precision—or switch to
+            <strong>Village Chaos</strong> to hoist cars, smash trees, and terrorize the High Street!
+          </p>
+
+          <div class="mode-picker">
+            <button id="pick-farm" class="mode-card selected" type="button">
+              <div class="mode-title">🚜 Farm Shift (Careful)</div>
+              <div class="mode-desc">
+                Match the right attachment at the shed, watch your tires, keep silage plastic sealed, and stack pallets cleanly onto the flatbed trailer.
+              </div>
+            </button>
+            <button id="pick-chaos" class="mode-card chaos" type="button">
+              <div class="mode-title">🔥 Village Chaos (GTA Mode)</div>
+              <div class="mode-desc">
+                Pure physics mayhem! Drive into town, lift &amp; fling cars with the boom, topple trees &amp; phone boxes, scatter villagers, and rack up Wanted stars!
+              </div>
+            </button>
+          </div>
+
+          <div class="controls-grid">
+            <div class="ctrl-group">
+              <h3>Drive &amp; Precision</h3>
+              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive &amp; Steer</div>
+              <div><kbd>Shift</kbd> Varipower Fast · <kbd>Alt</kbd> Precision Creep</div>
+              <div><kbd>X</kbd> 4WS / 2WS / Crab Steer</div>
+              <div><kbd>H</kbd> Horn (scares villagers!) · <kbd>V</kbd> Camera</div>
+            </div>
+            <div class="ctrl-group">
+              <h3>Boom &amp; Physics Handling</h3>
+              <div><kbd>↑</kbd><kbd>↓</kbd> or <kbd>Q</kbd><kbd>E</kbd> Raise / Lower Boom</div>
+              <div><kbd>R</kbd><kbd>F</kbd> Extend / Retract Telescopic Arm</div>
+              <div><kbd>←</kbd><kbd>→</kbd> or <kbd>Z</kbd><kbd>C</kbd> Level / Tilt Carriage</div>
+              <div><kbd>Space</kbd> Grab / Set Down (Spin + Release = Throw!)</div>
+              <div><kbd>T</kbd> Couple / Drop Tool at Shed · <kbd>M</kbd> Hints</div>
+            </div>
+          </div>
+
+          <button id="start-btn" class="primary-btn">Fire Up the Scorpion!</button>
+          <p class="hint-line">Drag mouse to orbit camera · Scroll to zoom · Switch modes live anytime in the top-right!</p>
+        </div>
+      </div>
+
+      <!-- In-Game HUD -->
+      <div id="hud" class="hud hidden">
+        <!-- Top Left: Farm Shift Clipboard -->
+        <div class="hud-panel top-left clipboard" id="farm-panel">
+          <div class="tidy-header">
+            <div class="title-row">
+              <span class="mini-claas">CLAAS</span>
+              <span class="mini-model">FARM SHIFT</span>
+            </div>
+            <div class="score-pill">
+              <span id="stars-val" class="stars">★★★</span>
+              <span id="score-val">0</span>
+            </div>
+          </div>
+
+          <div class="progress-wrap">
+            <div class="progress-label-row">
+              <span>Yard Organization</span>
+              <span id="tidy-pct">0%</span>
+            </div>
+            <div class="progress-bar">
+              <div id="tidy-bar-fill" class="progress-fill" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <div class="chore-list" id="chore-list">
+            <div class="chore-item" data-zone="logs">
+              <span class="chore-check">○</span>
+              <span class="chore-text">Clear fallen logs to firewood rack</span>
+              <strong id="count-logs">0/3</strong>
+            </div>
+            <div class="chore-item" data-zone="crates">
+              <span class="chore-check">○</span>
+              <span class="chore-text">Stack produce pallets on flatbed trailer</span>
+              <strong id="count-crates">0/4</strong>
+            </div>
+            <div class="chore-item" data-zone="hay">
+              <span class="chore-check">○</span>
+              <span class="chore-text">Stack dry hay bales in red barn</span>
+              <strong id="count-hay">0/4</strong>
+            </div>
+            <div class="chore-item" data-zone="silage">
+              <span class="chore-check">○</span>
+              <span class="chore-text">Line wrapped silage in concrete clamp</span>
+              <strong id="count-silage">0/4</strong>
+            </div>
+            <div class="chore-item" data-zone="harvest">
+              <span class="chore-check">○</span>
+              <span class="chore-text">Scoop loose pumpkins into shop bin</span>
+              <strong id="count-harvest">0/4</strong>
+            </div>
+            <div class="chore-item" data-zone="scrap">
+              <span class="chore-check">○</span>
+              <span class="chore-text">Clear drums, tires &amp; broken junk to skip</span>
+              <strong id="count-scrap">0/4</strong>
+            </div>
+          </div>
+
+          <div class="damage-row">
+            <span>Damaged / Spoiled:</span>
+            <strong id="damaged-val" class="ok">0</strong>
+          </div>
+        </div>
+
+        <!-- Top Left: Village Chaos (GTA Destruct Mode) Panel -->
+        <div class="hud-panel top-left chaos-panel hidden" id="chaos-panel">
+          <div class="tidy-header">
+            <div class="title-row">
+              <span class="mini-claas chaos-tag">CHAOS</span>
+              <span class="mini-model">VILLAGE MAYHEM</span>
+            </div>
+            <div id="wanted-stars" class="wanted-stars">☆☆☆☆☆</div>
+          </div>
+          <div class="chaos-score-big">
+            <span>DAMAGE BILL</span>
+            <strong id="chaos-bill">£0</strong>
+          </div>
+          <div class="chaos-stats">
+            <div><span>Cars Wrecked / Tossed</span><strong id="stat-cars">0</strong></div>
+            <div><span>Trees &amp; Lamps Toppled</span><strong id="stat-trees">0</strong></div>
+            <div><span>Props &amp; Stalls Smashed</span><strong id="stat-props">0</strong></div>
+            <div><span>Villagers Scattered</span><strong id="stat-peds">0</strong></div>
+          </div>
+          <div class="chaos-tip">
+            Head north through the stone gate into <strong>Scorpion Green Village</strong>! Any attachment can lift cars &amp; wreck town!
+          </div>
+        </div>
+
+        <!-- Top Right: Mode Toggle & Utilities -->
+        <div class="hud-panel top-right">
+          <div class="btn-row">
+            <button id="btn-mode" class="hud-btn mode-toggle-btn" title="Switch between Farm Shift and Village Chaos">
+              Mode: Farm Shift
+            </button>
+            <button id="btn-camera" class="hud-btn" title="Switch Camera (V)">Cam: Chase</button>
+            <button id="btn-sound" class="hud-btn" title="Toggle Sound">SFX: On</button>
+            <button id="btn-help" class="hud-btn" title="Controls">?</button>
+          </div>
+          <div class="btn-row">
+            <button id="btn-hints" class="hud-btn" title="Toggle Subtle Destination Clues (M)">Hints: Off</button>
+            <button id="btn-mess" class="hud-btn accent" title="Drop fresh clutter">
+              + More Clutter
+            </button>
+            <button id="btn-reset" class="hud-btn" title="Reset Tractor Position">Reset</button>
+          </div>
+        </div>
+
+        <!-- Center Toasts / Meters / Prompt -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <div id="squeeze-meter" class="squeeze-meter hidden">
+          <span class="squeeze-lbl">CLAMP PRESSURE</span>
+          <div class="squeeze-track">
+            <div id="squeeze-fill" class="squeeze-fill"></div>
+          </div>
+          <span id="squeeze-warn" class="squeeze-warn">Gentle Grip</span>
+        </div>
+
+        <div id="interact-prompt" class="interact-prompt hidden"></div>
+
+        <!-- Bottom Left: Boom & Precision Telemetry -->
+        <div class="hud-panel bottom-left">
+          <div class="tele-row">
+            <div class="gauge">
+              <span class="gauge-lbl">BOOM LIFT</span>
+              <div class="gauge-track"><div id="gauge-lift" class="gauge-fill"></div></div>
+            </div>
+            <div class="gauge">
+              <span class="gauge-lbl">TELESCOPE</span>
+              <div class="gauge-track"><div id="gauge-ext" class="gauge-fill green"></div></div>
+            </div>
+            <div class="gauge">
+              <span class="gauge-lbl">LEVEL / TILT</span>
+              <div class="gauge-track center-mark"><div id="gauge-tilt" class="gauge-fill orange"></div></div>
+            </div>
+          </div>
+          <div class="status-pills">
+            <span id="steer-badge" class="pill pill-green">4-Wheel Steer [X]</span>
+            <span id="creep-badge" class="pill hidden">Precision Creep</span>
+            <span id="hold-badge" class="pill">No Load</span>
+          </div>
+        </div>
+
+        <!-- Bottom Center: Active Attachment Readout -->
+        <div class="hud-panel bottom-center">
+          <div class="tool-status-bar">
+            <div class="active-tool-readout">
+              <span class="tool-readout-lbl">HITCHED TOOL</span>
+              <strong id="active-tool-name">Pallet Forks</strong>
+              <span id="active-tool-tip" class="tool-tip">Level forks under Produce Pallets</span>
+            </div>
+            <button id="btn-hitch-action" class="hud-btn hitch-btn" title="Couple or drop attachment (T)">
+              [T] Drop / Couple
+            </button>
+          </div>
+          <div class="mini-controls-hint">
+            <kbd>WASD</kbd> Drive · <kbd>Alt</kbd> Creep · <kbd>Q/E</kbd> Lift · <kbd>R/F</kbd> Extend · <kbd>Z/C</kbd> Tilt · <kbd>Space</kbd> Grab/Release · <kbd>T</kbd> Tool Shed
+          </div>
+        </div>
+      </div>
+
+      <!-- Victory Banner -->
+      <div id="victory-banner" class="victory-banner hidden">
+        <h2 id="victory-title">Morning Shift Complete!</h2>
+        <p id="victory-sub">The whole yard is tidy and ready for market pickup!</p>
+        <div class="btn-row" style="justify-content: center; margin-top: 10px">
+          <button id="btn-victory-chaos" class="primary-btn small">Unleash Village Chaos!</button>
+          <button id="btn-victory-close" class="hud-btn">Keep Driving</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
