@@ -4,12 +4,15 @@ import {
   createBarnWoodTexture,
   createConcreteTexture,
   createCorrugatedMetalTexture,
+  createDetailBumpTexture,
   createFarmGroundTexture,
   createHayTexture,
+  createMeadowDetailTexture,
   createPebbledashTexture,
   createStoneWallTexture,
   createWrappedSilageTexture
 } from './textures';
+import { buildTerrainAndLake, getTerrainHeight } from './terrain';
 import { ZoneKey } from './props';
 
 export interface TidyZone {
@@ -35,6 +38,8 @@ export class FarmEnvironment {
   public pondCenter = new THREE.Vector3(12, 0, 23);
   public pondRadius = 4.9;
   public trailerDeckY = 1.02;
+  public lakeWaterMesh!: THREE.Mesh;
+  public nightGlowMaterials: THREE.MeshStandardMaterial[] = [];
 
   private windmillBlades!: THREE.Group;
   private ducks: { group: THREE.Group; angle: number; radius: number; speed: number }[] = [];
@@ -119,74 +124,77 @@ export class FarmEnvironment {
   }
 
   private buildGroundAndHills(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Broad Bavarian meadow extending far past both the farm and Münsing village (zero Z-fighting!)
-    const outerGrass = new THREE.Mesh(
-      new THREE.CircleGeometry(340, 64),
-      new THREE.MeshStandardMaterial({ color: 0x5d8843, roughness: 0.98 })
-    );
-    outerGrass.rotation.x = -Math.PI / 2;
-    outerGrass.position.y = -0.02;
-    outerGrass.receiveShadow = true;
-    scene.add(outerGrass);
+    // True continuous 3D Upper Bavarian terrain heightfield + shimmering Starnberger See lake!
+    const detailBump = createDetailBumpTexture();
+    const meadowTex = createMeadowDetailTexture();
+    const { waterMesh } = buildTerrainAndLake(scene, world, groundMat, detailBump, meadowTex);
+    this.lakeWaterMesh = waterMesh;
 
-    // Farmyard gravel/concrete/pasture courtyard cleanly seated inside the farm fences (y = 0.0)
+    // Farmyard gravel/concrete/mud-track apron cleanly seated on the flat y = 0 farm plateau
     const groundTex = createFarmGroundTexture();
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(66, 64),
-      new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.96, metalness: 0.02 })
+      new THREE.PlaneGeometry(66, 63),
+      new THREE.MeshStandardMaterial({
+        map: groundTex,
+        bumpMap: detailBump,
+        bumpScale: 0.08,
+        roughness: 0.94,
+        metalness: 0.02
+      })
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(0, 0.005, 0);
+    ground.position.set(0, 0.015, 0);
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // Distant rolling Upper Bavarian hills placed FAR outside the entire Farm + Münsing Village (>165m away!)
-    const hillColors = [0x4f783a, 0x5c8744, 0x486d35, 0x64904b];
-    const hillCoords: [number, number, number, number][] = [
-      [-170, -145, 58, 22],
-      [-75, -195, 68, 24],
-      [45, -198, 72, 26],
-      [155, -155, 62, 23],
-      [185, -35, 56, 20],
-      [165, 95, 60, 22],
-      [55, 165, 68, 24],
-      [-75, 162, 66, 22],
-      [-175, 85, 58, 21],
-      [-185, -30, 56, 20]
+    // Sculpted Upper Bavarian wooded foothills & ridges (faceted natural shapes instead of round spheres!)
+    const hillColors = [0x466d36, 0x527a3e, 0x3e6231, 0x5b8444];
+    const ridgeSpecs: [number, number, number, number, number][] = [
+      [-60, -215, 76, 26, 0.4],
+      [58, -218, 82, 29, -0.3],
+      [172, -165, 68, 25, 0.8],
+      [196, -35, 64, 23, 0.2],
+      [175, 95, 68, 25, -0.5],
+      [55, 180, 74, 26, 0.1],
+      [-75, 180, 72, 24, 0.6],
+      // Far western Starnberger See shore ridges (Tutzing / Feldafing wooded bluffs!)
+      [-288, -145, 86, 24, 0.3],
+      [-298, -35, 92, 28, -0.2],
+      [-290, 88, 88, 25, 0.5]
     ];
-    hillCoords.forEach(([hx, hz, hr, hh], idx) => {
-      const hill = new THREE.Mesh(
-        new THREE.SphereGeometry(hr, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5),
-        new THREE.MeshStandardMaterial({ color: hillColors[idx % hillColors.length], roughness: 0.97 })
+    ridgeSpecs.forEach(([hx, hz, hr, hh, rot], idx) => {
+      const ridge = new THREE.Mesh(
+        new THREE.ConeGeometry(hr, hh, 7),
+        new THREE.MeshStandardMaterial({ color: hillColors[idx % hillColors.length], roughness: 0.96, flatShading: true })
       );
-      hill.scale.y = hh / hr;
-      hill.position.set(hx, -0.5, hz);
-      scene.add(hill);
+      ridge.position.set(hx, hh * 0.45 - 4.2, hz);
+      ridge.rotation.y = rot;
+      ridge.scale.set(1.35, 1, 0.85);
+      scene.add(ridge);
     });
 
-    // Iconic distant Bavarian Alps silhouette far on the southern horizon (authentic Münsing view!)
-    const alpRock = new THREE.MeshStandardMaterial({ color: 0x6f8396, roughness: 0.95 });
-    const alpSnow = new THREE.MeshStandardMaterial({ color: 0xeaf0f5, roughness: 0.85 });
+    // Panoramic snow-capped Bavarian Alps (Karwendel & Zugspitze silhouette!) across the southern & southwestern horizon
+    const alpRock = new THREE.MeshStandardMaterial({ color: 0x627990, roughness: 0.94, flatShading: true });
+    const alpSnow = new THREE.MeshStandardMaterial({ color: 0xedf4fa, roughness: 0.85, flatShading: true });
     const alpPeaks: [number, number, number, number][] = [
-      [-160, 225, 48, 52],
-      [-90, 245, 58, 68],
-      [-15, 250, 62, 76],
-      [68, 242, 56, 66],
-      [148, 228, 52, 56]
+      [-270, 175, 62, 68],
+      [-215, 225, 64, 74],
+      [-140, 248, 66, 82],
+      [-55, 262, 72, 92],
+      [35, 260, 70, 88],
+      [120, 246, 62, 74],
+      [195, 225, 58, 64]
     ];
     for (const [ax, az, ar, ah] of alpPeaks) {
-      const peak = new THREE.Mesh(new THREE.ConeGeometry(ar, ah, 7), alpRock);
-      peak.position.set(ax, ah * 0.5 - 2, az);
+      const peak = new THREE.Mesh(new THREE.ConeGeometry(ar, ah, 6), alpRock);
+      peak.position.set(ax, ah * 0.5 - 3, az);
+      peak.rotation.y = ax * 0.03;
       scene.add(peak);
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(ar * 0.38, ah * 0.38, 7), alpSnow);
-      cap.position.set(ax, ah * 0.81 - 2, az);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(ar * 0.38, ah * 0.38, 6), alpSnow);
+      cap.position.set(ax, ah * 0.81 - 3, az);
+      cap.rotation.y = ax * 0.03;
       scene.add(cap);
     }
-
-    const planeBody = new CANNON.Body({ mass: 0, material: groundMat });
-    planeBody.addShape(new CANNON.Plane());
-    planeBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-    world.addBody(planeBody);
   }
 
   private buildBoundaries(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
@@ -286,11 +294,11 @@ export class FarmEnvironment {
       }
     }
 
-    // Wide outer world boundaries encompassing Farmyard + entire Münsing Village!
-    this.addStaticBox(world, groundMat, 0, 4, -112, 186, 8, 1.4);
-    this.addStaticBox(world, groundMat, 0, 4, 34, 186, 8, 1.4);
-    this.addStaticBox(world, groundMat, -90, 4, -39, 1.4, 8, 150);
-    this.addStaticBox(world, groundMat, 90, 4, -39, 1.4, 8, 150);
+    // Wide outer world boundaries encompassing Farmyard + Münsing + Ammerland & Starnberger See shore!
+    this.addStaticBox(world, groundMat, -18, 4, -116, 220, 14, 1.4);
+    this.addStaticBox(world, groundMat, -18, 4, 38, 220, 14, 1.4);
+    this.addStaticBox(world, groundMat, -125, 0, -39, 1.4, 14, 160);
+    this.addStaticBox(world, groundMat, 92, 4, -39, 1.4, 14, 160);
   }
 
   private buildHayBarn(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
@@ -855,7 +863,7 @@ export class FarmEnvironment {
         tree.add(crown);
       }
       tree.scale.setScalar(s);
-      tree.position.set(tx, 0, tz);
+      tree.position.set(tx, getTerrainHeight(tx, tz) - 0.1, tz);
       scene.add(tree);
     }
 

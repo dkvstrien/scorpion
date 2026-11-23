@@ -46,6 +46,7 @@ export interface FarmProp {
 
 export class PropManager {
   public props: FarmProp[] = [];
+  private debris: { mesh: THREE.Mesh; body: CANNON.Body; life: number }[] = [];
   private nextId = 1;
   private scene: THREE.Scene;
   private world: CANNON.World;
@@ -490,15 +491,24 @@ export class PropManager {
     if (!prop.crushable) return false;
 
     prop.isDamaged = true;
+    const pos = new THREE.Vector3(prop.body.position.x, prop.body.position.y + 0.35, prop.body.position.z);
 
     if (prop.kind === 'pumpkin') {
       prop.label = 'Squashed Pumpkin';
       prop.mesh.scale.set(1.42, 0.25, 1.38);
-      // Squashed pumpkin becomes scrap!
       prop.targetZone = 'scrap';
+      this.spawnDebrisChunks(pos, 5, 0xd96518, 'sphere', 0.16);
     } else if (prop.kind === 'barrel') {
       prop.label = 'Crushed Oil Drum';
       prop.mesh.scale.set(0.5, 1.04, 1.34);
+      // Dark glossy spilled-oil puddle decal on ground beneath crushed drum!
+      const puddle = new THREE.Mesh(
+        new THREE.CircleGeometry(0.95, 16),
+        new THREE.MeshStandardMaterial({ color: 0x16171a, roughness: 0.14, metalness: 0.5 })
+      );
+      puddle.rotation.x = -Math.PI / 2;
+      puddle.position.set(pos.x, Math.max(0.03, prop.body.position.y - 0.55), pos.z);
+      this.scene.add(puddle);
     } else if (prop.kind === 'crate') {
       prop.label = 'Smashed Pallet';
       prop.targetZone = 'scrap';
@@ -507,11 +517,51 @@ export class PropManager {
         box.material = new THREE.MeshStandardMaterial({ map: this.texCrateDamaged, roughness: 0.9 });
       }
       prop.mesh.scale.set(1.12, 0.44, 1.12);
+      // Multi-piece physics splinters: real tumbling wooden planks + rolling red farm apples!
+      this.spawnDebrisChunks(pos, 5, 0x9c6832, 'plank', 0.24);
+      this.spawnDebrisChunks(pos, 6, 0xc92a22, 'sphere', 0.12);
     }
     return true;
   }
 
-  public syncMeshes(): void {
+  private spawnDebrisChunks(
+    origin: THREE.Vector3,
+    count: number,
+    color: number,
+    shapeType: 'plank' | 'sphere',
+    size: number
+  ): void {
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: shapeType === 'sphere' ? 0.35 : 0.85 });
+    for (let i = 0; i < count; i++) {
+      const geo =
+        shapeType === 'plank'
+          ? new THREE.BoxGeometry(size * 2.8, size * 0.25, size * 0.65)
+          : new THREE.SphereGeometry(size, 8, 6);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      this.scene.add(mesh);
+
+      const body = new CANNON.Body({
+        mass: 1.5,
+        material: this.propMaterial,
+        linearDamping: 0.2,
+        angularDamping: 0.25
+      });
+      if (shapeType === 'plank') {
+        body.addShape(new CANNON.Box(new CANNON.Vec3(size * 1.4, size * 0.125, size * 0.325)));
+      } else {
+        body.addShape(new CANNON.Sphere(size));
+      }
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.5;
+      body.position.set(origin.x + Math.cos(a) * 0.4, origin.y + 0.2 + Math.random() * 0.4, origin.z + Math.sin(a) * 0.4);
+      body.velocity.set(Math.cos(a) * (2.2 + Math.random() * 2.5), 2.5 + Math.random() * 2.2, Math.sin(a) * (2.2 + Math.random() * 2.5));
+      body.angularVelocity.set((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+      this.world.addBody(body);
+      this.debris.push({ mesh, body, life: 18 });
+    }
+  }
+
+  public syncMeshes(dt = 0.016): void {
     for (const p of this.props) {
       p.mesh.position.set(p.body.position.x, p.body.position.y, p.body.position.z);
       p.mesh.quaternion.set(
@@ -520,6 +570,18 @@ export class PropManager {
         p.body.quaternion.z,
         p.body.quaternion.w
       );
+    }
+    for (let i = this.debris.length - 1; i >= 0; i--) {
+      const d = this.debris[i];
+      d.life -= dt;
+      if (d.life <= 0) {
+        this.scene.remove(d.mesh);
+        this.world.removeBody(d.body);
+        this.debris.splice(i, 1);
+        continue;
+      }
+      d.mesh.position.set(d.body.position.x, d.body.position.y, d.body.position.z);
+      d.mesh.quaternion.set(d.body.quaternion.x, d.body.quaternion.y, d.body.quaternion.z, d.body.quaternion.w);
     }
   }
 }

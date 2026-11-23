@@ -469,3 +469,134 @@ export function createConcreteTexture(): THREE.CanvasTexture {
   tex.repeat.set(2, 2);
   return tex;
 }
+
+export function createDetailBumpTexture(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(256, 256);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4200; i++) {
+    const v = 90 + Math.floor(Math.random() * 80);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 4, 2 + Math.random() * 4);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(28, 28);
+  return tex;
+}
+
+export function createMeadowDetailTexture(): THREE.CanvasTexture {
+  // Subtle grayscale/warm-tinted painterly grass & clover texture that multiplies cleanly with terrain vertexColors!
+  const [c, ctx] = makeCanvas(256, 256);
+  ctx.fillStyle = '#e2e6de';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2400; i++) {
+    const x = Math.random() * 256;
+    const y = Math.random() * 256;
+    ctx.fillStyle =
+      i % 3 === 0
+        ? 'rgba(255,255,245,0.28)'
+        : i % 3 === 1
+          ? 'rgba(135,152,120,0.25)'
+          : 'rgba(175,188,155,0.22)';
+    ctx.fillRect(x, y, 2, 7 + Math.random() * 8);
+  }
+  // Tiny subtle wildflower flecks
+  for (let i = 0; i < 45; i++) {
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,244,180,0.55)' : 'rgba(255,255,255,0.5)';
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 2.5, 2.5);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(34, 28);
+  return tex;
+}
+
+export function createCobbleTexture(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(256, 256);
+  ctx.fillStyle = '#6c6860';
+  ctx.fillRect(0, 0, 256, 256);
+  const shades = ['#9d978c', '#8f897f', '#aba59a', '#7e7870', '#a39d92'];
+  let row = 0;
+  for (let y = 2; y < 254; y += 22) {
+    let x = row % 2 === 0 ? 2 : -10;
+    while (x < 256) {
+      const w = 22 + Math.random() * 14;
+      ctx.fillStyle = shades[Math.floor(Math.random() * shades.length)];
+      ctx.beginPath();
+      ctx.roundRect(x, y, w - 3, 18, 4);
+      ctx.fill();
+      x += w;
+    }
+    row++;
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4);
+  return tex;
+}
+
+export function createAsphaltTexture(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(256, 256);
+  ctx.fillStyle = '#3a3e43';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 3600; i++) {
+    const v = 42 + Math.floor(Math.random() * 38);
+    ctx.fillStyle = `rgb(${v},${v + 2},${v + 4})`;
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(14, 2);
+  return tex;
+}
+
+export function createSkyEnvTexture(mode: 'morning' | 'afternoon' | 'sunset' | 'dusk'): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(512, 256);
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  if (mode === 'morning') {
+    grad.addColorStop(0, '#6a9ec9');
+    grad.addColorStop(0.46, '#c7dfed');
+    grad.addColorStop(0.54, '#e5ebe2');
+    grad.addColorStop(1, '#4c6642');
+  } else if (mode === 'afternoon') {
+    grad.addColorStop(0, '#4688c7');
+    grad.addColorStop(0.47, '#a7d2ec');
+    grad.addColorStop(0.54, '#d9e6dc');
+    grad.addColorStop(1, '#4d6f3b');
+  } else if (mode === 'sunset') {
+    grad.addColorStop(0, '#364d7a');
+    grad.addColorStop(0.35, '#a8675c');
+    grad.addColorStop(0.5, '#f2a863');
+    grad.addColorStop(0.56, '#7a5942');
+    grad.addColorStop(1, '#303b2a');
+  } else {
+    grad.addColorStop(0, '#101c33');
+    grad.addColorStop(0.42, '#243c61');
+    grad.addColorStop(0.52, '#3d526e');
+    grad.addColorStop(1, '#1a231c');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 256);
+
+  // Soft sun disk in environment reflection
+  const sunY = mode === 'sunset' ? 122 : mode === 'dusk' ? 140 : 68;
+  const sunRad = mode === 'dusk' ? 18 : 34;
+  const sunGrad = ctx.createRadialGradient(380, sunY, 2, 380, sunY, sunRad);
+  sunGrad.addColorStop(0, mode === 'dusk' ? 'rgba(200,220,255,0.6)' : 'rgba(255,250,225,0.95)');
+  sunGrad.addColorStop(1, 'rgba(255,230,180,0)');
+  ctx.fillStyle = sunGrad;
+  ctx.fillRect(320, sunY - sunRad, sunRad * 2 + 40, sunRad * 2);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  return tex;
+}

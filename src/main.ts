@@ -7,45 +7,54 @@ import { FarmEnvironment } from './farm';
 import { FarmProp, PropManager, ZoneKey } from './props';
 import { AttachmentType, buildAttachmentMesh, ClaasScorpion, TOOL_META, TractorInput } from './tractor';
 import { VillageWorld } from './village';
+import { TireTrackSystem } from './tracks';
+import { MiniMapMarker, MuensingMiniMap } from './minimap';
+import { createSkyEnvTexture } from './textures';
+import { getTerrainHeight, WATER_LEVEL } from './terrain';
 
 type CameraMode = 'chase' | 'cab' | 'boom';
-type GameMode = 'farm' | 'chaos';
+type GameMode = 'farm' | 'freeplay';
+type TimeOfDay = 'afternoon' | 'sunset' | 'dusk' | 'morning';
 
 class ScorpionGame {
   private renderer: THREE.WebGLRenderer;
+  private pmrem: THREE.PMREMGenerator;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
+  private hemiLight!: THREE.HemisphereLight;
+  private sunLight!: THREE.DirectionalLight;
+  private rimLight!: THREE.DirectionalLight;
+  private currentEnvRT: THREE.WebGLRenderTarget | null = null;
+
   private world: CANNON.World;
   private audio = new FarmAudio();
   private particles: ParticleSystem;
+  private tracks: TireTrackSystem;
   private farm: FarmEnvironment;
   private village: VillageWorld;
   private propMgr: PropManager;
   private tractor: ClaasScorpion;
+  private minimap: MuensingMiniMap;
 
   private rackPreviews = new Map<Exclude<AttachmentType, 'none'>, THREE.Group>();
   private clouds: THREE.Group[] = [];
 
   private keys = new Set<string>();
+  private prevGamepadButtons: boolean[] = [];
   private started = false;
   private mode: GameMode = 'farm';
+  private timeOfDay: TimeOfDay = 'afternoon';
   private score = 0;
   private damagedCount = 0;
   private hintsOn = false;
   private victoryShown = false;
+  private churchBellTimer = 14;
 
-  // Village Chaos (GTA Destruct Mode) stats
-  private chaosBillGBP = 0;
-  private chaosCars = 0;
-  private chaosTrees = 0;
-  private chaosProps = 0;
-  private chaosPeds = 0;
-
-  // Camera state
+  // Camera state (framed slightly wider/lower so Münsing's onion-dome church spire & Alps shine cinematically!)
   private cameraMode: CameraMode = 'chase';
-  private camYawOffset = 0.25;
-  private camPitch = 0.42;
-  private camDist = 14.5;
+  private camYawOffset = 0.22;
+  private camPitch = 0.31;
+  private camDist = 15.8;
   private isDragging = false;
   private lastMouseX = 0;
   private lastMouseY = 0;
@@ -56,23 +65,19 @@ class ScorpionGame {
   private startOverlay = document.getElementById('start-overlay')!;
   private hud = document.getElementById('hud')!;
   private farmPanel = document.getElementById('farm-panel')!;
-  private chaosPanel = document.getElementById('chaos-panel')!;
+  private freeplayPanel = document.getElementById('freeplay-panel')!;
+  private locationReadout = document.getElementById('location-readout')!;
   private pickFarmBtn = document.getElementById('pick-farm')!;
-  private pickChaosBtn = document.getElementById('pick-chaos')!;
+  private pickFreeplayBtn = document.getElementById('pick-freeplay')!;
   private btnMode = document.getElementById('btn-mode')!;
+  private btnTime = document.getElementById('btn-time')!;
+  private btnLights = document.getElementById('btn-lights')!;
 
   private scoreEl = document.getElementById('score-val')!;
   private starsEl = document.getElementById('stars-val')!;
   private damagedEl = document.getElementById('damaged-val')!;
   private tidyPctEl = document.getElementById('tidy-pct')!;
   private tidyBarEl = document.getElementById('tidy-bar-fill')!;
-
-  private wantedStarsEl = document.getElementById('wanted-stars')!;
-  private chaosBillEl = document.getElementById('chaos-bill')!;
-  private statCarsEl = document.getElementById('stat-cars')!;
-  private statTreesEl = document.getElementById('stat-trees')!;
-  private statPropsEl = document.getElementById('stat-props')!;
-  private statPedsEl = document.getElementById('stat-peds')!;
 
   private toastContainer = document.getElementById('toast-container')!;
   private interactPrompt = document.getElementById('interact-prompt')!;
@@ -82,6 +87,7 @@ class ScorpionGame {
   private gaugeLift = document.getElementById('gauge-lift')!;
   private gaugeExt = document.getElementById('gauge-ext')!;
   private gaugeTilt = document.getElementById('gauge-tilt')!;
+  private gaugeStab = document.getElementById('gauge-stab')!;
   private steerBadge = document.getElementById('steer-badge')!;
   private creepBadge = document.getElementById('creep-badge')!;
   private holdBadge = document.getElementById('hold-badge')!;
@@ -105,24 +111,24 @@ class ScorpionGame {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.02;
+    this.renderer.toneMappingExposure = 1.04;
+
+    this.pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.pmrem.compileEquirectangularShader();
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x98bdd6);
-    this.scene.fog = new THREE.Fog(0xb9d4e6, 115, 340);
-
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 450);
+    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 520);
     this.camera.position.set(8, 7.5, 25);
 
     this.setupLightingAndSky();
 
-    // Dialed-in Cannon-es solver for realistic, zero-bounce wood-on-wood pallet stacking!
+    // High-precision Cannon-es solver for zero-bounce realistic wood-on-wood pallet stacking!
     this.world = new CANNON.World({
       gravity: new CANNON.Vec3(0, -16.5, 0)
     });
     this.world.broadphase = new CANNON.SAPBroadphase(this.world);
     this.world.allowSleep = true;
-    (this.world.solver as CANNON.GSSolver).iterations = 20;
+    (this.world.solver as CANNON.GSSolver).iterations = 22;
 
     const groundMat = new CANNON.Material('ground');
     const propMat = new CANNON.Material('prop');
@@ -130,33 +136,46 @@ class ScorpionGame {
 
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(groundMat, propMat, {
-        friction: 0.82,
-        restitution: 0.02,
+        friction: 0.84,
+        restitution: 0.015,
         contactEquationStiffness: 1e7,
         contactEquationRelaxation: 4
       })
     );
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(propMat, propMat, {
-        friction: 0.86,
-        restitution: 0.02,
+        friction: 0.88,
+        restitution: 0.015,
         contactEquationStiffness: 1e7,
         contactEquationRelaxation: 4
       })
     );
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(tractorMat, propMat, {
-        friction: 0.62,
-        restitution: 0.05
+        friction: 0.68,
+        restitution: 0.04
       })
     );
 
     this.particles = new ParticleSystem(this.scene);
+    this.tracks = new TireTrackSystem(this.scene);
     this.farm = new FarmEnvironment(this.scene, this.world, groundMat);
 
-    // Whole countryside village of Scorpion Green right outside the north stone gate!
     this.village = new VillageWorld(this.scene, this.world, groundMat, propMat, {
-      onChaosEvent: (category, label, costGBP, pos) => this.handleChaosEvent(category, label, costGBP, pos)
+      onTreeOrLampToppled: (label, kind, pos) => {
+        this.audio.playCrush(kind === 'lamp');
+        this.particles.spawnCrush(
+          pos,
+          kind === 'lamp' ? [0x3b4045, 0xffe288] : [0x4b7e39, 0x624228, 0x35622e]
+        );
+        this.showToast(kind === 'maibaum' ? 'TIMBER! You toppled the Münsing Maibaum!' : `Toppled ${label}!`, 'trick');
+      },
+      onCarHonk: (alarm) => this.audio.playCarHorn(alarm),
+      onLakeSplash: (label, pos) => {
+        this.audio.playImpact(8, 'water');
+        this.particles.spawnSplash(pos);
+        this.showToast(`SPLASH! ${label} went into Starnberger See!`);
+      }
     });
 
     for (const spot of this.farm.rackSpots) {
@@ -183,14 +202,14 @@ class ScorpionGame {
       onPropDamaged: (prop, reason) => this.handlePropDamage(prop, reason),
       onPropFling: (label, speed) => {
         this.audio.playFling();
-        this.showToast(`FLUNG ${label}! (${Math.round(speed * 2.2)} mph)`, 'trick');
+        this.showToast(`LAUNCHED ${label}! (${Math.round(speed * 2.2)} mph)`, 'trick');
       },
       onPropGrabbed: (label, _tool, isSilageIntact) => {
         this.audio.playHitch(true);
         if (isSilageIntact) {
           this.showToast('Gentle Silage Grip — Plastic Sealed!');
-        } else if (this.mode === 'chaos') {
-          this.showToast(`HOISTED ${label.toUpperCase()}!`, 'trick');
+        } else if (this.mode === 'freeplay') {
+          this.showToast(`Lifted ${label}`);
         }
       },
       onWrongTool: (message) => {
@@ -202,116 +221,208 @@ class ScorpionGame {
         this.updateToolReadout();
         this.showToast(attached ? `Coupled: ${TOOL_META[tool].name}` : 'Attachment Uncoupled');
       },
-      onDust: (pos) => this.particles.spawnDust(pos)
+      onDust: (pos) => this.particles.spawnDust(pos),
+      onExhaust: (pos) =>
+        this.particles.burst(pos, 1, {
+          colors: [0x505559, 0x6c7276],
+          speed: 0.75,
+          upBias: 1.9,
+          size: 0.16,
+          life: 0.65,
+          gravity: -1.1,
+          shape: 'puff',
+          grow: true
+        }),
+      onWheelTrack: (x, z, heading) => this.tracks.stampWheel(x, z, heading),
+      onOverloadAlarm: () => this.audio.playOverloadBeep()
     });
 
+    this.minimap = new MuensingMiniMap(document.getElementById('minimap-canvas') as HTMLCanvasElement);
+
+    this.applyTimeOfDay('afternoon');
     this.updateToolReadout();
     this.bindEvents();
     this.animate();
   }
 
   private setupLightingAndSky(): void {
-    const hemi = new THREE.HemisphereLight(0xd4e8f5, 0x5c7044, 0.8);
-    this.scene.add(hemi);
+    this.hemiLight = new THREE.HemisphereLight(0xd4e8f5, 0x5c7044, 0.85);
+    this.scene.add(this.hemiLight);
 
-    const sun = new THREE.DirectionalLight(0xfff0cf, 1.8);
-    sun.position.set(42, 68, 22);
-    sun.target.position.set(0, 0, -35);
-    this.scene.add(sun.target);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 230;
-    const d = 96;
-    sun.shadow.camera.left = -d;
-    sun.shadow.camera.right = d;
-    sun.shadow.camera.top = d;
-    sun.shadow.camera.bottom = -d;
-    sun.shadow.bias = -0.0006;
-    this.scene.add(sun);
+    this.sunLight = new THREE.DirectionalLight(0xfff0cf, 1.8);
+    this.sunLight.position.set(42, 68, 22);
+    this.sunLight.target.position.set(-15, 0, -35);
+    this.scene.add(this.sunLight.target);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.set(2048, 2048);
+    this.sunLight.shadow.camera.near = 10;
+    this.sunLight.shadow.camera.far = 260;
+    const d = 105;
+    this.sunLight.shadow.camera.left = -d;
+    this.sunLight.shadow.camera.right = d;
+    this.sunLight.shadow.camera.top = d;
+    this.sunLight.shadow.camera.bottom = -d;
+    this.sunLight.shadow.bias = -0.0006;
+    this.scene.add(this.sunLight);
 
-    const rim = new THREE.DirectionalLight(0xaacbe6, 0.35);
-    rim.position.set(-28, 22, -40);
-    this.scene.add(rim);
+    this.rimLight = new THREE.DirectionalLight(0xaacbe6, 0.35);
+    this.rimLight.position.set(-40, 24, -50);
+    this.scene.add(this.rimLight);
 
     const cloudMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f7, roughness: 0.96 });
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 14; i++) {
       const cloud = new THREE.Group();
       for (let p = 0; p < 4; p++) {
-        const puff = new THREE.Mesh(new THREE.SphereGeometry(2.8 + (p % 2) * 1.2, 10, 8), cloudMat);
-        puff.position.set((p - 1.5) * 2.2, (p % 2) * 0.65, ((p % 3) - 1) * 0.85);
-        puff.scale.y = 0.6;
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(3.2 + (p % 2) * 1.4, 10, 8), cloudMat);
+        puff.position.set((p - 1.5) * 2.4, (p % 2) * 0.7, ((p % 3) - 1) * 0.9);
+        puff.scale.y = 0.58;
         cloud.add(puff);
       }
-      cloud.position.set(-80 + i * 16, 28 + (i % 3) * 4, -75 + (i % 4) * 32);
+      cloud.position.set(-130 + i * 20, 34 + (i % 3) * 5, -90 + (i % 4) * 38);
       this.scene.add(cloud);
       this.clouds.push(cloud);
     }
   }
 
+  private applyTimeOfDay(tod: TimeOfDay): void {
+    this.timeOfDay = tod;
+
+    // Generate authentic PMREM sky environment reflections for glass, chrome, silage plastic & Lake Starnberg!
+    const envTex = createSkyEnvTexture(tod);
+    if (this.currentEnvRT) this.currentEnvRT.dispose();
+    this.currentEnvRT = this.pmrem.fromEquirectangular(envTex);
+    this.scene.environment = this.currentEnvRT.texture;
+    envTex.dispose();
+
+    const configs: Record<
+      TimeOfDay,
+      {
+        label: string;
+        sky: number;
+        fog: number;
+        fogNear: number;
+        fogFar: number;
+        sunCol: number;
+        sunInt: number;
+        sunPos: [number, number, number];
+        hemiSky: number;
+        hemiInt: number;
+        nightAmt: number;
+        autoLights: boolean;
+      }
+    > = {
+      afternoon: {
+        label: '☀ Afternoon',
+        sky: 0x90bede,
+        fog: 0xb6d3e6,
+        fogNear: 120,
+        fogFar: 360,
+        sunCol: 0xfff3d4,
+        sunInt: 1.8,
+        sunPos: [42, 68, 22],
+        hemiSky: 0xd6ecff,
+        hemiInt: 0.85,
+        nightAmt: 0.0,
+        autoLights: false
+      },
+      sunset: {
+        label: '🌅 Golden Sunset',
+        sky: 0xd98a5b,
+        fog: 0xd99b72,
+        fogNear: 95,
+        fogFar: 320,
+        sunCol: 0xffa857,
+        sunInt: 1.65,
+        sunPos: [-95, 22, -32],
+        hemiSky: 0xffc494,
+        hemiInt: 0.65,
+        nightAmt: 0.6,
+        autoLights: true
+      },
+      dusk: {
+        label: '🌙 Blue Hour',
+        sky: 0x1c2e4a,
+        fog: 0x243652,
+        fogNear: 75,
+        fogFar: 280,
+        sunCol: 0x8bb6e8,
+        sunInt: 0.45,
+        sunPos: [-50, 35, -40],
+        hemiSky: 0x456594,
+        hemiInt: 0.42,
+        nightAmt: 1.0,
+        autoLights: true
+      },
+      morning: {
+        label: '🌫 Morning Mist',
+        sky: 0xb8d4e3,
+        fog: 0xd6e3e8,
+        fogNear: 68,
+        fogFar: 255,
+        sunCol: 0xfff4e0,
+        sunInt: 1.45,
+        sunPos: [82, 34, 15],
+        hemiSky: 0xe6f2fa,
+        hemiInt: 0.92,
+        nightAmt: 0.12,
+        autoLights: false
+      }
+    };
+
+    const cfg = configs[tod];
+    this.scene.background = new THREE.Color(cfg.sky);
+    this.scene.fog = new THREE.Fog(cfg.fog, cfg.fogNear, cfg.fogFar);
+    this.sunLight.color.setHex(cfg.sunCol);
+    this.sunLight.intensity = cfg.sunInt;
+    this.sunLight.position.set(...cfg.sunPos);
+    this.hemiLight.color.setHex(cfg.hemiSky);
+    this.hemiLight.intensity = cfg.hemiInt;
+    this.village.setNightMode(cfg.nightAmt);
+    this.setWorkLights(cfg.autoLights);
+    this.btnTime.textContent = cfg.label;
+  }
+
+  private cycleTimeOfDay(): void {
+    const order: TimeOfDay[] = ['afternoon', 'sunset', 'dusk', 'morning'];
+    const next = order[(order.indexOf(this.timeOfDay) + 1) % order.length];
+    this.applyTimeOfDay(next);
+    this.showToast(`Sky: ${this.btnTime.textContent}`);
+  }
+
+  private setWorkLights(on: boolean): void {
+    this.tractor.setWorkLights(on);
+    this.btnLights.textContent = on ? 'Lights: On' : 'Lights: Off';
+    this.btnLights.classList.toggle('active-toggle', on);
+  }
+
   private setMode(next: GameMode): void {
     this.mode = next;
-    this.tractor.chaosMode = next === 'chaos';
+    this.tractor.freePlayMode = next === 'freeplay';
 
     this.pickFarmBtn.classList.toggle('selected', next === 'farm');
-    this.pickChaosBtn.classList.toggle('selected', next === 'chaos');
+    this.pickFreeplayBtn.classList.toggle('selected', next === 'freeplay');
 
     this.farmPanel.classList.toggle('hidden', next !== 'farm');
-    this.chaosPanel.classList.toggle('hidden', next !== 'chaos');
+    this.freeplayPanel.classList.toggle('hidden', next !== 'freeplay');
 
-    this.btnMode.textContent = next === 'chaos' ? 'Mode: Village Chaos 🔥' : 'Mode: Farm Shift';
-    this.btnMode.classList.toggle('chaos-active', next === 'chaos');
+    this.btnMode.textContent = next === 'freeplay' ? 'Mode: Free Play 🏔️' : 'Mode: Farm Shift';
+    this.btnMode.classList.toggle('free-active', next === 'freeplay');
 
     if (this.started) {
-      if (next === 'chaos') {
-        this.audio.playHorn();
-        this.showToast('VILLAGE CHAOS ACTIVE! Drive north through the gate!', 'trick');
+      if (next === 'freeplay') {
+        this.showToast('Open-World Free Play — Explore Münsing & Starnberger See!');
       } else {
         this.showToast('Farm Shift Mode — Careful handling & tool rules active!');
       }
     }
   }
 
-  private handleChaosEvent(
-    category: 'car' | 'tree' | 'prop' | 'ped',
-    label: string,
-    costGBP: number,
-    pos: THREE.Vector3
-  ): void {
-    this.chaosBillGBP += costGBP;
-    if (category === 'car') {
-      this.chaosCars++;
-      this.audio.playCrush(true);
-      this.particles.spawnCrush(pos, [0xd94420, 0x747c82, 0xffe370]);
-    } else if (category === 'tree') {
-      this.chaosTrees++;
-      this.audio.playCrush(false);
-      this.particles.spawnCrush(pos, [0x4b7e39, 0x624228, 0x35622e]);
-    } else if (category === 'prop') {
-      this.chaosProps++;
-      this.audio.playCrush(false);
-      this.particles.spawnCrush(pos, [0xc9251e, 0x8f5d2b, 0xf2f0e6]);
-    } else {
-      this.chaosPeds++;
-      this.audio.playScoreChime(false);
-      this.particles.burst(pos, 8, { colors: [0xffe370, 0xffffff], speed: 3.5, upBias: 3, size: 0.14, life: 0.7 });
-    }
-
-    // Update Chaos HUD & GTA Wanted Stars!
-    this.chaosBillEl.textContent = `€${this.chaosBillGBP.toLocaleString()}`;
-    this.statCarsEl.textContent = String(this.chaosCars);
-    this.statTreesEl.textContent = String(this.chaosTrees);
-    this.statPropsEl.textContent = String(this.chaosProps);
-    this.statPedsEl.textContent = String(this.chaosPeds);
-
-    const stars = Math.min(5, Math.floor(this.chaosBillGBP / 2500) + (this.chaosBillGBP > 400 ? 1 : 0));
-    this.wantedStarsEl.textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
-
-    if (this.mode === 'chaos') {
-      this.showToast(`${label}! +€${costGBP.toLocaleString()}`, category === 'car' ? 'trick' : 'danger');
-    } else if (category === 'car' || category === 'tree') {
-      this.showToast(`Careful! You hit a ${label} in Münsing!`, 'danger');
-    }
+  private teleportTractor(x: number, z: number, heading: number, label: string): void {
+    this.tractor.releaseAll(false);
+    this.tractor.position.set(x, getTerrainHeight(x, z), z);
+    this.tractor.heading = heading;
+    this.tractor.speed = 0;
+    this.showToast(`Driven to ${label}`);
   }
 
   private recordDamage(): void {
@@ -347,7 +458,7 @@ class ScorpionGame {
     if (prop.kind !== 'barrel') {
       this.recordDamage();
       this.showToast(
-        this.mode === 'chaos' ? `${reason}` : `${reason} (Toss wreckage in Skip!)`,
+        this.mode === 'freeplay' ? reason : `${reason} (Toss wreckage in Skip!)`,
         'danger'
       );
     } else {
@@ -390,8 +501,14 @@ class ScorpionGame {
     });
 
     this.pickFarmBtn.addEventListener('click', () => this.setMode('farm'));
-    this.pickChaosBtn.addEventListener('click', () => this.setMode('chaos'));
-    this.btnMode.addEventListener('click', () => this.setMode(this.mode === 'farm' ? 'chaos' : 'farm'));
+    this.pickFreeplayBtn.addEventListener('click', () => this.setMode('freeplay'));
+    this.btnMode.addEventListener('click', () => this.setMode(this.mode === 'farm' ? 'freeplay' : 'farm'));
+    this.btnTime.addEventListener('click', () => this.cycleTimeOfDay());
+    this.btnLights.addEventListener('click', () => this.setWorkLights(!this.tractor.workLightsOn));
+
+    document.getElementById('btn-tp-farm')!.addEventListener('click', () => this.teleportTractor(-2, 14.5, 0.18, 'Farmyard'));
+    document.getElementById('btn-tp-village')!.addEventListener('click', () => this.teleportTractor(-1.5, -36, 0, 'Münsing Dorfplatz'));
+    document.getElementById('btn-tp-lake')!.addEventListener('click', () => this.teleportTractor(-92, -40, Math.PI / 2, 'Starnberger See Pier'));
 
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
@@ -408,20 +525,16 @@ class ScorpionGame {
         }
       } else if (e.code === 'KeyM') {
         this.toggleHints();
+      } else if (e.code === 'KeyN') {
+        this.cycleTimeOfDay();
+      } else if (e.code === 'KeyL') {
+        this.setWorkLights(!this.tractor.workLightsOn);
       } else if (e.code === 'KeyH') {
         this.audio.playHorn();
         const scared = this.village.scarePedestriansNear(this.tractor.position, 22);
-        this.showToast(scared > 0 ? `HONK! Scattered ${scared} villager(s)!` : 'HONK HONK!');
+        this.showToast(scared > 0 ? `HONK! Startled ${scared} villager(s)!` : 'HONK HONK!');
       } else if (e.code === 'KeyX') {
-        const mode = this.tractor.cycleSteeringMode();
-        const label =
-          mode === '4WS'
-            ? '4-Wheel Steer [X]'
-            : mode === '2WS'
-              ? 'Front Steer [X]'
-              : 'Crab Steer [X]';
-        this.steerBadge.textContent = label;
-        this.showToast(`Steering: ${label.replace(' [X]', '')}`);
+        this.cycleSteerUI();
       } else if (e.code === 'KeyV') {
         this.cycleCamera();
       }
@@ -453,7 +566,7 @@ class ScorpionGame {
       'wheel',
       (e) => {
         e.preventDefault();
-        this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.01, 6.0, 32);
+        this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.01, 6.0, 34);
       },
       { passive: false }
     );
@@ -465,9 +578,8 @@ class ScorpionGame {
       this.startOverlay.classList.add('hidden');
       this.hud.classList.remove('hidden');
       this.setMode(this.mode);
-      if (this.mode === 'chaos') {
-        // Spawn right in the wide open farm gateway facing straight into Münsing!
-        this.tractor.position.set(-1.5, 0, -28.0);
+      if (this.mode === 'freeplay') {
+        this.tractor.position.set(-1.5, getTerrainHeight(-1.5, -28.0), -28.0);
         this.tractor.heading = 0;
         this.tractor.equipTool('grapple', false);
         this.updateToolReadout();
@@ -497,7 +609,7 @@ class ScorpionGame {
       this.victoryShown = false;
       this.victoryBanner.classList.add('hidden');
       this.audio.playScoreChime(false);
-      this.showToast('More Storm Clutter Arrived!', 'trick');
+      this.showToast('More Farm Clutter Dropped!', 'trick');
     });
 
     document.getElementById('btn-reset')!.addEventListener('click', () => {
@@ -505,14 +617,22 @@ class ScorpionGame {
       this.showToast('Scorpion Reset to Farmyard');
     });
 
-    document.getElementById('btn-victory-chaos')!.addEventListener('click', () => {
+    document.getElementById('btn-victory-freeplay')!.addEventListener('click', () => {
       this.victoryBanner.classList.add('hidden');
-      this.setMode('chaos');
+      this.setMode('freeplay');
     });
 
     document.getElementById('btn-victory-close')!.addEventListener('click', () => {
       this.victoryBanner.classList.add('hidden');
     });
+  }
+
+  private cycleSteerUI(): void {
+    const mode = this.tractor.cycleSteeringMode();
+    const label =
+      mode === '4WS' ? '4-Wheel Steer [X]' : mode === '2WS' ? 'Front Steer [X]' : 'Crab Steer [X]';
+    this.steerBadge.textContent = label;
+    this.showToast(`Steering: ${label.replace(' [X]', '')}`);
   }
 
   private cycleCamera(): void {
@@ -540,33 +660,76 @@ class ScorpionGame {
       };
     }
 
-    const f = this.keys.has('KeyW') ? 1 : 0;
-    const b = this.keys.has('KeyS') ? 1 : 0;
-    const l = this.keys.has('KeyA') ? 1 : 0;
-    const r = this.keys.has('KeyD') ? 1 : 0;
+    let throttle = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
+    let steer = (this.keys.has('KeyA') ? 1 : 0) - (this.keys.has('KeyD') ? 1 : 0);
+    let boost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    let creep = this.keys.has('AltLeft') || this.keys.has('AltRight');
+    let boomLift =
+      (this.keys.has('KeyQ') || this.keys.has('ArrowUp') ? 1 : 0) -
+      (this.keys.has('KeyE') || this.keys.has('ArrowDown') ? 1 : 0);
+    let boomExtend =
+      (this.keys.has('KeyR') || this.keys.has('PageUp') ? 1 : 0) -
+      (this.keys.has('KeyF') || this.keys.has('PageDown') ? 1 : 0);
+    let headTilt =
+      (this.keys.has('KeyC') || this.keys.has('ArrowRight') ? 1 : 0) -
+      (this.keys.has('KeyZ') || this.keys.has('ArrowLeft') ? 1 : 0);
+    let actionHeld = this.keys.has('Space');
 
-    const liftUp = this.keys.has('KeyQ') || this.keys.has('ArrowUp') ? 1 : 0;
-    const liftDn = this.keys.has('KeyE') || this.keys.has('ArrowDown') ? 1 : 0;
+    // === GAMEPAD / CONTROLLER SUPPORT (Xbox / PS / Standard Web Gamepad!) ===
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const gp = pads[0];
+    if (gp) {
+      const dead = (v: number) => (Math.abs(v) < 0.14 ? 0 : v);
+      const rt = gp.buttons[7]?.value ?? 0;
+      const lt = gp.buttons[6]?.value ?? 0;
+      if (rt > 0.08 || lt > 0.08) throttle = rt - lt;
+      const lx = dead(gp.axes[0] ?? 0);
+      if (lx !== 0) steer = -lx;
+      const rx = dead(gp.axes[2] ?? 0);
+      const ry = dead(gp.axes[3] ?? 0);
+      if (ry !== 0) boomLift = -ry;
+      if (rx !== 0) headTilt = rx;
+      if (gp.buttons[5]?.pressed) boomExtend = 1; // RB = Extend
+      if (gp.buttons[4]?.pressed) boomExtend = -1; // LB = Retract
+      if (gp.buttons[0]?.pressed) actionHeld = true; // A = Grab / Release
+      if (gp.buttons[10]?.pressed) boost = true; // L3 = Boost
+      if (gp.buttons[11]?.pressed) creep = true; // R3 = Creep
 
-    const extOut = this.keys.has('KeyR') || this.keys.has('PageUp') ? 1 : 0;
-    const extIn = this.keys.has('KeyF') || this.keys.has('PageDown') ? 1 : 0;
+      const pressedEdge = (idx: number) => Boolean(gp.buttons[idx]?.pressed) && !this.prevGamepadButtons[idx];
+      if (pressedEdge(3)) this.tractor.tryHitchNearby(this.farm.rackSpots); // Y = Couple
+      if (pressedEdge(2)) this.cycleSteerUI(); // X = Steer Mode
+      if (pressedEdge(1)) {
+        this.audio.playHorn();
+        this.village.scarePedestriansNear(this.tractor.position, 22);
+      }
+      this.prevGamepadButtons = gp.buttons.map((b) => b.pressed);
+    }
 
-    const tiltUp = this.keys.has('KeyZ') || this.keys.has('ArrowLeft') ? -1 : 0;
-    const tiltDn = this.keys.has('KeyC') || this.keys.has('ArrowRight') ? 1 : 0;
-
-    const creep = this.keys.has('AltLeft') || this.keys.has('AltRight');
     this.creepBadge.classList.toggle('hidden', !creep);
 
     return {
-      throttle: f - b,
-      steer: l - r,
-      boost: this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'),
+      throttle: THREE.MathUtils.clamp(throttle, -1, 1),
+      steer: THREE.MathUtils.clamp(steer, -1, 1),
+      boost,
       creep,
-      boomLift: liftUp - liftDn,
-      boomExtend: extOut - extIn,
-      headTilt: tiltUp + tiltDn,
-      actionHeld: this.keys.has('Space')
+      boomLift: THREE.MathUtils.clamp(boomLift, -1, 1),
+      boomExtend: THREE.MathUtils.clamp(boomExtend, -1, 1),
+      headTilt: THREE.MathUtils.clamp(headTilt, -1, 1),
+      actionHeld
     };
+  }
+
+  private getCurrentLocationName(): string {
+    const { x, z } = this.tractor.position;
+    if (x < -97 && Math.abs(z - -40) < 6) return '⛵ Starnberger See Pier (Steg)';
+    if (x < -72) return '🌊 Ammerlander Straße (Lake Descent)';
+    if (Math.hypot(x - -21, z - -67.5) < 22) return '⛪ Am Kirchberg — St. Mariä Himmelfahrt';
+    if (x > 42 && z < -44) return '🛒 Bachstraße — EDEKA Aktivmarkt';
+    if (x > 10 && x < 35 && z < -45 && z > -64) return '🍺 Gasthof Alter Wirt · Biergarten';
+    if (x > 10 && x < 35 && z <= -64) return '🏛️ Rathaus — Gemeinde Münsing';
+    if (x < -40 && z < -44) return '🥨 Bäckerei Krümel & Korn';
+    if (z < -33) return '🏘️ Münsing Dorfplatz & Hauptstraße';
+    return '🚜 Farmyard Plateau';
   }
 
   private evaluateZonesAndPond(): void {
@@ -580,12 +743,17 @@ class ScorpionGame {
         p.body.position.x - this.farm.pondCenter.x,
         p.body.position.z - this.farm.pondCenter.z
       );
-      const isNowInWater = dPond < this.farm.pondRadius - 0.3 && p.body.position.y < 1.1;
+      const inDuckPond = dPond < this.farm.pondRadius - 0.3 && p.body.position.y < 1.1;
+      const inStarnbergerSee = p.body.position.x < -99 && p.body.position.y < WATER_LEVEL + 0.35;
+      const isNowInWater = inDuckPond || inStarnbergerSee;
+
       if (isNowInWater && !p.inWater) {
         p.inWater = true;
         this.audio.playImpact(7, 'water');
-        this.particles.spawnSplash(new THREE.Vector3(p.body.position.x, 0.2, p.body.position.z));
-        this.showToast(`SPLASH! ${p.label} fell in the duck pond!`);
+        this.particles.spawnSplash(
+          new THREE.Vector3(p.body.position.x, inStarnbergerSee ? WATER_LEVEL + 0.2 : 0.2, p.body.position.z)
+        );
+        this.showToast(`SPLASH! ${p.label} fell in the water!`);
       } else if (!isNowInWater) {
         p.inWater = false;
       }
@@ -602,7 +770,7 @@ class ScorpionGame {
 
       if (inBounds) {
         counts[p.targetZone]++;
-        const settled = p.body.velocity.length() < 1.6;
+        const settled = p.body.velocity.length() < 1.5;
 
         if (!p.scored && settled) {
           p.scored = true;
@@ -675,7 +843,7 @@ class ScorpionGame {
         this.damagedCount === 0 ? '★★★ Spotless Master Operator!' : 'Morning Shift Complete!';
       this.victorySub.textContent =
         this.damagedCount === 0
-          ? `Zero items damaged — Score ${this.score}! Ready for Village Chaos?`
+          ? `Zero items damaged — Score ${this.score}! Take the Scorpion down to Starnberger See!`
           : `Yard organized with ${this.damagedCount} damaged item(s) — Score ${this.score}!`;
       this.victoryBanner.classList.remove('hidden');
       this.particles.spawnConfetti(this.tractor.position.clone().add(new THREE.Vector3(0, 3.5, 0)));
@@ -718,16 +886,22 @@ class ScorpionGame {
   }
 
   private updateHUD(): void {
-    const liftPct = ((this.tractor.boomPitch + 0.15) / (1.06 + 0.15)) * 100;
+    const liftPct = ((this.tractor.boomPitch + 0.16) / (1.08 + 0.16)) * 100;
     const extPct = (this.tractor.boomExt / 3.6) * 100;
     const tiltPct = ((this.tractor.headTilt + 0.78) / (1.15 + 0.78)) * 100;
+    const stabPct = Math.min(100, Math.round(this.tractor.loadMoment * 100));
 
     this.gaugeLift.style.width = `${Math.round(liftPct)}%`;
     this.gaugeExt.style.width = `${Math.round(extPct)}%`;
     this.gaugeTilt.style.width = `${Math.round(tiltPct)}%`;
+    this.gaugeStab.style.width = `${stabPct}%`;
+
+    if (this.mode === 'freeplay') {
+      this.locationReadout.textContent = this.getCurrentLocationName();
+    }
 
     if (this.tractor.heldVillageObj) {
-      this.holdBadge.textContent = `Hoisting: ${this.tractor.heldVillageObj.label}`;
+      this.holdBadge.textContent = `Load: ${this.tractor.heldVillageObj.label}`;
       this.holdBadge.classList.add('pill-hot');
     } else if (this.tractor.heldProps.length > 0) {
       const names = this.tractor.heldProps.map((p) => p.label).join(', ');
@@ -758,6 +932,16 @@ class ScorpionGame {
     } else {
       this.squeezeMeter.classList.add('hidden');
     }
+
+    // Update live Münsing & Starnberger See GPS Mini-Map!
+    const carDots = this.village.objects
+      .filter((o) => o.kind === 'car')
+      .map((o) => ({ x: o.body.position.x, z: o.body.position.z }));
+    const markers: MiniMapMarker[] =
+      this.mode === 'farm'
+        ? this.farm.zones.map((z) => ({ x: z.center.x, z: z.center.z, color: '#9fd32e', pulse: this.hintsOn }))
+        : [{ x: -112, z: -40, color: '#5bc4f5', pulse: true }];
+    this.minimap.render(this.tractor.position, this.tractor.heading, carDots, markers, this.elapsed);
   }
 
   private updateCamera(dt: number): void {
@@ -765,10 +949,10 @@ class ScorpionGame {
       const a = this.elapsed * 0.25 + 0.7;
       this.camera.position.set(
         this.tractor.position.x + Math.sin(a) * 11.5,
-        4.6,
+        this.tractor.position.y + 4.6,
         this.tractor.position.z + Math.cos(a) * 11.5
       );
-      this.camera.lookAt(this.tractor.position.x, 1.8, this.tractor.position.z - 1.2);
+      this.camera.lookAt(this.tractor.position.x, this.tractor.position.y + 1.8, this.tractor.position.z - 1.2);
       return;
     }
 
@@ -788,7 +972,7 @@ class ScorpionGame {
       const tip = this.tractor.getBoomTipWorldPos();
       const back = new THREE.Vector3(Math.sin(this.tractor.heading), 0.72, Math.cos(this.tractor.heading));
       const targetPos = tip.clone().addScaledVector(back, 5.0);
-      targetPos.y = Math.max(1.7, targetPos.y);
+      targetPos.y = Math.max(getTerrainHeight(targetPos.x, targetPos.z) + 1.6, targetPos.y);
       this.smoothCamPos.lerp(targetPos, Math.min(1, dt * 8));
       this.smoothLookAt.lerp(
         tip.clone().add(new THREE.Vector3(-Math.sin(this.tractor.heading) * 3, -0.45, -Math.cos(this.tractor.heading) * 3)),
@@ -801,15 +985,18 @@ class ScorpionGame {
 
     const angle = this.tractor.heading + this.camYawOffset;
     const horiz = Math.cos(this.camPitch) * this.camDist;
+    const desiredX = this.tractor.position.x + Math.sin(angle) * horiz;
+    const desiredZ = this.tractor.position.z + Math.cos(angle) * horiz;
+    const groundAtCam = getTerrainHeight(desiredX, desiredZ);
     const desiredPos = new THREE.Vector3(
-      this.tractor.position.x + Math.sin(angle) * horiz,
-      Math.max(1.6, this.tractor.position.y + 1.8 + Math.sin(this.camPitch) * this.camDist),
-      this.tractor.position.z + Math.cos(angle) * horiz
+      desiredX,
+      Math.max(groundAtCam + 1.6, this.tractor.position.y + 1.8 + Math.sin(this.camPitch) * this.camDist),
+      desiredZ
     );
     const desiredLook = new THREE.Vector3(
-      this.tractor.position.x - Math.sin(this.tractor.heading) * 1.6,
-      1.7 + this.tractor.boomPitch * 1.1,
-      this.tractor.position.z - Math.cos(this.tractor.heading) * 1.6
+      this.tractor.position.x - Math.sin(this.tractor.heading) * 2.2,
+      this.tractor.position.y + 2.25 + this.tractor.boomPitch * 1.1,
+      this.tractor.position.z - Math.cos(this.tractor.heading) * 2.2
     );
 
     this.smoothCamPos.lerp(desiredPos, Math.min(1, dt * 6.5));
@@ -829,7 +1016,7 @@ class ScorpionGame {
     this.tractor.update(dt, this.elapsed, input, this.propMgr.props, this.village.objects);
 
     this.world.step(1 / 60, dt, 4);
-    this.propMgr.syncMeshes();
+    this.propMgr.syncMeshes(dt);
 
     this.farm.update(dt, this.elapsed);
     this.village.update(
@@ -839,13 +1026,29 @@ class ScorpionGame {
       this.tractor.speed,
       this.tractor.getHoldWorldPos(),
       this.tractor.getTipSpeed(),
-      this.mode === 'chaos'
+      this.mode === 'freeplay'
     );
     this.particles.update(dt);
 
+    // Subtle shimmering Lake Starnberg water wave
+    if (this.farm.lakeWaterMesh) {
+      this.farm.lakeWaterMesh.position.y = WATER_LEVEL + Math.sin(this.elapsed * 1.2) * 0.04;
+    }
+
+    // Ambient bronze church bell chiming gently from St. Mariä Himmelfahrt!
+    if (this.started) {
+      this.churchBellTimer -= dt;
+      if (this.churchBellTimer <= 0) {
+        this.churchBellTimer = 38 + Math.random() * 18;
+        const dChurch = this.tractor.position.distanceTo(this.village.churchPos);
+        const atten = THREE.MathUtils.clamp(1 - dChurch / 140, 0.15, 1.0);
+        this.audio.playChurchBell(atten);
+      }
+    }
+
     for (const c of this.clouds) {
       c.position.x += dt * 0.4;
-      if (c.position.x > 95) c.position.x = -95;
+      if (c.position.x > 135) c.position.x = -155;
     }
 
     if (this.started) {

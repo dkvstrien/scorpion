@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SCORPION 741 — Farm &amp; Village Simulator</title>
+    <title>SCORPION 741 — Münsing &amp; Starnberger See</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -23,38 +23,39 @@
             <span class="model-name">SCORPION 741</span>
             <span class="varipower-tag">VARIPOWER</span>
           </div>
-          <h1>Scorpion 741: Münsing, Bavaria</h1>
+          <h1>Münsing &amp; Starnberger See</h1>
           <p class="subtitle">
-            Drive your 8-ton CLAAS Scorpion 741 across the working farmyard and straight through the north gate
-            into <strong>Münsing</strong>—cruise <em>Hauptstraße</em>, <em>Weipertshausener Straße</em>, and <em>Am Kirchberg</em>
-            past <strong>St. Mariä Himmelfahrt</strong>, <strong>Gasthof Alter Wirt</strong>, and the <strong>Maibaum</strong>!
+            Operate your 8-ton CLAAS Scorpion 741 with 4-wheel terrain suspension, load-moment tipping physics,
+            and 5 real attachments—organize the farmyard or cruise through <strong>Münsing</strong>, climb
+            <strong>Am Kirchberg</strong> past <strong>St. Mariä Himmelfahrt</strong>, and roll down to the
+            <strong>Starnberger See</strong> pier!
           </p>
 
           <div class="mode-picker">
             <button id="pick-farm" class="mode-card selected" type="button">
-              <div class="mode-title">🚜 Farm Shift (Careful)</div>
+              <div class="mode-title">🚜 Farm Shift (Careful Work)</div>
               <div class="mode-desc">
-                Match the right attachment at the shed, watch your tires, keep silage plastic sealed, and stack pallets cleanly onto the flatbed trailer.
+                Authentic telehandler work: couple the right tool at the shed, watch your 8-ton tires &amp; load stability, keep silage plastic sealed, and stack pallets cleanly onto the trailer.
               </div>
             </button>
-            <button id="pick-chaos" class="mode-card chaos" type="button">
-              <div class="mode-title">🔥 Village Chaos (GTA Mode)</div>
+            <button id="pick-freeplay" class="mode-card freeplay" type="button">
+              <div class="mode-title">🏔️ Open-World Free Play</div>
               <div class="mode-desc">
-                Pure physics mayhem! Drive into town, lift &amp; fling cars with the boom, topple trees &amp; phone boxes, scatter villagers, and rack up Wanted stars!
+                Pure open-ended Scorpion simulator across Münsing &amp; Lake Starnberg—any attachment grabs anything (including cars, benches &amp; trees), explore freely, or test wild physics!
               </div>
             </button>
           </div>
 
           <div class="controls-grid">
             <div class="ctrl-group">
-              <h3>Drive &amp; Precision</h3>
-              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive &amp; Steer</div>
-              <div><kbd>Shift</kbd> Varipower Fast · <kbd>Alt</kbd> Precision Creep</div>
-              <div><kbd>X</kbd> 4WS / 2WS / Crab Steer</div>
-              <div><kbd>H</kbd> Horn (scares villagers!) · <kbd>V</kbd> Camera</div>
+              <h3>Drive, Precision &amp; World</h3>
+              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive &amp; Steer · <kbd>Shift</kbd> Fast · <kbd>Alt</kbd> Creep + Fork Laser</div>
+              <div><kbd>X</kbd> 4WS / 2WS / Crab · <kbd>V</kbd> Camera (Chase / Cab / Boom)</div>
+              <div><kbd>N</kbd> Time of Day · <kbd>L</kbd> LED Worklights · <kbd>H</kbd> Horn</div>
+              <div>🎮 Gamepad supported automatically!</div>
             </div>
             <div class="ctrl-group">
-              <h3>Boom &amp; Physics Handling</h3>
+              <h3>Telescopic Boom &amp; Tools</h3>
               <div><kbd>↑</kbd><kbd>↓</kbd> or <kbd>Q</kbd><kbd>E</kbd> Raise / Lower Boom</div>
               <div><kbd>R</kbd><kbd>F</kbd> Extend / Retract Telescopic Arm</div>
               <div><kbd>←</kbd><kbd>→</kbd> or <kbd>Z</kbd><kbd>C</kbd> Level / Tilt Carriage</div>
@@ -64,7 +65,7 @@
           </div>
 
           <button id="start-btn" class="primary-btn">Fire Up the Scorpion!</button>
-          <p class="hint-line">Drag mouse to orbit camera · Scroll to zoom · Switch modes live anytime in the top-right!</p>
+          <p class="hint-line">Drag mouse to orbit camera · Scroll to zoom · Switch modes &amp; lighting live anytime!</p>
         </div>
       </div>
 
@@ -132,46 +133,45 @@
           </div>
         </div>
 
-        <!-- Top Left: Village Chaos (GTA Destruct Mode) Panel -->
-        <div class="hud-panel top-left chaos-panel hidden" id="chaos-panel">
+        <!-- Top Left: Clean Minimal Open-World Free Play Card -->
+        <div class="hud-panel top-left freeplay-panel hidden" id="freeplay-panel">
           <div class="tidy-header">
             <div class="title-row">
-              <span class="mini-claas chaos-tag">CHAOS</span>
-              <span class="mini-model">VILLAGE MAYHEM</span>
+              <span class="mini-claas free-tag">FREE PLAY</span>
+              <span class="mini-model">MÜNSING, BAYERN</span>
             </div>
-            <div id="wanted-stars" class="wanted-stars">☆☆☆☆☆</div>
           </div>
-          <div class="chaos-score-big">
-            <span>DAMAGE BILL</span>
-            <strong id="chaos-bill">€0</strong>
-          </div>
-          <div class="chaos-stats">
-            <div><span>Cars Wrecked / Tossed</span><strong id="stat-cars">0</strong></div>
-            <div><span>Trees, Lamps &amp; Maibaum</span><strong id="stat-trees">0</strong></div>
-            <div><span>Biergarten &amp; Stalls Smashed</span><strong id="stat-props">0</strong></div>
-            <div><span>Münsingers Scattered</span><strong id="stat-peds">0</strong></div>
-          </div>
-          <div class="chaos-tip">
-            Head north through the stone gate into <strong>Münsing</strong>! Cruise Hauptstraße past St. Mariä Himmelfahrt &amp; Alter Wirt!
+          <div class="freeplay-location" id="location-readout">📍 Farmyard Plateau</div>
+          <p class="freeplay-desc">
+            Open-ended CLAAS Scorpion 741 sandbox. Climb <strong>Am Kirchberg</strong> to the church, visit
+            <strong>Gasthof Alter Wirt</strong> &amp; <strong>EDEKA</strong>, or head west down
+            <strong>Ammerlander Straße</strong> to the <strong>Starnberger See</strong> pier!
+          </p>
+          <div class="freeplay-quick-row">
+            <button id="btn-tp-farm" class="hud-btn">Farmyard</button>
+            <button id="btn-tp-village" class="hud-btn">Dorfplatz</button>
+            <button id="btn-tp-lake" class="hud-btn">Lake Pier</button>
           </div>
         </div>
 
-        <!-- Top Right: Mode Toggle & Utilities -->
+        <!-- Top Right: Mode, Time-of-Day, Lights & Utilities -->
         <div class="hud-panel top-right">
           <div class="btn-row">
-            <button id="btn-mode" class="hud-btn mode-toggle-btn" title="Switch between Farm Shift and Village Chaos">
+            <button id="btn-mode" class="hud-btn mode-toggle-btn" title="Switch between Farm Shift and Open-World Free Play">
               Mode: Farm Shift
             </button>
+            <button id="btn-time" class="hud-btn" title="Cycle Time of Day (N)">☀ Afternoon</button>
+            <button id="btn-lights" class="hud-btn" title="Toggle Roof LED Worklights (L)">Lights: Off</button>
             <button id="btn-camera" class="hud-btn" title="Switch Camera (V)">Cam: Chase</button>
-            <button id="btn-sound" class="hud-btn" title="Toggle Sound">SFX: On</button>
-            <button id="btn-help" class="hud-btn" title="Controls">?</button>
           </div>
           <div class="btn-row">
             <button id="btn-hints" class="hud-btn" title="Toggle Subtle Destination Clues (M)">Hints: Off</button>
-            <button id="btn-mess" class="hud-btn accent" title="Drop fresh clutter">
+            <button id="btn-sound" class="hud-btn" title="Toggle Sound">SFX: On</button>
+            <button id="btn-mess" class="hud-btn accent" title="Drop fresh farm clutter">
               + More Clutter
             </button>
-            <button id="btn-reset" class="hud-btn" title="Reset Tractor Position">Reset</button>
+            <button id="btn-reset" class="hud-btn" title="Reset Tractor">Reset</button>
+            <button id="btn-help" class="hud-btn" title="Controls">?</button>
           </div>
         </div>
 
@@ -188,7 +188,7 @@
 
         <div id="interact-prompt" class="interact-prompt hidden"></div>
 
-        <!-- Bottom Left: Boom & Precision Telemetry -->
+        <!-- Bottom Left: Boom, Stability & Steering Telemetry -->
         <div class="hud-panel bottom-left">
           <div class="tele-row">
             <div class="gauge">
@@ -203,10 +203,14 @@
               <span class="gauge-lbl">LEVEL / TILT</span>
               <div class="gauge-track center-mark"><div id="gauge-tilt" class="gauge-fill orange"></div></div>
             </div>
+            <div class="gauge">
+              <span class="gauge-lbl">STABILITY</span>
+              <div class="gauge-track"><div id="gauge-stab" class="gauge-fill stab"></div></div>
+            </div>
           </div>
           <div class="status-pills">
             <span id="steer-badge" class="pill pill-green">4-Wheel Steer [X]</span>
-            <span id="creep-badge" class="pill hidden">Precision Creep</span>
+            <span id="creep-badge" class="pill hidden">Precision Laser [Alt]</span>
             <span id="hold-badge" class="pill">No Load</span>
           </div>
         </div>
@@ -217,25 +221,31 @@
             <div class="active-tool-readout">
               <span class="tool-readout-lbl">HITCHED TOOL</span>
               <strong id="active-tool-name">Pallet Forks</strong>
-              <span id="active-tool-tip" class="tool-tip">Level forks under Produce Pallets</span>
+              <span id="active-tool-tip" class="tool-tip">Hold [Alt] for precision laser guide</span>
             </div>
             <button id="btn-hitch-action" class="hud-btn hitch-btn" title="Couple or drop attachment (T)">
               [T] Drop / Couple
             </button>
           </div>
           <div class="mini-controls-hint">
-            <kbd>WASD</kbd> Drive · <kbd>Alt</kbd> Creep · <kbd>Q/E</kbd> Lift · <kbd>R/F</kbd> Extend · <kbd>Z/C</kbd> Tilt · <kbd>Space</kbd> Grab/Release · <kbd>T</kbd> Tool Shed
+            <kbd>WASD</kbd> Drive · <kbd>Alt</kbd> Creep · <kbd>Q/E</kbd> Lift · <kbd>R/F</kbd> Extend · <kbd>Z/C</kbd> Tilt · <kbd>Space</kbd> Grab/Release · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights
           </div>
+        </div>
+
+        <!-- Bottom Right: Live Münsing & Starnberger See GPS Mini-Map -->
+        <div class="hud-panel bottom-right minimap-wrap">
+          <canvas id="minimap-canvas" width="176" height="132"></canvas>
+          <div class="minimap-caption">Münsing · Starnberger See</div>
         </div>
       </div>
 
       <!-- Victory Banner -->
       <div id="victory-banner" class="victory-banner hidden">
         <h2 id="victory-title">Morning Shift Complete!</h2>
-        <p id="victory-sub">The whole yard is tidy and ready for market pickup!</p>
+        <p id="victory-sub">The whole farmyard is tidy and ready for market pickup!</p>
         <div class="btn-row" style="justify-content: center; margin-top: 10px">
-          <button id="btn-victory-chaos" class="primary-btn small">Unleash Village Chaos!</button>
-          <button id="btn-victory-close" class="hud-btn">Keep Driving</button>
+          <button id="btn-victory-freeplay" class="primary-btn small">Explore Münsing &amp; Lake</button>
+          <button id="btn-victory-close" class="hud-btn">Keep Working</button>
         </div>
       </div>
     </div>
