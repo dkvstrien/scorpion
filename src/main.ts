@@ -109,9 +109,9 @@ class ScorpionGame {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x98bdd6);
-    this.scene.fog = new THREE.Fog(0xb5cddc, 75, 195);
+    this.scene.fog = new THREE.Fog(0xb9d4e6, 115, 340);
 
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 290);
+    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 450);
     this.camera.position.set(8, 7.5, 25);
 
     this.setupLightingAndSky();
@@ -214,18 +214,20 @@ class ScorpionGame {
     const hemi = new THREE.HemisphereLight(0xd4e8f5, 0x5c7044, 0.8);
     this.scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xfff0cf, 1.75);
-    sun.position.set(36, 52, 26);
+    const sun = new THREE.DirectionalLight(0xfff0cf, 1.8);
+    sun.position.set(42, 68, 22);
+    sun.target.position.set(0, 0, -35);
+    this.scene.add(sun.target);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.near = 5;
-    sun.shadow.camera.far = 175;
-    const d = 68;
+    sun.shadow.camera.near = 10;
+    sun.shadow.camera.far = 230;
+    const d = 96;
     sun.shadow.camera.left = -d;
     sun.shadow.camera.right = d;
     sun.shadow.camera.top = d;
     sun.shadow.camera.bottom = -d;
-    sun.shadow.bias = -0.0005;
+    sun.shadow.bias = -0.0006;
     this.scene.add(sun);
 
     const rim = new THREE.DirectionalLight(0xaacbe6, 0.35);
@@ -296,7 +298,7 @@ class ScorpionGame {
     }
 
     // Update Chaos HUD & GTA Wanted Stars!
-    this.chaosBillEl.textContent = `£${this.chaosBillGBP.toLocaleString()}`;
+    this.chaosBillEl.textContent = `€${this.chaosBillGBP.toLocaleString()}`;
     this.statCarsEl.textContent = String(this.chaosCars);
     this.statTreesEl.textContent = String(this.chaosTrees);
     this.statPropsEl.textContent = String(this.chaosProps);
@@ -306,9 +308,9 @@ class ScorpionGame {
     this.wantedStarsEl.textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
 
     if (this.mode === 'chaos') {
-      this.showToast(`${label}! +£${costGBP.toLocaleString()}`, category === 'car' ? 'trick' : 'danger');
+      this.showToast(`${label}! +€${costGBP.toLocaleString()}`, category === 'car' ? 'trick' : 'danger');
     } else if (category === 'car' || category === 'tree') {
-      this.showToast(`Careful! You hit a ${label} in the village!`, 'danger');
+      this.showToast(`Careful! You hit a ${label} in Münsing!`, 'danger');
     }
   }
 
@@ -464,8 +466,8 @@ class ScorpionGame {
       this.hud.classList.remove('hidden');
       this.setMode(this.mode);
       if (this.mode === 'chaos') {
-        // Spawn right near the open north farm gate facing Scorpion Green Village for instant action!
-        this.tractor.position.set(0, 0, -25);
+        // Spawn right in the wide open farm gateway facing straight into Münsing!
+        this.tractor.position.set(-1.5, 0, -28.0);
         this.tractor.heading = 0;
         this.tractor.equipTool('grapple', false);
         this.updateToolReadout();

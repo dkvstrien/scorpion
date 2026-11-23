@@ -954,9 +954,9 @@ export class ClaasScorpion {
       this.position.z -= Math.cos(this.heading) * this.speed * dt;
     }
 
-    // Expanded Farmyard + Scorpion Green Village world bounds!
-    const limitX = 65.5;
-    const minZ = -70.5;
+    // Expanded Farmyard + Münsing Village world bounds!
+    const limitX = 85.5;
+    const minZ = -107.0;
     const maxZ = 29.8;
     if (this.position.x < -limitX) {
       this.position.x = -limitX;

@@ -119,34 +119,40 @@ export class FarmEnvironment {
   }
 
   private buildGroundAndHills(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
+    // Broad Bavarian meadow extending far past both the farm and Münsing village (zero Z-fighting!)
+    const outerGrass = new THREE.Mesh(
+      new THREE.CircleGeometry(340, 64),
+      new THREE.MeshStandardMaterial({ color: 0x5d8843, roughness: 0.98 })
+    );
+    outerGrass.rotation.x = -Math.PI / 2;
+    outerGrass.position.y = -0.02;
+    outerGrass.receiveShadow = true;
+    scene.add(outerGrass);
+
+    // Farmyard gravel/concrete/pasture courtyard cleanly seated inside the farm fences (y = 0.0)
     const groundTex = createFarmGroundTexture();
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(92, 92),
+      new THREE.PlaneGeometry(66, 64),
       new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.96, metalness: 0.02 })
     );
     ground.rotation.x = -Math.PI / 2;
+    ground.position.set(0, 0.005, 0);
     ground.receiveShadow = true;
     scene.add(ground);
 
-    const outerGrass = new THREE.Mesh(
-      new THREE.CircleGeometry(185, 48),
-      new THREE.MeshStandardMaterial({ color: 0x598240, roughness: 0.98 })
-    );
-    outerGrass.rotation.x = -Math.PI / 2;
-    outerGrass.position.y = -0.06;
-    scene.add(outerGrass);
-
-    // Rolling Yorkshire dales hills around the farmstead
-    const hillColors = [0x527a3b, 0x618c45, 0x4b7036, 0x6a944c];
+    // Distant rolling Upper Bavarian hills placed FAR outside the entire Farm + Münsing Village (>165m away!)
+    const hillColors = [0x4f783a, 0x5c8744, 0x486d35, 0x64904b];
     const hillCoords: [number, number, number, number][] = [
-      [-64, -56, 36, 16],
-      [0, -78, 48, 19],
-      [66, -54, 38, 17],
-      [78, 16, 34, 14],
-      [58, 70, 40, 15],
-      [-12, 80, 46, 15],
-      [-74, 44, 38, 15],
-      [-76, -8, 32, 13]
+      [-170, -145, 58, 22],
+      [-75, -195, 68, 24],
+      [45, -198, 72, 26],
+      [155, -155, 62, 23],
+      [185, -35, 56, 20],
+      [165, 95, 60, 22],
+      [55, 165, 68, 24],
+      [-75, 162, 66, 22],
+      [-175, 85, 58, 21],
+      [-185, -30, 56, 20]
     ];
     hillCoords.forEach(([hx, hz, hr, hh], idx) => {
       const hill = new THREE.Mesh(
@@ -157,6 +163,25 @@ export class FarmEnvironment {
       hill.position.set(hx, -0.5, hz);
       scene.add(hill);
     });
+
+    // Iconic distant Bavarian Alps silhouette far on the southern horizon (authentic Münsing view!)
+    const alpRock = new THREE.MeshStandardMaterial({ color: 0x6f8396, roughness: 0.95 });
+    const alpSnow = new THREE.MeshStandardMaterial({ color: 0xeaf0f5, roughness: 0.85 });
+    const alpPeaks: [number, number, number, number][] = [
+      [-160, 225, 48, 52],
+      [-90, 245, 58, 68],
+      [-15, 250, 62, 76],
+      [68, 242, 56, 66],
+      [148, 228, 52, 56]
+    ];
+    for (const [ax, az, ar, ah] of alpPeaks) {
+      const peak = new THREE.Mesh(new THREE.ConeGeometry(ar, ah, 7), alpRock);
+      peak.position.set(ax, ah * 0.5 - 2, az);
+      scene.add(peak);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(ar * 0.38, ah * 0.38, 7), alpSnow);
+      cap.position.set(ax, ah * 0.81 - 2, az);
+      scene.add(cap);
+    }
 
     const planeBody = new CANNON.Body({ mass: 0, material: groundMat });
     planeBody.addShape(new CANNON.Plane());
@@ -170,10 +195,10 @@ export class FarmEnvironment {
     const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.95 });
     const copeMat = new THREE.MeshStandardMaterial({ color: 0x857f75, roughness: 0.93 });
 
-    // Left & Right north wall segments leaving a wide 12m open gate at x = -6..+6!
+    // Left & Right north wall segments leaving a wide 12m open gate at x = -7.5..+4.5 aligned with the open driveway!
     const wallSegments: [number, number][] = [
-      [-19, 26],
-      [19, 26]
+      [-19.75, 24.5],
+      [18.25, 27.5]
     ];
     for (const [wx, ww] of wallSegments) {
       const seg = new THREE.Mesh(new THREE.BoxGeometry(ww, 1.5, 0.95), stoneMat);
@@ -189,8 +214,8 @@ export class FarmEnvironment {
       this.addStaticBox(world, groundMat, wx, 1.0, -31, ww, 2.0, 1.1);
     }
 
-    // Classic stone gateposts framing the open driveway out to Scorpion Green Village!
-    for (const gx of [-6.2, 6.2]) {
+    // Classic stone gateposts framing the open driveway out to Münsing!
+    for (const gx of [-7.5, 4.5]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.2, 1.15), stoneMat);
       post.position.set(gx, 1.1, -31);
       post.castShadow = true;
@@ -200,33 +225,34 @@ export class FarmEnvironment {
       scene.add(cap);
     }
 
-    // Wooden farm signpost right beside the gate pointing to Scorpion Green Village!
-    const postWood = new THREE.MeshStandardMaterial({ color: 0x6f4a28, roughness: 0.9 });
-    const signPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 2.7, 8), postWood);
-    signPost.position.set(7.4, 1.35, -30.6);
+    // Authentic yellow German Ortsschild right beside the farm gate pointing into Münsing!
+    const postMetal = new THREE.MeshStandardMaterial({ color: 0x60666c, roughness: 0.55, metalness: 0.5 });
+    const signPost = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.07, 2.7, 8), postMetal);
+    signPost.position.set(7.4, 1.35, -31.8);
     scene.add(signPost);
 
     const sc = document.createElement('canvas');
     sc.width = 256;
-    sc.height = 64;
+    sc.height = 128;
     const sctx = sc.getContext('2d')!;
-    sctx.fillStyle = '#f5f2e6';
-    sctx.fillRect(0, 0, 256, 64);
-    sctx.strokeStyle = '#24292b';
-    sctx.lineWidth = 6;
-    sctx.strokeRect(3, 3, 250, 58);
-    sctx.fillStyle = '#1f2622';
-    sctx.font = 'bold 22px sans-serif';
+    sctx.fillStyle = '#f2c016';
+    sctx.fillRect(0, 0, 256, 128);
+    sctx.strokeStyle = '#181a1c';
+    sctx.lineWidth = 8;
+    sctx.strokeRect(5, 5, 246, 118);
+    sctx.fillStyle = '#141618';
+    sctx.font = 'bold 42px sans-serif';
     sctx.textAlign = 'center';
-    sctx.textBaseline = 'middle';
-    sctx.fillText('↑ SCORPION VILLAGE', 128, 33);
+    sctx.fillText('Münsing', 128, 58);
+    sctx.font = 'bold 17px sans-serif';
+    sctx.fillText('Lkr. Bad Tölz-Wolfratshausen', 128, 96);
     const sTex = new THREE.CanvasTexture(sc);
     sTex.colorSpace = THREE.SRGBColorSpace;
     const sBoard = new THREE.Mesh(
-      new THREE.BoxGeometry(2.3, 0.62, 0.1),
-      new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.65 })
+      new THREE.BoxGeometry(2.15, 1.05, 0.08),
+      new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.55 })
     );
-    sBoard.position.set(7.4, 2.45, -30.6);
+    sBoard.position.set(7.4, 2.35, -31.8);
     scene.add(sBoard);
 
     // Timber post-and-rail farm fencing on West, East, and South sides of farmyard
@@ -260,18 +286,18 @@ export class FarmEnvironment {
       }
     }
 
-    // Wide outer world boundaries encompassing both Farmyard AND Scorpion Green Village!
-    this.addStaticBox(world, groundMat, 0, 4, -74, 144, 8, 1.4);
-    this.addStaticBox(world, groundMat, 0, 4, 33, 144, 8, 1.4);
-    this.addStaticBox(world, groundMat, -69, 4, -20, 1.4, 8, 110);
-    this.addStaticBox(world, groundMat, 69, 4, -20, 1.4, 8, 110);
+    // Wide outer world boundaries encompassing Farmyard + entire Münsing Village!
+    this.addStaticBox(world, groundMat, 0, 4, -112, 186, 8, 1.4);
+    this.addStaticBox(world, groundMat, 0, 4, 34, 186, 8, 1.4);
+    this.addStaticBox(world, groundMat, -90, 4, -39, 1.4, 8, 150);
+    this.addStaticBox(world, groundMat, 90, 4, -39, 1.4, 8, 150);
   }
 
   private buildHayBarn(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    const cx = 2.5;
+    const cx = 11.2;
     const cz = -21;
-    const w = 12.2;
-    const d = 8.6;
+    const w = 11.4;
+    const d = 8.4;
     const h = 5.8;
 
     const barnWood = new THREE.MeshStandardMaterial({ map: createBarnWoodTexture(), roughness: 0.88 });
@@ -789,20 +815,18 @@ export class FarmEnvironment {
     const leafDark = new THREE.MeshStandardMaterial({ color: 0x35622e, roughness: 0.9 });
     const leafBright = new THREE.MeshStandardMaterial({ color: 0x4b7e39, roughness: 0.88 });
 
+    // Perimeter trees kept clear of the north village roads (only west/east/south of farmyard!)
     const treeSpots: [number, number, boolean][] = [
-      [-28, -28, true],
-      [-22, -35, false],
-      [-8, -35, true],
-      [15, -34, false],
-      [28, -27, true],
-      [35, -14, false],
-      [36, 4, true],
-      [34, 24, false],
-      [24, 34, true],
-      [-2, 35, false],
-      [-24, 34, true],
-      [-36, 18, false],
-      [-36, -12, true]
+      [-35, -24, true],
+      [35, -24, true],
+      [36, -12, false],
+      [37, 5, true],
+      [35, 24, false],
+      [24, 35, true],
+      [-2, 36, false],
+      [-24, 35, true],
+      [-37, 18, false],
+      [-37, -10, true]
     ];
 
     for (const [tx, tz, isPine] of treeSpots) {
