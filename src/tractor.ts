@@ -1,9 +1,18 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { createClaasDoorTexture } from './textures';
-import { getTerrainHeight, WATER_LEVEL } from './terrain';
+import {
+  FARM_CENTER,
+  FARM_GROUND_Y,
+  getDrivableGroundY,
+  getShorelineX,
+  WORLD_MAX_X,
+  WORLD_MAX_Z,
+  WORLD_MIN_X,
+  WORLD_MIN_Z
+} from './terrain';
 import { FarmProp } from './props';
-import { DynamicVillageObj } from './village';
+import { DynamicVillageObj } from './realWorld';
 
 export type AttachmentType = 'none' | 'forks' | 'spike' | 'grabber' | 'grapple' | 'bucket';
 export type SteeringMode = '4WS' | '2WS' | 'CRAB';
@@ -37,24 +46,17 @@ export interface TractorCallbacks {
   onExhaust: (pos: THREE.Vector3) => void;
   onWheelTrack: (x: number, z: number, heading: number) => void;
   onOverloadAlarm: () => void;
+  onTippedOver: (pos: THREE.Vector3) => void;
 }
 
 export const TOOL_META: Record<AttachmentType, { name: string; tip: string }> = {
   none: { name: 'Quick-Hitch Empty', tip: 'Drive to the Tool Shed & press [T] to couple a tool' },
-  forks: { name: 'Pallet Forks', tip: 'Hold [Alt] for precision laser guide · slide level under Produce Pallets' },
+  forks: { name: 'Pallet Forks', tip: 'Hold [Alt] for precision laser · keep heavy pallets low when turning!' },
   spike: { name: 'Bale Spike', tip: 'Skewer Dry Hay Bales · keep sharp spears away from Wrapped Silage!' },
   grabber: { name: 'Bale Grabber', tip: 'Tap [Space] for gentle silage grip · hold [Space] to squeeze/crush!' },
-  grapple: { name: 'Grapple Claw', tip: 'Clamp Fallen Logs, Oil Drums, Tires, or Vehicles in Free Play' },
+  grapple: { name: 'Grapple Claw', tip: 'Clamp Logs, Drums, Tires & Cars — watch your Tip-O-Meter!' },
   bucket: { name: 'Scoop Bucket', tip: 'Scoop Pumpkins level, curl back [Z] to carry, tilt [C] to pour' }
 };
-
-function getDrivableGroundY(x: number, z: number): number {
-  // Wooden Starnberger See Pier (Ammerland Steg: x ∈ [-123, -97], z ∈ [-42.6, -37.4])
-  if (x <= -97 && x >= -123.5 && Math.abs(z - -40) <= 2.65) {
-    return Math.max(getTerrainHeight(x, z), WATER_LEVEL + 0.68);
-  }
-  return getTerrainHeight(x, z);
-}
 
 export function buildAttachmentMesh(type: Exclude<AttachmentType, 'none'>): THREE.Group {
   const g = new THREE.Group();
@@ -75,12 +77,7 @@ export function buildAttachmentMesh(type: Exclude<AttachmentType, 'none'>): THRE
     topRail.castShadow = true;
     g.add(topRail);
 
-    const laserMat = new THREE.MeshBasicMaterial({
-      color: 0x9fd32e,
-      transparent: true,
-      opacity: 0.55
-    });
-
+    const laserMat = new THREE.MeshBasicMaterial({ color: 0x9fd32e, transparent: true, opacity: 0.58 });
     for (const sx of [-0.42, 0.42]) {
       const upright = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.78, 0.14), darkSteel);
       upright.position.set(sx, 0.04, -0.2);
@@ -96,7 +93,6 @@ export function buildAttachmentMesh(type: Exclude<AttachmentType, 'none'>): THRE
       tip.position.set(sx, -0.32, -1.62);
       g.add(tip);
 
-      // Subtle precision alignment laser beam (only visible when holding Alt Precision Creep!)
       const laser = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 2.2, 6), laserMat);
       laser.name = sx < 0 ? 'forkLaserL' : 'forkLaserR';
       laser.rotation.x = Math.PI / 2;
@@ -125,7 +121,6 @@ export function buildAttachmentMesh(type: Exclude<AttachmentType, 'none'>): THRE
     const topSpear = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.9, 10), accentSteel);
     topSpear.rotation.x = -Math.PI / 2;
     topSpear.position.set(0, 0.42, -0.6);
-    topSpear.castShadow = true;
     g.add(topSpear);
   } else if (type === 'grabber') {
     const rail = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.22, 0.24), darkSteel);
@@ -191,13 +186,11 @@ export function buildAttachmentMesh(type: Exclude<AttachmentType, 'none'>): THRE
       const arm = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.14, 1.05), darkSteel);
       arm.position.set(sx, 0.12, -0.52);
       arm.rotation.x = 0.22;
-      arm.castShadow = true;
       jawPivot.add(arm);
 
       const fang = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.58, 0.12), claasRed);
       fang.position.set(sx, -0.16, -1.04);
       fang.rotation.x = 0.35;
-      fang.castShadow = true;
       jawPivot.add(fang);
     }
     g.add(jawPivot);
@@ -206,7 +199,6 @@ export function buildAttachmentMesh(type: Exclude<AttachmentType, 'none'>): THRE
     const floor = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.12, 1.38), darkSteel);
     floor.position.set(0, -0.34, -0.78);
     floor.castShadow = true;
-    floor.receiveShadow = true;
     g.add(floor);
 
     const back = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.92, 0.12), accentSteel);
@@ -216,13 +208,11 @@ export function buildAttachmentMesh(type: Exclude<AttachmentType, 'none'>): THRE
 
     const topLip = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.12, 0.42), claasGreen);
     topLip.position.set(0, 0.56, -0.3);
-    topLip.castShadow = true;
     g.add(topLip);
 
     for (const sx of [-bw * 0.5 + 0.06, bw * 0.5 - 0.06]) {
       const side = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 1.28), darkSteel);
       side.position.set(sx, 0.1, -0.72);
-      side.castShadow = true;
       g.add(side);
     }
 
@@ -240,7 +230,7 @@ export class ClaasScorpion {
   public chassisBody: CANNON.Body;
   public headBody: CANNON.Body;
 
-  public position = new THREE.Vector3(-2, 0, 14.5);
+  public position = new THREE.Vector3(FARM_CENTER.x - 2, FARM_GROUND_Y, FARM_CENTER.z + 14.5);
   public heading = 0.18;
   public speed = 0;
   public yawRate = 0;
@@ -252,9 +242,14 @@ export class ClaasScorpion {
   public headTilt = 0.0;
   public prevHeadTilt = 0.0;
 
-  // Stability / Load-Moment Telemetry (0..1.25 -> >0.82 triggers CLAAS cab overload warning!)
+  // Live True Rigid-Body Telemetry!
   public loadMoment = 0;
+  public pitchDeg = 0;
+  public rollDeg = 0;
+  public wheelsOnGround = 4;
+  public isTipped = false;
   public workLightsOn = false;
+  public distanceMeters = 0;
 
   public activeTool: AttachmentType = 'forks';
   public freePlayMode = false;
@@ -265,7 +260,15 @@ export class ClaasScorpion {
   public hydroLoad = 0;
   public droppedAttachments: DroppedAttachment[] = [];
 
-  private wheelPivots: { pivot: THREE.Group; spin: THREE.Group; isFront: boolean; baseY: number; localX: number; localZ: number }[] = [];
+  private wheelPivots: {
+    pivot: THREE.Group;
+    spin: THREE.Group;
+    isFront: boolean;
+    baseY: number;
+    localX: number;
+    localZ: number;
+    compression: number;
+  }[] = [];
   private steeringWheelMesh!: THREE.Group;
   private driverHead!: THREE.Mesh;
   private driverLeftArm!: THREE.Mesh;
@@ -285,11 +288,6 @@ export class ClaasScorpion {
   private boomBaseLocal = new THREE.Vector3(0.18, 1.72, 1.38);
   private cylAnchorLocal = new THREE.Vector3(0.18, 0.96, 0.12);
 
-  // Terrain-following suspension state
-  private smoothPitch = 0;
-  private smoothRoll = 0;
-  private smoothY = 0;
-
   private holdWorldPos = new THREE.Vector3();
   private prevHoldWorldPos = new THREE.Vector3();
   private tipWorldVel = new THREE.Vector3();
@@ -302,6 +300,11 @@ export class ClaasScorpion {
   private holdTimer = 0;
   private grabLockedOnPress = false;
   private lastWarnAt = 0;
+  private wasTipped = false;
+  private uprightTimer = 2.0;
+  private rolloverCooldown = 0;
+  private readonly comY = 1.05;
+  private readonly comZ = 0.28;
   private scene: THREE.Scene;
   private callbacks: TractorCallbacks;
 
@@ -310,54 +313,72 @@ export class ClaasScorpion {
     this.callbacks = callbacks;
 
     this.buildTractorVisuals();
+    // Shift visual chassis so root (0,0,0) aligns with the true physical Center of Mass (height 1.05m, rear-biased counterweight)!
+    this.chassisGroup.position.set(0, -this.comY, -this.comZ);
     this.root.add(this.chassisGroup);
     scene.add(this.root);
 
+    // === TRUE DYNAMIC 6,800 KG RIGID-BODY CHASSIS (CAN GENUINELY TIP FORWARD OR ROLL ONTO ITS SIDE!) ===
     this.chassisBody = new CANNON.Body({
-      mass: 0,
-      type: CANNON.Body.KINEMATIC,
-      material: tractorMat
+      mass: 6800,
+      type: CANNON.Body.DYNAMIC,
+      material: tractorMat,
+      linearDamping: 0.06,
+      angularDamping: 0.26,
+      collisionFilterGroup: 2,
+      collisionFilterMask: 1 // Collides with terrain, buildings, props & cars — NEVER with kinematic headBody!
     });
-    this.chassisBody.addShape(new CANNON.Box(new CANNON.Vec3(1.16, 0.92, 2.18)), new CANNON.Vec3(0, 1.12, 0.1));
-    this.chassisBody.addShape(new CANNON.Box(new CANNON.Vec3(0.65, 0.72, 1.15)), new CANNON.Vec3(-0.52, 2.25, 0.2));
+    // Lower steel frame + rear counterweight + ROPS cab cage (offset around CoM so cab hits ground on rollover!)
+    this.chassisBody.addShape(
+      new CANNON.Box(new CANNON.Vec3(1.06, 0.42, 2.05)),
+      new CANNON.Vec3(0, 0.98 - this.comY, 0.12 - this.comZ)
+    );
+    this.chassisBody.addShape(
+      new CANNON.Box(new CANNON.Vec3(0.58, 0.68, 0.88)),
+      new CANNON.Vec3(-0.56, 2.25 - this.comY, 0.18 - this.comZ)
+    );
+    this.chassisBody.addShape(
+      new CANNON.Box(new CANNON.Vec3(0.48, 0.44, 1.3)),
+      new CANNON.Vec3(0.56, 1.56 - this.comY, 0.56 - this.comZ)
+    );
+    this.chassisBody.position.set(this.position.x, this.position.y + this.comY, this.position.z);
+    this.chassisBody.quaternion.setFromEuler(0, this.heading, 0);
+    this.chassisBody.allowSleep = false;
     world.addBody(this.chassisBody);
 
     this.headBody = new CANNON.Body({
       mass: 0,
       type: CANNON.Body.KINEMATIC,
-      material: tractorMat
+      material: tractorMat,
+      collisionFilterGroup: 4,
+      collisionFilterMask: 1 // Pushes props & cars cleanly without EVER touching chassisBody!
     });
     world.addBody(this.headBody);
 
     this.equipTool('forks', false);
-    this.syncTransforms(0.016, false);
+    this.syncVisualsFromBody(0.016, false);
     this.prevHoldWorldPos.copy(this.holdWorldPos);
   }
 
   private rebuildHeadColliders(tool: AttachmentType): void {
-    // Clear existing headBody shapes and build true tool-specific physical colliders!
     this.headBody.shapes.length = 0;
     this.headBody.shapeOffsets.length = 0;
     this.headBody.shapeOrientations.length = 0;
 
     if (tool === 'forks') {
-      // Real twin steel fork tines + vertical carriage backplate!
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.075, 0.045, 0.78)), new CANNON.Vec3(-0.42, -0.32, -0.96));
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.075, 0.045, 0.78)), new CANNON.Vec3(0.42, -0.32, -0.96));
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.75, 0.36, 0.09)), new CANNON.Vec3(0, 0.08, -0.14));
     } else if (tool === 'bucket') {
-      // True 4-walled physical scoop cradle (floor, back, left & right cheeks!)
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(1.06, 0.07, 0.68)), new CANNON.Vec3(0, -0.34, -0.78));
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(1.06, 0.45, 0.07)), new CANNON.Vec3(0, 0.12, -0.14));
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.07, 0.44, 0.64)), new CANNON.Vec3(-1.01, 0.1, -0.72));
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.07, 0.44, 0.64)), new CANNON.Vec3(1.01, 0.1, -0.72));
     } else if (tool === 'grabber') {
-      // Back crossbar + opposing left/right curved squeeze arms
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.95, 0.18, 0.14)), new CANNON.Vec3(0, 0.1, -0.2));
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.12, 0.28, 0.65)), new CANNON.Vec3(-0.88, 0.08, -0.96));
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.12, 0.28, 0.65)), new CANNON.Vec3(0.88, 0.08, -0.96));
     } else {
-      // Spike / Grapple / Empty quick-hitch
       this.headBody.addShape(new CANNON.Box(new CANNON.Vec3(0.68, 0.25, 0.48)), new CANNON.Vec3(0, -0.05, -0.58));
     }
     this.headBody.updateMassProperties();
@@ -366,9 +387,7 @@ export class ClaasScorpion {
 
   public setWorkLights(on: boolean): void {
     this.workLightsOn = on;
-    for (const sl of this.workSpotLights) {
-      sl.intensity = on ? 26 : 0;
-    }
+    for (const sl of this.workSpotLights) sl.intensity = on ? 26 : 0;
     this.ledLensMat.emissiveIntensity = on ? 2.2 : 0.65;
   }
 
@@ -442,7 +461,7 @@ export class ClaasScorpion {
     exhaust.rotation.z = -0.1;
     this.chassisGroup.add(exhaust);
 
-    // Panoramic Left Cab + Animated Operator + Live A-Pillar Load-Moment LED Bar!
+    // Panoramic Left Cab + Animated Operator + Live A-Pillar Load-Moment LEDs
     const cab = new THREE.Group();
     cab.position.set(-0.56, 1.45, 0.18);
 
@@ -477,7 +496,6 @@ export class ClaasScorpion {
       cab.add(p);
     }
 
-    // Authentic CLAAS A-Pillar Load-Moment Stability LED Bar (visible inside Cab View!)
     for (let i = 0; i < 6; i++) {
       const ledColor = i < 3 ? 0x5ee034 : i < 5 ? 0xf5b822 : 0xff3b24;
       const mat = new THREE.MeshStandardMaterial({
@@ -504,7 +522,6 @@ export class ClaasScorpion {
     sideGlassR.position.set(0.56, 0.96, -0.02);
     cab.add(sideGlassR);
 
-    // Operator Seat & Animated Farmer inside the Cab!
     const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.24, 0.54), darkSlate);
     seatBase.position.set(0, 0.18, 0.26);
     cab.add(seatBase);
@@ -530,10 +547,6 @@ export class ClaasScorpion {
     this.driverLeftArm.position.set(-0.18, 0.68, -0.05);
     cab.add(this.driverLeftArm);
 
-    const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.36), driverCoat);
-    rightArm.position.set(0.24, 0.56, 0.04);
-    cab.add(rightArm);
-
     const dash = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.46, 0.44), darkSlate);
     dash.position.set(0, 0.25, -0.58);
     cab.add(dash);
@@ -550,7 +563,6 @@ export class ClaasScorpion {
     roof.castShadow = true;
     cab.add(roof);
 
-    // 4 Front LED Worklights + Real Nighttime SpotLights!
     this.ledLensMat = new THREE.MeshStandardMaterial({
       color: 0xfff8dc,
       emissive: 0xffe49e,
@@ -566,10 +578,10 @@ export class ClaasScorpion {
     }
 
     for (const slx of [-0.36, 0.36]) {
-      const sl = new THREE.SpotLight(0xfff1cc, 0, 38, Math.PI * 0.26, 0.55, 1.3);
+      const sl = new THREE.SpotLight(0xfff1cc, 0, 42, Math.PI * 0.26, 0.55, 1.25);
       sl.position.set(slx, 1.66, -0.9);
       const tgt = new THREE.Object3D();
-      tgt.position.set(slx * 1.4, -0.2, -14);
+      tgt.position.set(slx * 1.4, -0.2, -15);
       cab.add(tgt);
       sl.target = tgt;
       cab.add(sl);
@@ -593,7 +605,7 @@ export class ClaasScorpion {
 
     this.chassisGroup.add(cab);
 
-    // 4 Lugged Agricultural Wheels with Independent Suspension Travel!
+    // 4 Chunky Agricultural Wheels with Independent Suspension Compression!
     const wheelCoords: [number, number, boolean][] = [
       [-1.08, -1.28, true],
       [1.08, -1.28, true],
@@ -639,7 +651,7 @@ export class ClaasScorpion {
 
       pivot.add(spin);
       this.chassisGroup.add(pivot);
-      this.wheelPivots.push({ pivot, spin, isFront, baseY: 0.74, localX: wx, localZ: wz });
+      this.wheelPivots.push({ pivot, spin, isFront, baseY: 0.74, localX: wx, localZ: wz, compression: 0.14 });
     }
 
     // Telescopic Boom
@@ -649,7 +661,6 @@ export class ClaasScorpion {
     const outerBoom = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.52, 3.65), claasGreen);
     outerBoom.position.set(0, 0, -1.78);
     outerBoom.castShadow = true;
-    outerBoom.receiveShadow = true;
     this.boomPivot.add(outerBoom);
 
     const boomLamp = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.14, 0.14), darkSlate);
@@ -702,12 +713,10 @@ export class ClaasScorpion {
 
   public equipTool(tool: AttachmentType, notify = true): void {
     this.releaseAll(false);
-
     if (this.activeAttachmentMesh) {
       this.attachmentMount.remove(this.activeAttachmentMesh);
       this.activeAttachmentMesh = null;
     }
-
     this.activeTool = tool;
     this.clampClosed = false;
     this.squeezePressure = 0;
@@ -718,17 +727,13 @@ export class ClaasScorpion {
         this.scene.remove(this.droppedAttachments[dropIdx].mesh);
         this.droppedAttachments.splice(dropIdx, 1);
       }
-
       const mesh = buildAttachmentMesh(tool);
       this.activeAttachmentMesh = mesh;
       this.attachmentMount.add(mesh);
     }
 
     this.rebuildHeadColliders(tool);
-
-    if (notify) {
-      this.callbacks.onToolChanged(tool, tool !== 'none');
-    }
+    if (notify) this.callbacks.onToolChanged(tool, tool !== 'none');
   }
 
   public dropCurrentTool(): boolean {
@@ -765,9 +770,7 @@ export class ClaasScorpion {
         const old = this.activeTool;
         this.scene.remove(d.mesh);
         this.droppedAttachments.splice(i, 1);
-        if (old !== 'none') {
-          this.equipTool('none', false);
-        }
+        if (old !== 'none') this.equipTool('none', false);
         this.equipTool(d.type, true);
         return true;
       }
@@ -780,9 +783,7 @@ export class ClaasScorpion {
       }
     }
 
-    if (this.activeTool !== 'none') {
-      return this.dropCurrentTool();
-    }
+    if (this.activeTool !== 'none') return this.dropCurrentTool();
     return false;
   }
 
@@ -808,9 +809,62 @@ export class ClaasScorpion {
     return this.smoothedTipVel.length();
   }
 
+  /**
+   * Computes realistic kilogram mass of currently carried load (used for true dynamic tipping torque!).
+   */
+  public getCarriedMassKg(): number {
+    let kg = 0;
+    if (this.heldVillageObj) {
+      kg += this.heldVillageObj.kind === 'car' ? 2750 : this.heldVillageObj.kind === 'maibaum' ? 1400 : 750;
+    }
+    for (const p of this.heldProps) {
+      if (p.kind === 'silage_wrapped') kg += 1350;
+      else if (p.kind === 'crate') kg += 1100;
+      else if (p.kind === 'hay_round' || p.kind === 'hay_square') kg += 950;
+      else if (p.kind === 'log') kg += 900;
+      else kg += 420;
+    }
+    return kg;
+  }
+
+  public rightTractorInPlace(): void {
+    this.releaseAll(false);
+    const gx = this.chassisBody.position.x;
+    const gz = this.chassisBody.position.z;
+    const gy = getDrivableGroundY(gx, gz);
+    this.chassisBody.position.set(gx, gy + this.comY + 0.18, gz);
+    this.chassisBody.velocity.set(0, 0, 0);
+    this.chassisBody.angularVelocity.set(0, 0, 0);
+    this.chassisBody.quaternion.setFromEuler(0, this.heading, 0);
+    this.isTipped = false;
+    this.wasTipped = false;
+    this.uprightTimer = 2.0;
+    this.boomPitch = Math.min(this.boomPitch, 0.12);
+    this.boomExt = 0;
+  }
+
+  public teleportTo(x: number, z: number, heading: number): void {
+    this.releaseAll(false);
+    const gy = getDrivableGroundY(x, z);
+    this.chassisBody.position.set(x, gy + this.comY + 0.05, z);
+    this.chassisBody.velocity.set(0, 0, 0);
+    this.chassisBody.angularVelocity.set(0, 0, 0);
+    this.chassisBody.quaternion.setFromEuler(0, heading, 0);
+    this.heading = heading;
+    this.isTipped = false;
+    this.wasTipped = false;
+    this.uprightTimer = 2.0;
+    this.boomPitch = 0.08;
+    this.boomExt = 0;
+    this.headTilt = 0;
+  }
+
+  public resetPosition(): void {
+    this.teleportTo(FARM_CENTER.x - 2, FARM_CENTER.z + 14.5, 0.18);
+  }
+
   public releaseAll(allowMomentum = true): void {
     const tipSpeed = this.smoothedTipVel.length();
-    // PURE PHYSICS MOMENTUM RELEASE — zero artificial pop!
     const isGenuineThrow = allowMomentum && tipSpeed > 4.2;
 
     if (this.heldVillageObj) {
@@ -827,9 +881,7 @@ export class ClaasScorpion {
           this.yawRate * 1.4,
           (Math.random() - 0.5) * Math.min(4, tipSpeed * 0.3)
         );
-        if (isGenuineThrow) {
-          this.callbacks.onPropFling(vo.label, tipSpeed);
-        }
+        if (isGenuineThrow) this.callbacks.onPropFling(vo.label, tipSpeed);
       } else {
         vo.body.velocity.set(0, -0.1, 0);
         vo.body.angularVelocity.set(0, 0, 0);
@@ -841,7 +893,6 @@ export class ClaasScorpion {
     }
 
     if (this.heldProps.length === 0) return;
-
     for (const p of this.heldProps) {
       p.heldByTractor = false;
       p.body.wakeUp();
@@ -865,7 +916,6 @@ export class ClaasScorpion {
           p.wasThrown = false;
         }
       } else {
-        // Ultra-clean gentle set-down for realistic pallet & bale stacking!
         p.body.velocity.set(0, -0.06, 0);
         p.body.angularVelocity.set(0, 0, 0);
         p.wasThrown = false;
@@ -1015,21 +1065,159 @@ export class ClaasScorpion {
       grabbedAny = true;
     }
 
-    if (grabbedAny) {
-      this.clampClosed = true;
-    }
+    if (grabbedAny) this.clampClosed = true;
     return grabbedAny;
   }
 
-  public resetPosition(): void {
-    this.releaseAll(false);
-    this.position.set(-2, getDrivableGroundY(-2, 14.5), 14.5);
-    this.heading = 0.18;
-    this.speed = 0;
-    this.yawRate = 0;
-    this.boomPitch = 0.06;
-    this.boomExt = 0;
-    this.headTilt = 0;
+  /**
+   * Applies true 4-wheel spring-damper suspension, steered cornering grip, AND dynamic boom/load overturning forces!
+   * Called every physics step so the CLAAS Scorpion 741 genuinely pitches, rolls, lifts rear/inside wheels, and TIPS OVER!
+   */
+  public applyVehiclePhysicsForces(_dt: number, input: TractorInput): void {
+    const body = this.chassisBody;
+    const upWorld = new CANNON.Vec3(0, 1, 0);
+    body.quaternion.vmult(upWorld, upWorld);
+
+    const fwdWorld = new CANNON.Vec3(0, 0, -1);
+    body.quaternion.vmult(fwdWorld, fwdWorld);
+
+    const rightWorld = new CANNON.Vec3(1, 0, 0);
+    body.quaternion.vmult(rightWorld, rightWorld);
+
+    const maxSpeed = input.creep ? 3.2 : input.boost ? 18.5 : 12.2;
+    const restHubHeight = 0.92;
+    const kSpringFront = 132000;
+    const kSpringRear = 186000;
+    const cDamp = 24000;
+
+    let grounded = 0;
+
+    // 1. Independent 4-Wheel Spring-Damper + Steered Traction + Lateral Grip at Ground Contact!
+    if (upWorld.y > 0.25) {
+      for (const w of this.wheelPivots) {
+        const localHub = new CANNON.Vec3(w.localX, 0.74 - this.comY, w.localZ - this.comZ);
+        const hubWorld = body.pointToWorldFrame(localHub);
+        const groundY = getDrivableGroundY(hubWorld.x, hubWorld.z);
+        const distToGround = hubWorld.y - groundY;
+        const comp = Math.max(0, restHubHeight - distToGround);
+        w.compression = comp;
+
+        if (comp > 0) {
+          grounded++;
+          // Apply tire forces right at the ground patch (1.0m BELOW CoM) so sharp cornering creates REAL outward roll torque!
+          // NOTE: Cannon-es body.applyForce(worldForce, relativePoint) expects relativePoint = worldPoint - body.position!
+          const contactWorld = new CANNON.Vec3(hubWorld.x, groundY + 0.05, hubWorld.z);
+          const contactRel = contactWorld.vsub(body.position);
+          const vPt = new CANNON.Vec3();
+          body.getVelocityAtWorldPoint(contactWorld, vPt);
+
+          const kSpring = w.isFront ? kSpringFront : kSpringRear;
+          const fUp = THREE.MathUtils.clamp(kSpring * comp - cDamp * vPt.y, 0, 92000);
+          body.applyForce(new CANNON.Vec3(0, fUp, 0), contactRel);
+
+          let wSteer = 0;
+          if (this.steeringMode === '4WS') wSteer = w.isFront ? this.steerAngle : -this.steerAngle * 0.85;
+          else if (this.steeringMode === '2WS') wSteer = w.isFront ? this.steerAngle : 0;
+          else wSteer = this.steerAngle;
+
+          const cosS = Math.cos(wSteer);
+          const sinS = Math.sin(wSteer);
+          const wFwd = new CANNON.Vec3(
+            fwdWorld.x * cosS - rightWorld.x * sinS,
+            fwdWorld.y * cosS - rightWorld.y * sinS,
+            fwdWorld.z * cosS - rightWorld.z * sinS
+          );
+          wFwd.normalize();
+          const wRight = new CANNON.Vec3(
+            rightWorld.x * cosS + fwdWorld.x * sinS,
+            rightWorld.y * cosS + fwdWorld.y * sinS,
+            rightWorld.z * cosS + fwdWorld.z * sinS
+          );
+          wRight.normalize();
+
+          const vLong = vPt.dot(wFwd);
+          const vLat = vPt.dot(wRight);
+
+          // Varipower hydrostatic drive force (plenty of Bavarian hillside climbing torque + automatic hydrostatic hold!)
+          const targetSpeed = input.throttle * maxSpeed;
+          const driveGain = Math.abs(input.throttle) > 0.02 ? 12000 : 7600;
+          const fDrive = THREE.MathUtils.clamp((targetSpeed - vLong) * driveGain, -46000, 46000);
+
+          // Realistic rubber tire lateral cornering grip at ground contact patch
+          const fLat = THREE.MathUtils.clamp(-vLat * 21000, -42000, 42000);
+
+          const totalHoriz = new CANNON.Vec3(
+            wFwd.x * fDrive + wRight.x * fLat,
+            wFwd.y * fDrive + wRight.y * fLat,
+            wFwd.z * fDrive + wRight.z * fLat
+          );
+          body.applyForce(totalHoriz, contactRel);
+        }
+      }
+    }
+    this.wheelsOnGround = grounded;
+
+    // 2. Real Boom Steel + Carried Load Gravitational & Centrifugal Forces AT THE 3D BOOM TIP!
+    // Unloaded boom stays calm & level; extending heavy loads or turning fast with boom raised GENUINELY TIPS THE SCORPION!
+    const carriedKg = this.getCarriedMassKg();
+    const extSteelKg = this.boomExt * 165;
+    const tipWorldC = new CANNON.Vec3(this.holdWorldPos.x, this.holdWorldPos.y, this.holdWorldPos.z);
+    const tipRel = tipWorldC.vsub(body.position);
+
+    if (carriedKg > 0 || extSteelKg > 10) {
+      const fLoadY = -(carriedKg * 1.48 + extSteelKg) * 16.5;
+      body.applyForce(new CANNON.Vec3(0, fLoadY, 0), tipRel);
+    }
+
+    // Real inertial / centrifugal whip force when turning fast with raised boom or heavy load!
+    const effectiveWhipKg = carriedKg * 1.45 + (this.boomPitch > 0.25 ? 480 + this.boomExt * 240 : 0);
+    if (effectiveWhipKg > 0 && grounded >= 1) {
+      const yawOmega = body.angularVelocity.y;
+      const forwardSpd = body.velocity.dot(fwdWorld);
+      const latAccel = forwardSpd * yawOmega + yawOmega * Math.abs(yawOmega) * (1.8 + this.boomExt * 0.9);
+      const rollPush = THREE.MathUtils.clamp(effectiveWhipKg * latAccel, -56000, 56000);
+      body.applyForce(
+        new CANNON.Vec3(rightWorld.x * rollPush, 0, rightWorld.z * rollPush),
+        tipRel
+      );
+    }
+
+    // 3. Boom-to-Ground Physical Push (lets you push the boom against the ground — even to try self-righting if tipped!)
+    const tipGroundY = getDrivableGroundY(this.holdWorldPos.x, this.holdWorldPos.z);
+    if (this.holdWorldPos.y < tipGroundY + 0.28) {
+      const pen = tipGroundY + 0.28 - this.holdWorldPos.y;
+      const pushUp = Math.min(54000, pen * 82000);
+      body.applyForce(new CANNON.Vec3(0, pushUp, 0), tipRel);
+    }
+
+    // 4. Soft Water Shore Boundary (prevent driving off pier into deep Starnberger See!)
+    const px = body.position.x;
+    const pz = body.position.z;
+    const onSebaldPier = Math.abs(pz - 125) <= 2.9 && px <= -204 && px >= -245;
+    const minShoreX = onSebaldPier ? -244.5 : getShorelineX(pz) - 6;
+    if (px < minShoreX) {
+      body.position.x = minShoreX;
+      if (body.velocity.x < 0) body.velocity.x *= -0.2;
+    }
+    if (px > WORLD_MAX_X - 8) {
+      body.position.x = WORLD_MAX_X - 8;
+      if (body.velocity.x > 0) body.velocity.x = 0;
+    }
+    if (pz < WORLD_MIN_Z + 8) {
+      body.position.z = WORLD_MIN_Z + 8;
+      if (body.velocity.z < 0) body.velocity.z = 0;
+    }
+    if (pz > WORLD_MAX_Z - 8) {
+      body.position.z = WORLD_MAX_Z - 8;
+      if (body.velocity.z > 0) body.velocity.z = 0;
+    }
+
+    // Prevent chassis CoM from ever sinking below terrain even during violent rollovers!
+    const groundHere = getDrivableGroundY(body.position.x, body.position.z);
+    if (body.position.y < groundHere + 0.56) {
+      body.position.y = groundHere + 0.56;
+      if (body.velocity.y < 0) body.velocity.y = 0;
+    }
   }
 
   public update(
@@ -1039,71 +1227,13 @@ export class ClaasScorpion {
     props: FarmProp[],
     villageObjs: DynamicVillageObj[]
   ): void {
-    // --- 1. Driving, Slope Gravity Resistance & Multi-Mode Steering ---
-    const maxSpeed = input.creep ? 2.8 : input.boost ? (this.freePlayMode ? 16.5 : 13.5) : 9.2;
-    const accel = input.creep ? 10 : input.boost ? 21 : 14;
-
-    // Gentle hill gravity pull on Am Kirchberg & Ammerlander Straße!
-    const slopePull = Math.sin(this.smoothPitch) * 6.5;
-
-    if (Math.abs(input.throttle) > 0.01) {
-      const target = input.throttle * maxSpeed;
-      const diff = target - this.speed;
-      this.speed += Math.sign(diff) * Math.min(Math.abs(diff), accel * dt) - slopePull * dt * 0.35;
-    } else {
-      const drag = 13.5 * dt;
-      if (Math.abs(this.speed) <= drag) this.speed = 0;
-      else this.speed -= Math.sign(this.speed) * drag;
-    }
-
-    const targetSteer = input.steer * (input.creep ? 0.44 : 0.6);
+    // 1. Steer Angle & Telescopic Boom Hydraulics
+    const targetSteer = input.steer * (input.creep ? 0.44 : 0.62);
     this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, dt * 9);
 
-    const prevPos = this.position.clone();
-    const prevHeading = this.heading;
-
-    if (this.steeringMode === 'CRAB') {
-      this.yawRate = 0;
-      const moveAngle = this.heading + this.steerAngle * 0.9;
-      this.position.x -= Math.sin(moveAngle) * this.speed * dt;
-      this.position.z -= Math.cos(moveAngle) * this.speed * dt;
-    } else {
-      const turnMult = this.steeringMode === '4WS' ? 0.56 : 0.34;
-      const effectiveSpeed =
-        Math.abs(this.speed) > 0.25
-          ? this.speed
-          : Math.sign(input.throttle || 1) * (input.creep ? 0.45 : 1.05) * Math.abs(input.steer);
-      this.yawRate = this.steerAngle * effectiveSpeed * turnMult;
-      this.heading += this.yawRate * dt;
-      this.position.x -= Math.sin(this.heading) * this.speed * dt;
-      this.position.z -= Math.cos(this.heading) * this.speed * dt;
-    }
-
-    // World bounds: allow driving right out onto the wooden Starnberger See Pier (Steg) at z = -40!
-    const onPierCorridor = Math.abs(this.position.z - -40) <= 2.2;
-    const minX = onPierCorridor ? -121.5 : -99.5;
-    const maxX = 85.5;
-    const minZ = -107.0;
-    const maxZ = 29.8;
-    if (this.position.x < minX) {
-      this.position.x = minX;
-      this.speed *= 0.25;
-    } else if (this.position.x > maxX) {
-      this.position.x = maxX;
-      this.speed *= 0.25;
-    }
-    if (this.position.z < minZ) {
-      this.position.z = minZ;
-      this.speed *= 0.25;
-    } else if (this.position.z > maxZ) {
-      this.position.z = maxZ;
-      this.speed *= 0.25;
-    }
-
-    // --- 2. Telescopic Boom Hydraulics ---
     const fine = input.creep ? 0.45 : 1.0;
     this.prevHeadTilt = this.headTilt;
-    this.boomPitch = THREE.MathUtils.clamp(this.boomPitch + input.boomLift * 0.98 * fine * dt, -0.16, 1.08);
+    this.boomPitch = THREE.MathUtils.clamp(this.boomPitch + input.boomLift * 0.98 * fine * dt, -0.2, 1.1);
     this.boomExt = THREE.MathUtils.clamp(this.boomExt + input.boomExtend * 2.9 * fine * dt, 0, 3.6);
     this.headTilt = THREE.MathUtils.clamp(this.headTilt + input.headTilt * 1.9 * fine * dt, -0.78, 1.15);
 
@@ -1112,37 +1242,74 @@ export class ClaasScorpion {
       Math.abs(input.boomLift) + Math.abs(input.boomExtend) + Math.abs(input.headTilt) * 0.8
     );
 
-    // --- 3. Real Load-Moment & Tipping Stability Calculation! ---
-    let heldMass = 0;
-    if (this.heldVillageObj) heldMass += this.heldVillageObj.body.mass;
-    for (const p of this.heldProps) heldMass += p.body.mass;
-    const horizReach = (1.6 + this.boomExt * 1.1) * Math.max(0.25, Math.cos(this.boomPitch));
-    const targetMoment = heldMass > 0 ? Math.min(1.25, (heldMass * horizReach) / 215) : 0;
-    this.loadMoment += (targetMoment - this.loadMoment) * Math.min(1, dt * 6);
+    // 2. Sync 3D Visuals Directly from Dynamic Rigid-Body Orientation (REAL PITCH, ROLL & FLIPS!)
+    this.syncVisualsFromBody(dt, input.creep);
 
-    // Update authentic CLAAS A-Pillar Cab Stability LEDs & trigger Overload Alarm!
+    // 3. Detect Tipping / Rollover State & Fire Cab Overload Stability Alarm!
+    const upWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(this.root.quaternion);
+    const fwdWorld = new THREE.Vector3(0, 0, -1).applyQuaternion(this.root.quaternion);
+    const rightWorld = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.quaternion);
+
+    this.pitchDeg = Math.round(THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(fwdWorld.y, -1, 1))));
+    this.rollDeg = Math.round(THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(rightWorld.y, -1, 1))));
+    this.heading = Math.atan2(-fwdWorld.x, -fwdWorld.z);
+
+    const vel3 = new THREE.Vector3(
+      this.chassisBody.velocity.x,
+      this.chassisBody.velocity.y,
+      this.chassisBody.velocity.z
+    );
+    this.speed = vel3.dot(fwdWorld);
+    this.yawRate = this.chassisBody.angularVelocity.y;
+    this.distanceMeters += Math.hypot(vel3.x, vel3.z) * dt;
+
+    // Real tipping risk telemetry combining actual tilt angle + wheel liftoff + load moment!
+    const tiltFactor = Math.max(Math.abs(this.rollDeg) / 38, Math.abs(this.pitchDeg) / 34);
+    const wheelLiftFactor = this.wheelsOnGround <= 2 ? 0.95 : this.wheelsOnGround === 3 ? 0.68 : 0;
+    const carriedKg = this.getCarriedMassKg();
+    const reachFactor =
+      carriedKg > 0 ? (carriedKg * (1.8 + this.boomExt * 1.15) * Math.max(0.3, Math.cos(this.boomPitch))) / 4200 : 0;
+    this.loadMoment = Math.min(1.25, Math.max(tiltFactor, wheelLiftFactor, reachFactor));
+
     const litCount = Math.round(this.loadMoment * 6);
     this.aPillarLeds.forEach((mat, idx) => {
       const isLit = idx < litCount;
-      const blinkRed = idx === 5 && this.loadMoment > 0.86 ? (Math.sin(elapsed * 16) > 0 ? 1.8 : 0.1) : 1.3;
+      const blinkRed = idx === 5 && this.loadMoment > 0.82 ? (Math.sin(elapsed * 18) > 0 ? 1.8 : 0.1) : 1.3;
       mat.emissiveIntensity = isLit ? blinkRed : 0.06;
     });
-    if (this.loadMoment > 0.86) {
+    if (this.loadMoment > 0.8 && !this.isTipped) {
       this.callbacks.onOverloadAlarm();
     }
 
-    // --- 4. Wheel Spin, Steering, Driver Animation, Exhaust & 3D Tire Tracks ---
-    const wheelRadius = 0.74;
-    const wheelDelta = (this.speed * dt) / wheelRadius;
+    // GENUINE TIPPED-OVER / ROLLOVER CONSEQUENCE (debounced cleanly so it fires once per real rollover!)
+    this.rolloverCooldown = Math.max(0, this.rolloverCooldown - dt);
+    this.isTipped = upWorld.y < 0.56;
+    if (this.isTipped) {
+      this.uprightTimer = 0;
+      if (!this.wasTipped && this.rolloverCooldown <= 0) {
+        this.wasTipped = true;
+        this.rolloverCooldown = 3.5;
+        this.releaseAll(false);
+        this.callbacks.onTippedOver(this.position.clone());
+      }
+    } else if (upWorld.y > 0.84 && this.wheelsOnGround >= 3) {
+      this.uprightTimer += dt;
+      if (this.uprightTimer > 1.2) {
+        this.wasTipped = false;
+      }
+    }
+
+    // 4. Wheel Visuals, Driver Animation, Exhaust & 3D Tire Tracks
+    const wheelDelta = (this.speed * dt) / 0.74;
     for (const w of this.wheelPivots) {
       w.spin.rotation.x -= wheelDelta;
-      if (this.steeringMode === '4WS') {
-        w.pivot.rotation.y = w.isFront ? this.steerAngle : -this.steerAngle * 0.85;
-      } else if (this.steeringMode === '2WS') {
-        w.pivot.rotation.y = w.isFront ? this.steerAngle : 0;
-      } else {
-        w.pivot.rotation.y = this.steerAngle;
-      }
+      if (this.steeringMode === '4WS') w.pivot.rotation.y = w.isFront ? this.steerAngle : -this.steerAngle * 0.85;
+      else if (this.steeringMode === '2WS') w.pivot.rotation.y = w.isFront ? this.steerAngle : 0;
+      else w.pivot.rotation.y = this.steerAngle;
+
+      // Visually animate independent wheel droop/compression around equilibrium (0.18m)!
+      const travel = THREE.MathUtils.clamp((w.compression - 0.18) * 0.85, -0.18, 0.16);
+      w.pivot.position.y = w.baseY + travel;
     }
     this.steeringWheelMesh.rotation.z = this.steerAngle * 2.4;
     this.driverHead.rotation.y = this.steerAngle * 0.55;
@@ -1151,54 +1318,48 @@ export class ClaasScorpion {
     const flash = 0.4 + 0.6 * Math.abs(Math.sin(elapsed * 7.5));
     (this.beaconLight.material as THREE.MeshStandardMaterial).emissiveIntensity = flash * 1.35;
 
-    // Diesel exhaust puffs when throttling hard
-    if (Math.abs(input.throttle) > 0.2) {
+    if (Math.abs(input.throttle) > 0.2 && !this.isTipped) {
       this.exhaustTimer += dt;
       if (this.exhaustTimer > (input.boost ? 0.14 : 0.28)) {
         this.exhaustTimer = 0;
-        const exWorld = this.chassisGroup.localToWorld(this.exhaustTipLocal.clone());
-        this.callbacks.onExhaust(exWorld);
+        this.callbacks.onExhaust(this.chassisGroup.localToWorld(this.exhaustTipLocal.clone()));
       }
     }
 
-    // 3D Tire Tracks stamped onto mud, gravel & Bavarian meadow grass!
-    if (Math.abs(this.speed) > 0.8) {
+    if (Math.abs(this.speed) > 0.8 && this.wheelsOnGround >= 2) {
       this.trackTimer += Math.abs(this.speed) * dt;
-      if (this.trackTimer > 0.65) {
+      if (this.trackTimer > 0.7) {
         this.trackTimer = 0;
         const wWorld = new THREE.Vector3();
         for (const w of this.wheelPivots) {
-          w.pivot.getWorldPosition(wWorld);
-          this.callbacks.onWheelTrack(wWorld.x, wWorld.z, this.heading + w.pivot.rotation.y);
+          if (w.compression > 0) {
+            w.pivot.getWorldPosition(wWorld);
+            this.callbacks.onWheelTrack(wWorld.x, wWorld.z, this.heading + w.pivot.rotation.y);
+          }
         }
       }
     }
 
-    if (Math.abs(this.speed) > 4.8) {
+    if (Math.abs(this.speed) > 5.0 && this.wheelsOnGround >= 2) {
       this.dustTimer += dt;
       if (this.dustTimer > 0.16) {
         this.dustTimer = 0;
-        const rearL = this.chassisGroup.localToWorld(new THREE.Vector3(-1.05, 0.15, 1.45));
-        const rearR = this.chassisGroup.localToWorld(new THREE.Vector3(1.05, 0.15, 1.45));
-        this.callbacks.onDust(rearL);
-        this.callbacks.onDust(rearR);
+        this.callbacks.onDust(this.chassisGroup.localToWorld(new THREE.Vector3(-1.05, 0.15, 1.45)));
+        this.callbacks.onDust(this.chassisGroup.localToWorld(new THREE.Vector3(1.05, 0.15, 1.45)));
       }
     }
 
-    // --- 5. Action Input: Grab / Release / Hydraulic Squeeze ---
+    // 5. Grab / Release / Squeeze Action
     const justPressed = input.actionHeld && !this.actionWasHeld;
     const justReleased = !input.actionHeld && this.actionWasHeld;
     const hasLoad = this.heldProps.length > 0 || this.heldVillageObj !== null;
 
-    if (justPressed) {
+    if (justPressed && !this.isTipped) {
       this.holdTimer = 0;
       this.grabLockedOnPress = false;
       if (!hasLoad) {
-        if (this.tryGrabNearest(props, villageObjs)) {
-          this.grabLockedOnPress = true;
-        } else {
-          this.clampClosed = !this.clampClosed;
-        }
+        if (this.tryGrabNearest(props, villageObjs)) this.grabLockedOnPress = true;
+        else this.clampClosed = !this.clampClosed;
       }
     }
 
@@ -1230,27 +1391,20 @@ export class ClaasScorpion {
       this.grabLockedOnPress = false;
     }
 
-    if (!input.actionHeld) {
-      this.squeezePressure = Math.max(0, this.squeezePressure - dt * 2.2);
-    }
+    if (!input.actionHeld) this.squeezePressure = Math.max(0, this.squeezePressure - dt * 2.2);
     this.actionWasHeld = input.actionHeld;
 
-    // Realistic Balance / Pour mechanics
     if (this.activeTool === 'forks' && this.heldProps.length > 0 && !this.freePlayMode) {
-      const recklessWhip = this.boomPitch > 0.5 && Math.abs(this.yawRate) > 1.85 && Math.abs(this.speed) > 6.5;
       if (this.headTilt > 0.44) {
         this.releaseAll(false);
         this.warnOnce('Forks tilted too far forward — pallet slid off!');
-      } else if (recklessWhip) {
-        this.releaseAll(true);
-        this.warnOnce('Too fast with a high load — pallet slipped off forks!');
       }
     }
     if (this.activeTool === 'bucket' && this.heldProps.length > 0 && this.headTilt > 0.52) {
       this.releaseAll(true);
     }
 
-    // --- 6. Animate Attachment Jaws, Grabber Arms & Precision Fork Laser ---
+    // 6. Animate Attachment Jaws & Fork Lasers
     if (this.activeAttachmentMesh) {
       if (this.activeTool === 'forks') {
         const lL = this.activeAttachmentMesh.getObjectByName('forkLaserL');
@@ -1276,10 +1430,7 @@ export class ClaasScorpion {
       }
     }
 
-    // --- 7. True 4-Wheel Terrain Suspension & Visual Sync ---
-    this.syncTransforms(dt, input.creep);
-
-    // Passive Bale Spike puncture check
+    // 7. Passive Bale Spike Puncture & 8-Ton Wheel Run-Over Crush!
     if (this.activeTool === 'spike') {
       const tipPos = this.getHoldWorldPos();
       for (const p of props) {
@@ -1289,24 +1440,22 @@ export class ClaasScorpion {
             p.body.position.y - tipPos.y,
             p.body.position.z - tipPos.z
           );
-          if (dist < 1.02) {
-            this.callbacks.onSilagePopped(p, 'POP! Bale Spike poked the wrapped silage!');
-          }
+          if (dist < 1.02) this.callbacks.onSilagePopped(p, 'POP! Bale Spike poked the wrapped silage!');
         }
       }
     }
 
-    // 8-Ton Wheel Run-Over Crush Detection
     if (Math.abs(this.speed) > 0.55) {
       const wheelWorld = new THREE.Vector3();
       for (const w of this.wheelPivots) {
+        if (w.compression <= 0) continue;
         w.pivot.getWorldPosition(wheelWorld);
         for (const p of props) {
           if (p.heldByTractor || p.isDamaged || p.body.position.y > wheelWorld.y + 0.8) continue;
           const distXZ = Math.hypot(p.body.position.x - wheelWorld.x, p.body.position.z - wheelWorld.z);
           if (distXZ < p.radius + 0.42) {
             if (p.isWrappedSilage && !p.isPopped) {
-              this.callbacks.onSilagePopped(p, 'SQUISH-POP! You drove right over a wrapped silage bale!');
+              this.callbacks.onSilagePopped(p, 'SQUISH-POP! Your tires ran over a wrapped silage bale!');
             } else if (p.crushable) {
               this.callbacks.onPropDamaged(p, `CRUNCH! Your 8-ton tires ran over a ${p.label}!`);
             }
@@ -1315,20 +1464,7 @@ export class ClaasScorpion {
       }
     }
 
-    // Sync kinematic chassis collider
-    const safeDt = Math.max(0.004, dt);
-    const chassisQuat = new THREE.Quaternion();
-    this.chassisGroup.getWorldQuaternion(chassisQuat);
-    this.chassisBody.position.set(this.position.x, this.position.y, this.position.z);
-    this.chassisBody.quaternion.set(chassisQuat.x, chassisQuat.y, chassisQuat.z, chassisQuat.w);
-    this.chassisBody.velocity.set(
-      (this.position.x - prevPos.x) / safeDt,
-      (this.position.y - prevPos.y) / safeDt,
-      (this.position.z - prevPos.z) / safeDt
-    );
-    this.chassisBody.angularVelocity.set(0, (this.heading - prevHeading) / safeDt, 0);
-
-    // Sync held props & village objects cleanly to attachment
+    // 8. Sync Held Props & Lifted Vehicles to Attachment Mount
     const attachQuat = new THREE.Quaternion();
     this.attachmentMount.getWorldQuaternion(attachQuat);
 
@@ -1363,57 +1499,23 @@ export class ClaasScorpion {
     }
   }
 
-  private syncTransforms(dt: number, _creep: boolean): void {
-    // Sample real terrain height independently under all 4 agricultural wheels!
-    const cosH = Math.cos(this.heading);
-    const sinH = Math.sin(this.heading);
-    const wheelHeights: number[] = [];
-    for (const w of this.wheelPivots) {
-      const wx = this.position.x + w.localX * cosH + w.localZ * sinH;
-      const wz = this.position.z - w.localX * sinH + w.localZ * cosH;
-      wheelHeights.push(getDrivableGroundY(wx, wz));
-    }
-    const [hFL, hFR, hRL, hRR] = wheelHeights;
-    const avgFront = (hFL + hFR) * 0.5;
-    const avgRear = (hRL + hRR) * 0.5;
-    const avgLeft = (hFL + hRL) * 0.5;
-    const avgRight = (hFR + hRR) * 0.5;
-    const avgGround = (hFL + hFR + hRL + hRR) * 0.25;
+  private syncVisualsFromBody(dt: number, _creep: boolean): void {
+    this.root.position.set(
+      this.chassisBody.position.x,
+      this.chassisBody.position.y,
+      this.chassisBody.position.z
+    );
+    this.root.quaternion.set(
+      this.chassisBody.quaternion.x,
+      this.chassisBody.quaternion.y,
+      this.chassisBody.quaternion.z,
+      this.chassisBody.quaternion.w
+    );
 
-    // Authentic terrain slope pitch & cross-slope roll + heavy-boom tipping torque!
-    const terrainPitch = Math.atan2(avgFront - avgRear, 2.66);
-    const terrainRoll = Math.atan2(avgRight - avgLeft, 2.16);
-
-    // Overload tipping: front dives & rear lightens visibly when lifting heavy loads far out!
-    const tipDip = this.loadMoment * 0.095 + Math.max(0, this.loadMoment - 0.85) * 0.18;
-    const targetPitch = terrainPitch - this.speed * 0.003 - tipDip;
-    const targetRoll = terrainRoll + THREE.MathUtils.clamp(this.yawRate * 0.04, -0.06, 0.06);
-
-    const k = Math.min(1, dt * 11);
-    this.smoothY += (avgGround - this.smoothY) * k;
-    this.smoothPitch += (targetPitch - this.smoothPitch) * k;
-    this.smoothRoll += (targetRoll - this.smoothRoll) * k;
-
-    this.position.y = this.smoothY;
-    this.root.position.copy(this.position);
-    this.root.rotation.y = this.heading;
-    this.chassisGroup.rotation.x = this.smoothPitch;
-    this.chassisGroup.rotation.z = this.smoothRoll;
-
-    // Individual wheel spring compression relative to chassis!
-    this.wheelPivots.forEach((w, idx) => {
-      const expectedY = avgGround + (w.isFront ? (avgFront - avgRear) * 0.5 : -(avgFront - avgRear) * 0.5);
-      const bump = THREE.MathUtils.clamp(wheelHeights[idx] - expectedY, -0.14, 0.14);
-      const loadSquat = w.isFront ? -this.loadMoment * 0.06 : this.loadMoment * 0.05;
-      w.pivot.position.y = w.baseY + bump + loadSquat;
-    });
-
-    // Telescopic boom angles & slide
     this.boomPivot.rotation.x = this.boomPitch;
     this.innerBoom.position.z = -3.55 - this.boomExt;
     this.headPivot.rotation.x = -this.boomPitch - this.headTilt;
 
-    // Hydraulic lift cylinder tracking
     const boomMidLocal = new THREE.Vector3(0, -0.22, -1.75)
       .applyAxisAngle(new THREE.Vector3(1, 0, 0), this.boomPitch)
       .add(this.boomBaseLocal);
@@ -1423,8 +1525,7 @@ export class ClaasScorpion {
     const cylUnit = cylDir.clone().normalize();
     const cylMid = this.cylAnchorLocal.clone().addScaledVector(cylUnit, Math.min(0.36, cylLen * 0.4));
     const rodMid = this.cylAnchorLocal.clone().addScaledVector(cylDir, 0.55);
-    const up = new THREE.Vector3(0, 1, 0);
-    const cylQuat = new THREE.Quaternion().setFromUnitVectors(up, cylUnit);
+    const cylQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), cylUnit);
 
     this.liftCylOuter.position.copy(cylMid);
     this.liftCylOuter.quaternion.copy(cylQuat);
@@ -1433,6 +1534,8 @@ export class ClaasScorpion {
     this.liftCylRod.scale.y = Math.max(0.35, cylLen * 0.85);
 
     this.root.updateMatrixWorld(true);
+    // Ground-level chassis origin for camera, minimap, elevation, and interaction checks!
+    this.chassisGroup.getWorldPosition(this.position);
 
     this.holdWorldPos.copy(this.getHoldWorldPos());
     const safeDt = Math.max(0.004, dt);
@@ -1440,7 +1543,6 @@ export class ClaasScorpion {
     this.smoothedTipVel.lerp(this.tipWorldVel, 0.42);
     this.prevHoldWorldPos.copy(this.holdWorldPos);
 
-    // Sync true physical attachment headBody directly to attachmentMount world transform!
     const mountWorldPos = new THREE.Vector3();
     const mountWorldQuat = new THREE.Quaternion();
     this.attachmentMount.getWorldPosition(mountWorldPos);

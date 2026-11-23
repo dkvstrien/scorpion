@@ -1,16 +1,59 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import muensingRaw from './data/muensingData.json';
 
-export type SurfaceType = 'asphalt' | 'cobble' | 'gravel' | 'grass' | 'mud' | 'water';
+export interface MuensingOSMData {
+  meta: {
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+    scale: number;
+    lakeElevationM: number;
+    elevScale: number;
+  };
+  elevation: {
+    cols: number;
+    rows: number;
+    minX: number;
+    maxX: number;
+    minZ: number;
+    maxZ: number;
+    values: number[];
+  };
+  roads: { hw: string; name: string; pts: [number, number][] }[];
+  buildings: { x: number; z: number; w: number; d: number; rot: number; type: string; name: string }[];
+  forests: { x: number; z: number; w: number; d: number }[];
+  streams: { name: string; pts: [number, number][] }[];
+  landmarks: { name: string; kind: string; x: number; z: number }[];
+}
 
-export const WATER_LEVEL = -3.15;
+export const OSM_DATA = muensingRaw as unknown as MuensingOSMData;
 
-// World terrain grid covering Farmyard + Münsing + Am Kirchberg + Starnberger See shore!
-const GRID_MIN_X = -150;
-const GRID_MAX_X = 110;
-const GRID_MIN_Z = -130;
-const GRID_MAX_Z = 70;
-const GRID_STEP = 2.0;
+export type SurfaceType = 'asphalt' | 'gravel' | 'grass' | 'mud' | 'water';
+
+// Home Farmyard nestled right on the real open meadow in Wimpasing beside Münsinger Straße!
+export const FARM_CENTER = new THREE.Vector3(75, 0, 175);
+export const WATER_LEVEL = -1.1;
+
+// Real GPS landmarks from the OpenStreetMap dataset
+export const REAL_SPOTS = {
+  farm: { x: 75, z: 175, label: 'Wimpasing Home Farm' },
+  wimpasing: { x: -21.6, z: 194.3, label: 'Wimpasing' },
+  sebaldPier: { x: -206, z: 125, label: 'Fischerei Sebald · Starnberger See' },
+  schlossAmmerland: { x: -222.5, z: 163.5, label: 'Schloss Ammerland' },
+  ried: { x: -3.1, z: 50.9, label: 'Ried' },
+  muensingAltwirt: { x: 474.6, z: 240.0, label: 'Münsing · Gasthaus Zum Altwirt' },
+  muensingChurch: { x: 456.6, z: 225.5, label: 'Münsing · St. Mariä Himmelfahrt' },
+  edeka: { x: 516.7, z: 213.4, label: 'Münsing · EDEKA Graf' },
+  weipertshausen: { x: 214.4, z: -401.7, label: 'Weipertshausen' }
+};
+
+// Terrain visual & physics grid bounds covering Starnberger See shore -> Ammerland -> Wimpasing -> Münsing -> Weipertshausen!
+export const WORLD_MIN_X = -390;
+export const WORLD_MAX_X = 650;
+export const WORLD_MIN_Z = -435;
+export const WORLD_MAX_Z = 305;
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
@@ -18,69 +61,88 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 }
 
 /**
- * Analytic continuous Upper Bavarian heightfield for Münsing & Starnberger See.
- * - Farmyard plateau (x ∈ [-32, 32], z ∈ [-31, 31]): crisp flat y = 0 for rock-solid pallet stacking.
- * - Hauptstraße / Weipertshausener Str. / Bachstraße / EDEKA / Alter Wirt / Rathaus: flat-to-gently-undulating y = 0..0.4m.
- * - Am Kirchberg (centered at -21, -67.5): authentic +3.5m church hill with flat churchyard crown & drivable west/east slopes.
- * - Ammerlander Straße heading west (x < -58): scenic descent down to Starnberger See shoreline (y = -3.15m at x = -102).
+ * Real Starnberger See eastern shoreline X coordinate (follows real Nördliche/Südliche Seestraße from OSM!).
+ */
+export function getShorelineX(z: number): number {
+  const pts: [number, number][] = [
+    [-440, -258],
+    [-260, -284],
+    [-130, -264],
+    [-30, -226],
+    [78, -206],
+    [130, -214],
+    [170, -228],
+    [245, -242],
+    [320, -248]
+  ];
+  if (z <= pts[0][0]) return pts[0][1];
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (z <= pts[i + 1][0]) {
+      const t = (z - pts[i][0]) / (pts[i + 1][0] - pts[i][0]);
+      return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t;
+    }
+  }
+  return pts[pts.length - 1][1];
+}
+
+/**
+ * Sample real SRTM elevation in meters above sea level (m ü. NN) from Open-Elevation DEM grid.
+ */
+export function getRealElevationMeters(x: number, z: number): number {
+  const { cols, rows, minX, maxX, minZ, maxZ, values } = OSM_DATA.elevation;
+  const u = Math.max(0, Math.min(cols - 1.0001, ((x - minX) / (maxX - minX)) * (cols - 1)));
+  const v = Math.max(0, Math.min(rows - 1.0001, ((z - minZ) / (maxZ - minZ)) * (rows - 1)));
+  const ix = Math.floor(u);
+  const iz = Math.floor(v);
+  const fx = u - ix;
+  const fz = v - iz;
+
+  const e00 = values[iz * cols + ix];
+  const e10 = values[iz * cols + ix + 1];
+  const e01 = values[(iz + 1) * cols + ix];
+  const e11 = values[(iz + 1) * cols + ix + 1];
+
+  return (e00 * (1 - fx) + e10 * fx) * (1 - fz) + (e01 * (1 - fx) + e11 * fx) * fz;
+}
+
+const FARM_RAW_ELEV = getRealElevationMeters(FARM_CENTER.x, FARM_CENTER.z);
+export const FARM_GROUND_Y = Math.max(0.6, (FARM_RAW_ELEV - 583.0) * 0.36 + 0.5);
+
+/**
+ * Continuous 3D world Y height in game meters, driven directly by the real Münsing–Ammerland DEM!
+ * - Starnberger See sits cleanly west of the real Seestraße shoreline at WATER_LEVEL (-1.1m)
+ * - Ammerland & Wimpasing sit dry at y ≈ +0.5m..+4m
+ * - Driving east up Münsinger Straße climbs the REAL Bavarian moraine ridge up to y ≈ +25m in Münsing!
+ * - Home Farmyard at (75, 175) has a crisp flat carved plateau for realistic pallet stacking!
  */
 export function getTerrainHeight(x: number, z: number): number {
-  // 1. Am Kirchberg Church Hill (authentic gentle Bavarian hill for St. Mariä Himmelfahrt!)
-  const dxChurch = (x - -21) / 18.5;
-  const dzChurch = (z - -67.5) / 16.5;
-  const rChurch = Math.hypot(dxChurch, dzChurch);
-  // Flat churchyard crown inside r < 0.68, smooth drivable ramp down to r = 1.35
-  const churchHill = 3.4 * (1 - smoothstep(0.62, 1.32, rChurch));
+  const elevM = getRealElevationMeters(x, z);
+  let y = Math.max(0.45, (elevM - 583.0) * 0.36 + 0.45);
 
-  // 2. Gentle descent west toward Starnberger See (Lake Starnberg shoreline around x = -100)
-  // Keep Hauptstraße / Ammerlander Straße smoothly descending down to the lakeside pier!
-  const lakeSlope = smoothstep(-58, -106, x) * -3.55;
-  // Deeper lakebed offshore
-  const lakeDepth = smoothstep(-102, -132, x) * -2.6;
+  // Carve smooth Starnberger See lake basin west of the real Seestraße shoreline!
+  const shoreX = getShorelineX(z);
+  const lakeDrop = smoothstep(shoreX + 6, shoreX - 30, x);
+  y = y * (1 - lakeDrop) + (WATER_LEVEL - 3.2) * lakeDrop;
 
-  // 3. Subtle natural Upper Bavarian rolling pasture outside the flat farm & road corridors
-  const farmFlatMask =
-    (1 - smoothstep(28, 42, Math.abs(x))) * (1 - smoothstep(28, 40, Math.abs(z)));
-  const mainRoadMask = 1 - smoothstep(5.5, 11.0, Math.abs(z - -40));
-  const weipertMask = (1 - smoothstep(5.0, 10.5, Math.abs(x - 2))) * smoothstep(-110, -34, z);
-  const bachMask = (1 - smoothstep(5.0, 10.5, Math.abs(x - 38))) * smoothstep(-90, -34, z);
-  const edekaPad = (1 - smoothstep(10, 18, Math.abs(x - 56))) * (1 - smoothstep(11, 18, Math.abs(z - -56)));
-  const alterWirtPad = (1 - smoothstep(9, 15, Math.abs(x - 22))) * (1 - smoothstep(10, 16, Math.abs(z - -55)));
-  const rathausPad = (1 - smoothstep(8, 14, Math.abs(x - 21.5))) * (1 - smoothstep(8, 14, Math.abs(z - -72.5)));
-  const bakeryPad = (1 - smoothstep(8, 14, Math.abs(x - -52))) * (1 - smoothstep(7, 13, Math.abs(z - -55)));
-  const dorfplatzPad = (1 - smoothstep(7, 12, Math.abs(x - -8.5))) * (1 - smoothstep(7, 12, Math.abs(z - -52.5)));
+  // Carve a crisp flat farmyard terrace around Wimpasing Home Farm (75, 175) so barns & pallet stacks are 100% level!
+  const fdx = Math.abs(x - FARM_CENTER.x);
+  const fdz = Math.abs(z - FARM_CENTER.z);
+  const farmFlat = (1 - smoothstep(32, 48, fdx)) * (1 - smoothstep(30, 46, fdz));
+  y = y * (1 - farmFlat) + FARM_GROUND_Y * farmFlat;
 
-  const keepLevel = Math.min(
-    1,
-    Math.max(
-      farmFlatMask,
-      mainRoadMask,
-      weipertMask,
-      bachMask,
-      edekaPad,
-      alterWirtPad,
-      rathausPad,
-      bakeryPad,
-      dorfplatzPad
-    )
-  );
+  return y;
+}
 
-  const rolling =
-    (Math.sin(x * 0.045) * Math.cos(z * 0.04) * 1.15 +
-      Math.sin((x + z) * 0.028) * 0.85) *
-    (1 - keepLevel) *
-    (1 - smoothstep(-60, -90, x));
-
-  // Keep northernmost far hills gently rising past z = -105 (outside playable streets!)
-  const northRise = smoothstep(-106, -130, z) * 4.5 * (1 - smoothstep(-65, -95, x));
-
-  // Keep farmyard strictly y = 0.0 inside [-31, 31] x [-30, 30]
-  const total = (churchHill + rolling + northRise) * (1 - farmFlatMask) + lakeSlope + lakeDepth;
-  return total;
+export function getDrivableGroundY(x: number, z: number): number {
+  // Wooden Fischerei Sebald Lakeside Pier (Steg) jutting out into Starnberger See at (-208..-244, 125)!
+  if (x <= -206 && x >= -246 && Math.abs(z - 125) <= 3.0) {
+    return Math.max(getTerrainHeight(x, z), WATER_LEVEL + 0.72);
+  }
+  return getTerrainHeight(x, z);
 }
 
 export function getTerrainNormal(x: number, z: number, target = new THREE.Vector3()): THREE.Vector3 {
-  const eps = 0.45;
+  const eps = 0.8;
   const hL = getTerrainHeight(x - eps, z);
   const hR = getTerrainHeight(x + eps, z);
   const hD = getTerrainHeight(x, z - eps);
@@ -91,28 +153,9 @@ export function getTerrainNormal(x: number, z: number, target = new THREE.Vector
 
 export function getSurfaceType(x: number, z: number): SurfaceType {
   const y = getTerrainHeight(x, z);
-  if (y < WATER_LEVEL + 0.12 && x < -92) return 'water';
-
-  // Hauptstraße & Ammerlander Straße down to Starnberger See pier
-  if (Math.abs(z - -40) < 5.3 && x > -104 && x < 84) return 'asphalt';
-  // Gate apron
-  if (Math.abs(x - -1.5) < 5.8 && z > -37 && z < -29) return 'asphalt';
-  // Weipertshausener Straße
-  if (Math.abs(x - 2) < 4.7 && z > -105 && z < -39) return 'asphalt';
-  // Am Kirchberg west & north loop
-  if (Math.abs(x - -38) < 4.1 && z > -86 && z < -39) return 'asphalt';
-  if (Math.abs(z - -84) < 4.2 && x > -41 && x < 42) return 'asphalt';
-  // Bachstraße & EDEKA parking lot
-  if (Math.abs(x - 38) < 4.2 && z > -86 && z < -39) return 'asphalt';
-  if (x > 41 && x < 52 && z > -67 && z < -45) return 'asphalt';
-
-  // Dorfplatz & sidewalks
-  if (x > -15.5 && x < -1.5 && z > -59.5 && z < -45.5) return 'cobble';
-  if (Math.abs(z - -46.6) < 1.5 && x > -82 && x < 82) return 'cobble';
-
-  // Farmyard courtyard & mud tracks
-  if (Math.abs(x) < 28 && Math.abs(z) < 28) {
-    if (Math.abs(x) < 4 || Math.abs(z) < 4) return 'mud';
+  if (y < WATER_LEVEL + 0.15) return 'water';
+  if (Math.abs(x - FARM_CENTER.x) < 28 && Math.abs(z - FARM_CENTER.z) < 28) {
+    if (Math.abs(x - FARM_CENTER.x) < 4.5 || Math.abs(z - FARM_CENTER.z) < 4.5) return 'mud';
     return 'gravel';
   }
   return 'grass';
@@ -124,35 +167,26 @@ export interface TerrainBuildResult {
   waterMesh: THREE.Mesh;
 }
 
-/**
- * Builds both the continuous 3D terrain mesh (vertex-colored Bavarian grass/shore/hill shading + detail)
- * AND the exact matching Cannon-es Heightfield physics collider, plus the shimmering Starnberger See water plane!
- */
-export function buildTerrainAndLake(
+export function buildRealMuensingTerrain(
   scene: THREE.Scene,
   world: CANNON.World,
   groundMat: CANNON.Material,
   detailBump: THREE.CanvasTexture,
   meadowTex: THREE.CanvasTexture
 ): TerrainBuildResult {
-  const cols = Math.round((GRID_MAX_X - GRID_MIN_X) / GRID_STEP);
-  const rows = Math.round((GRID_MAX_Z - GRID_MIN_Z) / GRID_STEP);
+  const cols = 130;
+  const rows = 92;
+  const width = WORLD_MAX_X - WORLD_MIN_X;
+  const depth = WORLD_MAX_Z - WORLD_MIN_Z;
+  const centerX = (WORLD_MIN_X + WORLD_MAX_X) * 0.5;
+  const centerZ = (WORLD_MIN_Z + WORLD_MAX_Z) * 0.5;
 
-  // --- 1. Three.js Visual Heightfield Mesh ---
-  const geo = new THREE.PlaneGeometry(
-    GRID_MAX_X - GRID_MIN_X,
-    GRID_MAX_Z - GRID_MIN_Z,
-    cols,
-    rows
-  );
+  const geo = new THREE.PlaneGeometry(width, depth, cols, rows);
   geo.rotateX(-Math.PI / 2);
 
   const posAttr = geo.attributes.position as THREE.BufferAttribute;
   const colors = new Float32Array(posAttr.count * 3);
   const c = new THREE.Color();
-
-  const centerX = (GRID_MIN_X + GRID_MAX_X) * 0.5;
-  const centerZ = (GRID_MIN_Z + GRID_MAX_Z) * 0.5;
 
   for (let i = 0; i < posAttr.count; i++) {
     const wx = posAttr.getX(i) + centerX;
@@ -160,17 +194,16 @@ export function buildTerrainAndLake(
     const wy = getTerrainHeight(wx, wz);
     posAttr.setY(i, wy);
 
-    // Rich painterly Bavarian meadow / Kirchberg hillside / sandy Starnberger See pebble shore coloring!
-    const noise = Math.sin(wx * 0.14) * Math.cos(wz * 0.13) * 0.04;
-    if (wy < WATER_LEVEL + 0.45 && wx < -90) {
-      // Warm natural Starnberger See pebble shore & shallow bed
-      c.setRGB(0.62 + noise, 0.56 + noise, 0.44 + noise);
-    } else if (wy > 1.8) {
-      // Sunlit grassy Kirchberg church hillside
-      c.setRGB(0.41 + noise, 0.58 + noise, 0.28 + noise);
+    const n = Math.sin(wx * 0.035) * Math.cos(wz * 0.035) * 0.035;
+    if (wy < WATER_LEVEL + 0.55) {
+      // Starnberger See pale gravel pebble beach
+      c.setRGB(0.62 + n, 0.58 + n, 0.47 + n);
+    } else if (wy > 16) {
+      // Sunlit Upper Bavarian Münsing moraine upland pasture
+      c.setRGB(0.39 + n, 0.55 + n, 0.27 + n);
     } else {
-      // Lush Upper Bavarian pasture grass
-      c.setRGB(0.36 + noise, 0.52 + noise, 0.25 + noise);
+      // Rich green Starnberger See lakeside & valley meadow
+      c.setRGB(0.34 + n, 0.5 + n, 0.24 + n);
     }
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
@@ -180,94 +213,80 @@ export function buildTerrainAndLake(
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
+  meadowTex.repeat.set(65, 45);
+  detailBump.repeat.set(55, 40);
+
   const terrainMat = new THREE.MeshStandardMaterial({
     map: meadowTex,
     vertexColors: true,
     roughness: 0.94,
     metalness: 0.02,
     bumpMap: detailBump,
-    bumpScale: 0.12
+    bumpScale: 0.14
   });
+
   const mesh = new THREE.Mesh(geo, terrainMat);
   mesh.position.set(centerX, 0, centerZ);
   mesh.receiveShadow = true;
   scene.add(mesh);
 
-  // Broad distant outer meadow skirt beyond the heightfield box (y = -3.6 so it never pokes through lake!)
-  const skirt = new THREE.Mesh(
-    new THREE.RingGeometry(130, 380, 64),
-    new THREE.MeshStandardMaterial({ color: 0x51783a, roughness: 0.98 })
-  );
-  skirt.rotation.x = -Math.PI / 2;
-  skirt.position.set(0, -0.35, -30);
-  scene.add(skirt);
-
-  // --- 2. Cannon-es Heightfield Physics Collider (exact match to visual terrain!) ---
-  // Note: In Cannon Heightfield, matrix[i][j] maps local x = i * elementSize, local y = j * elementSize,
-  // and rotating by -PI/2 around X maps local +Y -> world -Z!
-  // So matrix[ix][iz] corresponds to worldX = GRID_MIN_X + ix * step, worldZ = GRID_MAX_Z - iz * step!
+  // Cannon-es Heightfield physics collider matching the exact DEM terrain!
+  const hfStep = 8.0;
+  const hfCols = Math.ceil(width / hfStep);
+  const hfRows = Math.ceil(depth / hfStep);
   const matrix: number[][] = [];
-  for (let ix = 0; ix <= cols; ix++) {
+  for (let ix = 0; ix <= hfCols; ix++) {
     const col: number[] = [];
-    const wx = GRID_MIN_X + ix * GRID_STEP;
-    for (let iz = 0; iz <= rows; iz++) {
-      const wz = GRID_MAX_Z - iz * GRID_STEP;
+    const wx = WORLD_MIN_X + ix * hfStep;
+    for (let iz = 0; iz <= hfRows; iz++) {
+      const wz = WORLD_MAX_Z - iz * hfStep;
       col.push(getTerrainHeight(wx, wz));
     }
     matrix.push(col);
   }
-
-  const hfShape = new CANNON.Heightfield(matrix, { elementSize: GRID_STEP });
+  const hfShape = new CANNON.Heightfield(matrix, { elementSize: hfStep });
   const body = new CANNON.Body({ mass: 0, material: groundMat });
   body.addShape(hfShape);
-  body.position.set(GRID_MIN_X, 0, GRID_MAX_Z);
+  body.position.set(WORLD_MIN_X, 0, WORLD_MAX_Z);
   body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
   world.addBody(body);
 
-  // --- 3. Shimmering Reflective Starnberger See (Lake Starnberg) on the Western Horizon! ---
-  const waterGeo = new THREE.PlaneGeometry(240, 380, 28, 28);
+  // Shimmering Reflective Starnberger See (Lake Starnberg) stretching far west toward Tutzing & Feldafing!
+  const waterGeo = new THREE.PlaneGeometry(760, 1200, 32, 32);
   waterGeo.rotateX(-Math.PI / 2);
   const waterMat = new THREE.MeshStandardMaterial({
-    color: 0x266c8e,
-    roughness: 0.14,
-    metalness: 0.52,
+    color: 0x1e6082,
+    roughness: 0.12,
+    metalness: 0.56,
     transparent: true,
-    opacity: 0.9
+    opacity: 0.92
   });
   const waterMesh = new THREE.Mesh(waterGeo, waterMat);
-  waterMesh.position.set(-216, WATER_LEVEL, -40);
+  waterMesh.position.set(-595, WATER_LEVEL, -60);
   waterMesh.receiveShadow = true;
   scene.add(waterMesh);
 
-  return { mesh, body, waterMesh };
-}
-
-/**
- * Helper to build a terrain-conforming road strip so streets ride smoothly over Kirchberg & down toward Lake Starnberg!
- */
-export function buildConformingStrip(
-  width: number,
-  length: number,
-  centerX: number,
-  centerZ: number,
-  alongZ: boolean,
-  yOffset: number,
-  material: THREE.Material,
-  segments = 24
-): THREE.Mesh {
-  const segW = alongZ ? 4 : segments;
-  const segL = alongZ ? segments : 4;
-  const geo = new THREE.PlaneGeometry(width, length, segW, segL);
-  geo.rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < pos.count; i++) {
-    const wx = pos.getX(i) + centerX;
-    const wz = pos.getZ(i) + centerZ;
-    pos.setY(i, getTerrainHeight(wx, wz) + yOffset);
+  // Panoramic Bavarian Alps (Karwendel & Zugspitze) far on the southern horizon across Starnberger See!
+  const alpRock = new THREE.MeshStandardMaterial({ color: 0x5c738c, roughness: 0.94, flatShading: true });
+  const alpSnow = new THREE.MeshStandardMaterial({ color: 0xeef5fb, roughness: 0.85, flatShading: true });
+  const alpPeaks: [number, number, number, number][] = [
+    [-540, 560, 120, 140],
+    [-340, 620, 135, 168],
+    [-120, 660, 145, 190],
+    [120, 650, 140, 182],
+    [360, 620, 135, 165],
+    [590, 580, 125, 148]
+  ];
+  for (const [ax, az, ar, ah] of alpPeaks) {
+    const peak = new THREE.Mesh(new THREE.ConeGeometry(ar, ah, 6), alpRock);
+    peak.position.set(ax, ah * 0.5 - 6, az);
+    peak.rotation.y = ax * 0.02;
+    scene.add(peak);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(ar * 0.38, ah * 0.38, 6), alpSnow);
+    cap.position.set(ax, ah * 0.81 - 6, az);
+    cap.rotation.y = ax * 0.02;
+    scene.add(cap);
   }
-  geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, material);
-  mesh.position.set(centerX, 0, centerZ);
-  mesh.receiveShadow = true;
-  return mesh;
+
+  return { mesh, body, waterMesh };
 }

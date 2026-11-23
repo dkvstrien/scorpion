@@ -12,7 +12,15 @@ import {
   createStoneWallTexture,
   createWrappedSilageTexture
 } from './textures';
-import { buildTerrainAndLake, getTerrainHeight } from './terrain';
+import {
+  buildRealMuensingTerrain,
+  FARM_CENTER,
+  FARM_GROUND_Y,
+  WORLD_MAX_X,
+  WORLD_MAX_Z,
+  WORLD_MIN_X,
+  WORLD_MIN_Z
+} from './terrain';
 import { ZoneKey } from './props';
 
 export interface TidyZone {
@@ -35,18 +43,20 @@ export interface RackSpot {
 export class FarmEnvironment {
   public zones: TidyZone[] = [];
   public rackSpots: RackSpot[] = [];
-  public pondCenter = new THREE.Vector3(12, 0, 23);
+  public pondCenter = new THREE.Vector3(FARM_CENTER.x + 12, FARM_GROUND_Y, FARM_CENTER.z + 21);
   public pondRadius = 4.9;
-  public trailerDeckY = 1.02;
+  public trailerDeckY = FARM_GROUND_Y + 1.02;
   public lakeWaterMesh!: THREE.Mesh;
-  public nightGlowMaterials: THREE.MeshStandardMaterial[] = [];
 
+  private ox = FARM_CENTER.x;
+  private oy = FARM_GROUND_Y;
+  private oz = FARM_CENTER.z;
   private windmillBlades!: THREE.Group;
   private ducks: { group: THREE.Group; angle: number; radius: number; speed: number }[] = [];
   private hintsVisible = false;
 
   constructor(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material) {
-    this.buildGroundAndHills(scene, world, groundMat);
+    this.buildTerrainAndApron(scene, world, groundMat);
     this.buildBoundaries(scene, world, groundMat);
     this.buildHayBarn(scene, world, groundMat);
     this.buildSilageClamp(scene, world, groundMat);
@@ -56,7 +66,7 @@ export class FarmEnvironment {
     this.buildScrapSkip(scene, world, groundMat);
     this.buildWorkshopAndToolShed(scene, world, groundMat);
     this.buildDuckPond(scene);
-    this.buildScenery(scene);
+    this.buildWindmill(scene);
   }
 
   public setHintsVisible(show: boolean): void {
@@ -80,9 +90,7 @@ export class FarmEnvironment {
     const body = new CANNON.Body({ mass: 0, material: mat });
     body.addShape(new CANNON.Box(new CANNON.Vec3(w * 0.5, h * 0.5, d * 0.5)));
     body.position.set(x, y, z);
-    if (rotY !== 0) {
-      body.quaternion.setFromEuler(0, rotY, 0);
-    }
+    if (rotY !== 0) body.quaternion.setFromEuler(0, rotY, 0);
     world.addBody(body);
   }
 
@@ -96,7 +104,6 @@ export class FarmEnvironment {
     minY: number,
     color: number
   ): void {
-    // Subtle optional hint beacon (OFF by default so farm looks authentic & puzzle-like!)
     const hintGroup = new THREE.Group();
     const borderGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 0.14, d));
     const border = new THREE.LineSegments(borderGeo, new THREE.LineBasicMaterial({ color }));
@@ -123,17 +130,16 @@ export class FarmEnvironment {
     });
   }
 
-  private buildGroundAndHills(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // True continuous 3D Upper Bavarian terrain heightfield + shimmering Starnberger See lake!
+  private buildTerrainAndApron(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
     const detailBump = createDetailBumpTexture();
     const meadowTex = createMeadowDetailTexture();
-    const { waterMesh } = buildTerrainAndLake(scene, world, groundMat, detailBump, meadowTex);
+    const { waterMesh } = buildRealMuensingTerrain(scene, world, groundMat, detailBump, meadowTex);
     this.lakeWaterMesh = waterMesh;
 
-    // Farmyard gravel/concrete/mud-track apron cleanly seated on the flat y = 0 farm plateau
+    // Wimpasing Home Farmyard gravel/concrete courtyard cleanly seated on the carved flat terrace
     const groundTex = createFarmGroundTexture();
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(66, 63),
+      new THREE.PlaneGeometry(64, 62),
       new THREE.MeshStandardMaterial({
         map: groundTex,
         bumpMap: detailBump,
@@ -143,132 +149,45 @@ export class FarmEnvironment {
       })
     );
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(0, 0.015, 0);
+    ground.position.set(this.ox, this.oy + 0.04, this.oz);
     ground.receiveShadow = true;
     scene.add(ground);
-
-    // Sculpted Upper Bavarian wooded foothills & ridges (faceted natural shapes instead of round spheres!)
-    const hillColors = [0x466d36, 0x527a3e, 0x3e6231, 0x5b8444];
-    const ridgeSpecs: [number, number, number, number, number][] = [
-      [-60, -215, 76, 26, 0.4],
-      [58, -218, 82, 29, -0.3],
-      [172, -165, 68, 25, 0.8],
-      [196, -35, 64, 23, 0.2],
-      [175, 95, 68, 25, -0.5],
-      [55, 180, 74, 26, 0.1],
-      [-75, 180, 72, 24, 0.6],
-      // Far western Starnberger See shore ridges (Tutzing / Feldafing wooded bluffs!)
-      [-288, -145, 86, 24, 0.3],
-      [-298, -35, 92, 28, -0.2],
-      [-290, 88, 88, 25, 0.5]
-    ];
-    ridgeSpecs.forEach(([hx, hz, hr, hh, rot], idx) => {
-      const ridge = new THREE.Mesh(
-        new THREE.ConeGeometry(hr, hh, 7),
-        new THREE.MeshStandardMaterial({ color: hillColors[idx % hillColors.length], roughness: 0.96, flatShading: true })
-      );
-      ridge.position.set(hx, hh * 0.45 - 4.2, hz);
-      ridge.rotation.y = rot;
-      ridge.scale.set(1.35, 1, 0.85);
-      scene.add(ridge);
-    });
-
-    // Panoramic snow-capped Bavarian Alps (Karwendel & Zugspitze silhouette!) across the southern & southwestern horizon
-    const alpRock = new THREE.MeshStandardMaterial({ color: 0x627990, roughness: 0.94, flatShading: true });
-    const alpSnow = new THREE.MeshStandardMaterial({ color: 0xedf4fa, roughness: 0.85, flatShading: true });
-    const alpPeaks: [number, number, number, number][] = [
-      [-270, 175, 62, 68],
-      [-215, 225, 64, 74],
-      [-140, 248, 66, 82],
-      [-55, 262, 72, 92],
-      [35, 260, 70, 88],
-      [120, 246, 62, 74],
-      [195, 225, 58, 64]
-    ];
-    for (const [ax, az, ar, ah] of alpPeaks) {
-      const peak = new THREE.Mesh(new THREE.ConeGeometry(ar, ah, 6), alpRock);
-      peak.position.set(ax, ah * 0.5 - 3, az);
-      peak.rotation.y = ax * 0.03;
-      scene.add(peak);
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(ar * 0.38, ah * 0.38, 6), alpSnow);
-      cap.position.set(ax, ah * 0.81 - 3, az);
-      cap.rotation.y = ax * 0.03;
-      scene.add(cap);
-    }
   }
 
   private buildBoundaries(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Authentic Yorkshire dry-stone wall along the north edge WITH A WIDE OPEN FARM GATE to the Village!
     const stoneTex = createStoneWallTexture();
     const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.95 });
     const copeMat = new THREE.MeshStandardMaterial({ color: 0x857f75, roughness: 0.93 });
 
-    // Left & Right north wall segments leaving a wide 12m open gate at x = -7.5..+4.5 aligned with the open driveway!
-    const wallSegments: [number, number][] = [
-      [-19.75, 24.5],
-      [18.25, 27.5]
-    ];
-    for (const [wx, ww] of wallSegments) {
+    // South dry-stone wall facing Münsinger Straße with wide open farm gate (x = ox - 7..ox + 7)!
+    const wallZ = this.oz + 30;
+    for (const [dx, ww] of [
+      [-19.5, 25],
+      [19.5, 25]
+    ]) {
       const seg = new THREE.Mesh(new THREE.BoxGeometry(ww, 1.5, 0.95), stoneMat);
-      seg.position.set(wx, 0.75, -31);
+      seg.position.set(this.ox + dx, this.oy + 0.75, wallZ);
       seg.castShadow = true;
       seg.receiveShadow = true;
       scene.add(seg);
-
       const cope = new THREE.Mesh(new THREE.BoxGeometry(ww + 0.15, 0.22, 1.12), copeMat);
-      cope.position.set(wx, 1.58, -31);
+      cope.position.set(this.ox + dx, this.oy + 1.58, wallZ);
       scene.add(cope);
-
-      this.addStaticBox(world, groundMat, wx, 1.0, -31, ww, 2.0, 1.1);
+      this.addStaticBox(world, groundMat, this.ox + dx, this.oy + 1.0, wallZ, ww, 2.0, 1.1);
     }
 
-    // Classic stone gateposts framing the open driveway out to Münsing!
-    for (const gx of [-7.5, 4.5]) {
+    for (const gx of [-7, 7]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.2, 1.15), stoneMat);
-      post.position.set(gx, 1.1, -31);
+      post.position.set(this.ox + gx, this.oy + 1.1, wallZ);
       post.castShadow = true;
       scene.add(post);
-      const cap = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.24, 1.32), copeMat);
-      cap.position.set(gx, 2.3, -31);
-      scene.add(cap);
     }
 
-    // Authentic yellow German Ortsschild right beside the farm gate pointing into Münsing!
-    const postMetal = new THREE.MeshStandardMaterial({ color: 0x60666c, roughness: 0.55, metalness: 0.5 });
-    const signPost = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.07, 2.7, 8), postMetal);
-    signPost.position.set(7.4, 1.35, -31.8);
-    scene.add(signPost);
-
-    const sc = document.createElement('canvas');
-    sc.width = 256;
-    sc.height = 128;
-    const sctx = sc.getContext('2d')!;
-    sctx.fillStyle = '#f2c016';
-    sctx.fillRect(0, 0, 256, 128);
-    sctx.strokeStyle = '#181a1c';
-    sctx.lineWidth = 8;
-    sctx.strokeRect(5, 5, 246, 118);
-    sctx.fillStyle = '#141618';
-    sctx.font = 'bold 42px sans-serif';
-    sctx.textAlign = 'center';
-    sctx.fillText('Münsing', 128, 58);
-    sctx.font = 'bold 17px sans-serif';
-    sctx.fillText('Lkr. Bad Tölz-Wolfratshausen', 128, 96);
-    const sTex = new THREE.CanvasTexture(sc);
-    sTex.colorSpace = THREE.SRGBColorSpace;
-    const sBoard = new THREE.Mesh(
-      new THREE.BoxGeometry(2.15, 1.05, 0.08),
-      new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.55 })
-    );
-    sBoard.position.set(7.4, 2.35, -31.8);
-    scene.add(sBoard);
-
-    // Timber post-and-rail farm fencing on West, East, and South sides of farmyard
+    // Timber post-and-rail fencing on North & East (West has an open lane into Wimpasing!)
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x7c5a37, roughness: 0.92 });
-    const sides: { x1: number; z1: number; x2: number; z2: number }[] = [
-      { x1: -32, z1: -31, x2: -32, z2: 31 },
-      { x1: 32, z1: -31, x2: 32, z2: 31 },
-      { x1: -32, z1: 31, x2: 32, z2: 31 }
+    const sides = [
+      { x1: this.ox - 32, z1: this.oz - 30, x2: this.ox + 32, z2: this.oz - 30 },
+      { x1: this.ox + 32, z1: this.oz - 30, x2: this.ox + 32, z2: this.oz + 30 }
     ];
     for (const s of sides) {
       const dx = s.x2 - s.x1;
@@ -276,34 +195,36 @@ export class FarmEnvironment {
       const len = Math.hypot(dx, dz);
       const angle = Math.atan2(dx, dz);
       const posts = Math.floor(len / 4);
-
       for (let i = 0; i <= posts; i++) {
         const t = i / posts;
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.4, 0.22), woodMat);
-        post.position.set(s.x1 + dx * t, 0.7, s.z1 + dz * t);
+        post.position.set(s.x1 + dx * t, this.oy + 0.7, s.z1 + dz * t);
         post.castShadow = true;
         scene.add(post);
       }
-
       for (const ry of [0.52, 1.06]) {
         const rail = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.13, len), woodMat);
-        rail.position.set((s.x1 + s.x2) * 0.5, ry, (s.z1 + s.z2) * 0.5);
+        rail.position.set((s.x1 + s.x2) * 0.5, this.oy + ry, (s.z1 + s.z2) * 0.5);
         rail.rotation.y = angle;
-        rail.castShadow = true;
         scene.add(rail);
       }
     }
 
-    // Wide outer world boundaries encompassing Farmyard + Münsing + Ammerland & Starnberger See shore!
-    this.addStaticBox(world, groundMat, -18, 4, -116, 220, 14, 1.4);
-    this.addStaticBox(world, groundMat, -18, 4, 38, 220, 14, 1.4);
-    this.addStaticBox(world, groundMat, -125, 0, -39, 1.4, 14, 160);
-    this.addStaticBox(world, groundMat, 92, 4, -39, 1.4, 14, 160);
+    // Outer world safety perimeter matching the full real OSM Münsing–Ammerland–Weipertshausen map
+    const wX = WORLD_MAX_X - WORLD_MIN_X;
+    const wZ = WORLD_MAX_Z - WORLD_MIN_Z;
+    const cX = (WORLD_MIN_X + WORLD_MAX_X) * 0.5;
+    const cZ = (WORLD_MIN_Z + WORLD_MAX_Z) * 0.5;
+    this.addStaticBox(world, groundMat, cX, 20, WORLD_MIN_Z - 4, wX, 60, 4);
+    this.addStaticBox(world, groundMat, cX, 20, WORLD_MAX_Z + 4, wX, 60, 4);
+    this.addStaticBox(world, groundMat, WORLD_MIN_X - 4, 20, cZ, 4, 60, wZ);
+    this.addStaticBox(world, groundMat, WORLD_MAX_X + 4, 20, cZ, 4, 60, wZ);
   }
 
   private buildHayBarn(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    const cx = 11.2;
-    const cz = -21;
+    const cx = this.ox + 11.2;
+    const cz = this.oz - 21;
+    const y = this.oy;
     const w = 11.4;
     const d = 8.4;
     const h = 5.8;
@@ -320,116 +241,102 @@ export class FarmEnvironment {
       new THREE.BoxGeometry(w + 0.6, 0.14, d + 0.6),
       new THREE.MeshStandardMaterial({ map: createConcreteTexture(), roughness: 0.94 })
     );
-    floor.position.set(cx, 0.04, cz);
+    floor.position.set(cx, y + 0.05, cz);
     floor.receiveShadow = true;
     scene.add(floor);
 
-    // Back & side walls
     const backWall = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.4), barnWood);
-    backWall.position.set(cx, h * 0.5, cz - d * 0.5);
+    backWall.position.set(cx, y + h * 0.5, cz - d * 0.5);
     backWall.castShadow = true;
-    backWall.receiveShadow = true;
     scene.add(backWall);
-    this.addStaticBox(world, groundMat, cx, h * 0.5, cz - d * 0.5, w, h, 0.5);
+    this.addStaticBox(world, groundMat, cx, y + h * 0.5, cz - d * 0.5, w, h, 0.5);
 
     for (const s of [-1, 1]) {
       const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, h, d), barnWood);
-      sideWall.position.set(cx + s * (w * 0.5), h * 0.5, cz);
+      sideWall.position.set(cx + s * (w * 0.5), y + h * 0.5, cz);
       sideWall.castShadow = true;
-      sideWall.receiveShadow = true;
       scene.add(sideWall);
-      this.addStaticBox(world, groundMat, cx + s * (w * 0.5), h * 0.5, cz, 0.5, h, d);
+      this.addStaticBox(world, groundMat, cx + s * (w * 0.5), y + h * 0.5, cz, 0.5, h, d);
     }
 
-    // Corrugated steel gable roof
     const roofLen = Math.hypot(w * 0.56, 2.6);
     const roofAngle = Math.atan2(2.6, w * 0.56);
     for (const s of [-1, 1]) {
       const slope = new THREE.Mesh(new THREE.BoxGeometry(roofLen, 0.2, d + 1.5), roofMetal);
-      slope.position.set(cx + s * (w * 0.27), h + 1.2, cz);
+      slope.position.set(cx + s * (w * 0.27), y + h + 1.2, cz);
       slope.rotation.z = -s * roofAngle;
       slope.castShadow = true;
       scene.add(slope);
     }
 
-    // Open timber beam across entrance
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.36, 0.34), timber);
-    lintel.position.set(cx, h - 0.15, cz + d * 0.5);
+    lintel.position.set(cx, y + h - 0.15, cz + d * 0.5);
     scene.add(lintel);
 
-    // NATURAL VISUAL CLUE: 2 static starter dry hay bales already stacked in the back-right corner!
     const hayMat = new THREE.MeshStandardMaterial({ map: createHayTexture(), roughness: 0.94 });
-    const starterPositions: [number, number, number][] = [
-      [cx + 3.6, 0.92, cz - 2.4],
-      [cx + 1.6, 0.92, cz - 2.4]
-    ];
-    for (const [bx, by, bz] of starterPositions) {
+    for (const [bx, bz] of [
+      [cx + 3.4, cz - 2.3],
+      [cx + 1.4, cz - 2.3]
+    ]) {
       const b = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.82, 1.38, 16), hayMat);
       b.rotation.z = Math.PI / 2;
-      b.position.set(bx, by, bz);
+      b.position.set(bx, y + 0.92, bz);
       b.castShadow = true;
-      b.receiveShadow = true;
       scene.add(b);
-      this.addStaticBox(world, groundMat, bx, by, bz, 1.4, 1.6, 1.6);
+      this.addStaticBox(world, groundMat, bx, y + 0.92, bz, 1.4, 1.6, 1.6);
     }
 
-    this.registerZone(scene, 'hay', 'Hay Barn', new THREE.Vector3(cx, 0, cz + 0.3), w - 1.0, d - 1.0, 0, 0xf2b705);
+    this.registerZone(scene, 'hay', 'Hay Barn', new THREE.Vector3(cx, y, cz + 0.3), w - 1.0, d - 1.0, y, 0xf2b705);
   }
 
   private buildSilageClamp(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Classic UK/European precast concrete silage clamp bunker!
-    const cx = -13.5;
-    const cz = -21;
+    const cx = this.ox - 13.5;
+    const cz = this.oz - 21;
+    const y = this.oy;
     const w = 10.6;
     const d = 8.4;
     const wallH = 2.05;
 
     const concreteMat = new THREE.MeshStandardMaterial({ map: createConcreteTexture(), roughness: 0.92 });
-
     const slab = new THREE.Mesh(new THREE.BoxGeometry(w + 0.8, 0.14, d + 0.8), concreteMat);
-    slab.position.set(cx, 0.04, cz);
+    slab.position.set(cx, y + 0.05, cz);
     slab.receiveShadow = true;
     scene.add(slab);
 
-    // Back & side concrete bunker panels
     const backWall = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, 0.45), concreteMat);
-    backWall.position.set(cx, wallH * 0.5, cz - d * 0.5);
+    backWall.position.set(cx, y + wallH * 0.5, cz - d * 0.5);
     backWall.castShadow = true;
-    backWall.receiveShadow = true;
     scene.add(backWall);
-    this.addStaticBox(world, groundMat, cx, wallH * 0.5, cz - d * 0.5, w, wallH, 0.5);
+    this.addStaticBox(world, groundMat, cx, y + wallH * 0.5, cz - d * 0.5, w, wallH, 0.5);
 
     for (const s of [-1, 1]) {
       const side = new THREE.Mesh(new THREE.BoxGeometry(0.45, wallH, d), concreteMat);
-      side.position.set(cx + s * (w * 0.5), wallH * 0.5, cz);
+      side.position.set(cx + s * (w * 0.5), y + wallH * 0.5, cz);
       side.castShadow = true;
-      side.receiveShadow = true;
       scene.add(side);
-      this.addStaticBox(world, groundMat, cx + s * (w * 0.5), wallH * 0.5, cz, 0.5, wallH, d);
+      this.addStaticBox(world, groundMat, cx + s * (w * 0.5), y + wallH * 0.5, cz, 0.5, wallH, d);
     }
 
-    // NATURAL VISUAL CLUE: 2 tidy static wrapped silage bales already lined neatly against the back concrete wall!
-    const whiteMat = new THREE.MeshStandardMaterial({ map: createWrappedSilageTexture('white', false), roughness: 0.28 });
-    const mintMat = new THREE.MeshStandardMaterial({ map: createWrappedSilageTexture('mint', false), roughness: 0.28 });
+    const whiteMat = new THREE.MeshStandardMaterial({ map: createWrappedSilageTexture('white', false), roughness: 0.24 });
+    const mintMat = new THREE.MeshStandardMaterial({ map: createWrappedSilageTexture('mint', false), roughness: 0.24 });
     [
-      [cx - 3.2, 0.82, cz - 2.6, whiteMat],
-      [cx - 1.3, 0.82, cz - 2.6, mintMat]
+      [cx - 3.2, y + 0.82, cz - 2.6, whiteMat],
+      [cx - 1.3, y + 0.82, cz - 2.6, mintMat]
     ].forEach(([bx, by, bz, m]) => {
       const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.82, 1.35, 18), m as THREE.Material);
       cyl.position.set(bx as number, by as number, bz as number);
       cyl.castShadow = true;
-      cyl.receiveShadow = true;
       scene.add(cyl);
       this.addStaticBox(world, groundMat, bx as number, by as number, bz as number, 1.65, 1.5, 1.65);
     });
 
-    this.registerZone(scene, 'silage', 'Silage Clamp', new THREE.Vector3(cx, 0, cz + 0.4), w - 1.0, d - 1.0, 0, 0xc8f2b6);
+    this.registerZone(scene, 'silage', 'Silage Clamp', new THREE.Vector3(cx, y, cz + 0.4), w - 1.0, d - 1.0, y, 0xc8f2b6);
   }
 
   private buildFlatbedTrailer(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Authentic agricultural flatbed pallet delivery trailer parked along the east lane!
-    const cx = 19.2;
-    const cz = -5.5;
+    const cx = this.ox + 19.2;
+    const cz = this.oz - 5.5;
+    const y = this.oy;
     const deckW = 3.6;
     const deckL = 8.4;
     const deckY = this.trailerDeckY;
@@ -439,7 +346,6 @@ export class FarmEnvironment {
     const tireMat = new THREE.MeshStandardMaterial({ color: 0x222426, roughness: 0.92 });
     const rimMat = new THREE.MeshStandardMaterial({ color: 0xd9d4c7, roughness: 0.45 });
 
-    // Wooden flatbed deck
     const deck = new THREE.Mesh(new THREE.BoxGeometry(deckW, 0.16, deckL), plankMat);
     deck.position.set(cx, deckY - 0.08, cz);
     deck.castShadow = true;
@@ -447,179 +353,123 @@ export class FarmEnvironment {
     scene.add(deck);
     this.addStaticBox(world, groundMat, cx, deckY - 0.12, cz, deckW, 0.24, deckL);
 
-    // Steel perimeter chassis beam
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(deckW - 0.4, 0.24, deckL - 0.3), steelMat);
     chassis.position.set(cx, deckY - 0.28, cz);
-    chassis.castShadow = true;
     scene.add(chassis);
 
-    // Front steel headboard rack (north end of trailer)
     const headboard = new THREE.Mesh(new THREE.BoxGeometry(deckW, 1.35, 0.16), steelMat);
     headboard.position.set(cx, deckY + 0.68, cz - deckL * 0.5 + 0.08);
     headboard.castShadow = true;
     scene.add(headboard);
     this.addStaticBox(world, groundMat, cx, deckY + 0.68, cz - deckL * 0.5 + 0.08, deckW, 1.35, 0.24);
 
-    // Dual-axle wheels underneath
     for (const wz of [-1.8, 0.2, 2.2]) {
       for (const wx of [-1.45, 1.45]) {
-        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.34, 16), tireMat);
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.34, 14), tireMat);
         wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(cx + wx, 0.46, cz + wz);
-        wheel.castShadow = true;
+        wheel.position.set(cx + wx, y + 0.46, cz + wz);
         scene.add(wheel);
-
-        const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.36, 12), rimMat);
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.36, 10), rimMat);
         rim.rotation.z = Math.PI / 2;
-        rim.position.set(cx + wx, 0.46, cz + wz);
+        rim.position.set(cx + wx, y + 0.46, cz + wz);
         scene.add(rim);
       }
     }
 
-    // Drawbar hitch tongue & jack stand pointing south
     const drawbar = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 2.2), steelMat);
-    drawbar.position.set(cx, 0.56, cz + deckL * 0.5 + 1.0);
+    drawbar.position.set(cx, y + 0.56, cz + deckL * 0.5 + 1.0);
     scene.add(drawbar);
 
-    const jack = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.62, 0.14), steelMat);
-    jack.position.set(cx, 0.31, cz + deckL * 0.5 + 0.45);
-    scene.add(jack);
-
-    // Painted wheel chocks & subtle yellow corner tie-down posts
-    const tieMat = new THREE.MeshStandardMaterial({ color: 0xe6b422, roughness: 0.5 });
-    for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.22, 0.12), tieMat);
-        post.position.set(cx + sx * (deckW * 0.5 - 0.08), deckY + 0.11, cz + sz * (deckL * 0.5 - 0.2));
-        scene.add(post);
-      }
-    }
-
-    // Zone requires pallets to be actually UP ON THE TRAILER DECK (minY > 0.9)!
-    this.registerZone(scene, 'crates', 'Flatbed Trailer', new THREE.Vector3(cx, 0, cz), deckW + 0.3, deckL + 0.2, deckY, 0x3898ec);
+    this.registerZone(scene, 'crates', 'Flatbed Trailer', new THREE.Vector3(cx, y, cz), deckW + 0.3, deckL + 0.2, deckY, 0x3898ec);
   }
 
   private buildFarmShopAndProduceBin(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Cozy stone farm shop porch + rustic wooden produce bin for scooped pumpkins!
-    const shopX = 23.5;
-    const shopZ = 14;
+    const shopX = this.ox + 23.5;
+    const shopZ = this.oz + 14;
+    const y = this.oy;
     const stoneMat = new THREE.MeshStandardMaterial({ map: createPebbledashTexture(), roughness: 0.92 });
     const slateRoof = new THREE.MeshStandardMaterial({ color: 0x3a4046, roughness: 0.78 });
     const timber = new THREE.MeshStandardMaterial({ color: 0x7c5532, roughness: 0.9 });
 
     const shopBody = new THREE.Mesh(new THREE.BoxGeometry(6.8, 4.4, 8.8), stoneMat);
-    shopBody.position.set(shopX, 2.2, shopZ);
+    shopBody.position.set(shopX, y + 2.2, shopZ);
     shopBody.castShadow = true;
-    shopBody.receiveShadow = true;
     scene.add(shopBody);
-    this.addStaticBox(world, groundMat, shopX, 2.2, shopZ, 6.8, 4.4, 8.8);
+    this.addStaticBox(world, groundMat, shopX, y + 2.2, shopZ, 6.8, 4.4, 8.8);
 
-    // Slate pitched roof
-    const roofL = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.22, 9.4), slateRoof);
-    roofL.position.set(shopX - 1.75, 5.15, shopZ);
-    roofL.rotation.z = 0.42;
-    roofL.castShadow = true;
-    scene.add(roofL);
-    const roofR = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.22, 9.4), slateRoof);
-    roofR.position.set(shopX + 1.75, 5.15, shopZ);
-    roofR.rotation.z = -0.42;
-    roofR.castShadow = true;
-    scene.add(roofR);
+    for (const s of [-1, 1]) {
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.22, 9.4), slateRoof);
+      roof.position.set(shopX + s * 1.75, y + 5.15, shopZ);
+      roof.rotation.z = -s * 0.42;
+      roof.castShadow = true;
+      scene.add(roof);
+    }
 
-    // Warm lit shop window
-    const win = new THREE.Mesh(
-      new THREE.BoxGeometry(0.14, 1.5, 2.4),
-      new THREE.MeshStandardMaterial({ color: 0xffdf99, emissive: 0x8f5b1e, emissiveIntensity: 0.45 })
-    );
-    win.position.set(shopX - 3.42, 2.3, shopZ);
-    scene.add(win);
-
-    // Open-top wooden Harvest Produce Bin right beside the shop porch (pour pumpkins in!)
-    const bx = 17.6;
-    const bz = 14.0;
+    const bx = this.ox + 17.6;
+    const bz = this.oz + 14.0;
     const bw = 3.8;
     const bd = 4.6;
     const bh = 1.05;
 
     const floor = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.14, bd), timber);
-    floor.position.set(bx, 0.07, bz);
-    floor.receiveShadow = true;
+    floor.position.set(bx, y + 0.08, bz);
     scene.add(floor);
 
     const walls: [number, number, number, number, number, number][] = [
-      [bx, bh * 0.5, bz - bd * 0.5, bw, bh, 0.22],
-      [bx, bh * 0.5, bz + bd * 0.5, bw, bh, 0.22],
-      [bx + bw * 0.5, bh * 0.5, bz, 0.22, bh, bd],
-      [bx - bw * 0.5, bh * 0.42, bz, 0.22, bh * 0.84, bd]
+      [bx, y + bh * 0.5, bz - bd * 0.5, bw, bh, 0.22],
+      [bx, y + bh * 0.5, bz + bd * 0.5, bw, bh, 0.22],
+      [bx + bw * 0.5, y + bh * 0.5, bz, 0.22, bh, bd],
+      [bx - bw * 0.5, y + bh * 0.42, bz, 0.22, bh * 0.84, bd]
     ];
     for (const [wx, wy, wz, ww, wh, wd] of walls) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(ww, wh, wd), timber);
       m.position.set(wx, wy, wz);
       m.castShadow = true;
-      m.receiveShadow = true;
       scene.add(m);
       this.addStaticBox(world, groundMat, wx, wy, wz, ww, wh, wd);
     }
 
-    // NATURAL VISUAL CLUE: 2 static starter pumpkins sitting in the corner of the produce bin!
-    const pMat = new THREE.MeshStandardMaterial({ color: 0xd96518, roughness: 0.55 });
-    for (const [px, pz] of [
-      [bx + 0.9, bz - 1.3],
-      [bx + 0.85, bz + 1.25]
-    ]) {
-      const pm = new THREE.Mesh(new THREE.SphereGeometry(0.46, 12, 10), pMat);
-      pm.scale.y = 0.8;
-      pm.position.set(px, 0.48, pz);
-      pm.castShadow = true;
-      scene.add(pm);
-    }
-
-    this.registerZone(scene, 'harvest', 'Produce Bin', new THREE.Vector3(bx, 0, bz), bw - 0.1, bd - 0.1, 0, 0xf27405);
+    this.registerZone(scene, 'harvest', 'Produce Bin', new THREE.Vector3(bx, y, bz), bw - 0.1, bd - 0.1, y, 0xf27405);
   }
 
   private buildFirewoodLogRack(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Timber A-frame firewood log cradle near the south-west corner!
-    const cx = -13.5;
-    const cz = 20.5;
+    const cx = this.ox - 13.5;
+    const cz = this.oz + 20.5;
+    const y = this.oy;
     const w = 4.6;
     const d = 4.4;
-
     const timber = new THREE.MeshStandardMaterial({ color: 0x6e4a2a, roughness: 0.92 });
     const barkMat = new THREE.MeshStandardMaterial({ color: 0x624228, roughness: 0.95 });
 
-    // Ground skids
     for (const sx of [-1.2, 1.2]) {
       const skid = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.2, d), timber);
-      skid.position.set(cx + sx, 0.1, cz);
-      skid.castShadow = true;
+      skid.position.set(cx + sx, y + 0.12, cz);
       scene.add(skid);
     }
-    // Side upright stanchions holding logs neatly
     for (const sz of [-d * 0.5, d * 0.5]) {
       for (const sx of [-1.1, 1.1]) {
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.95, 0.2), timber);
-        post.position.set(cx + sx, 0.98, cz + sz);
+        post.position.set(cx + sx, y + 0.98, cz + sz);
         post.castShadow = true;
         scene.add(post);
       }
-      this.addStaticBox(world, groundMat, cx, 0.98, cz + sz, 2.5, 1.95, 0.26);
+      this.addStaticBox(world, groundMat, cx, y + 0.98, cz + sz, 2.5, 1.95, 0.26);
     }
-
-    // NATURAL VISUAL CLUE: 2 static starter logs already stacked inside the rack!
     for (const lz of [-1.2, -0.45]) {
       const log = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 3.0, 12), barkMat);
       log.rotation.z = Math.PI / 2;
-      log.position.set(cx, 0.52, cz + lz);
+      log.position.set(cx, y + 0.52, cz + lz);
       log.castShadow = true;
       scene.add(log);
     }
 
-    this.registerZone(scene, 'logs', 'Firewood Log Rack', new THREE.Vector3(cx, 0, cz), w, d, 0, 0xb8763e);
+    this.registerZone(scene, 'logs', 'Firewood Rack', new THREE.Vector3(cx, y, cz), w, d, y, 0xb8763e);
   }
 
   private buildScrapSkip(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    const cx = -19.5;
-    const cz = 10.5;
+    const cx = this.ox - 19.5;
+    const cz = this.oz + 10.5;
+    const y = this.oy;
     const w = 5.6;
     const d = 4.2;
     const h = 1.55;
@@ -628,33 +478,31 @@ export class FarmEnvironment {
     const darkSteel = new THREE.MeshStandardMaterial({ color: 0x3b3f43, roughness: 0.68, metalness: 0.45 });
 
     const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.22, d), darkSteel);
-    floor.position.set(cx, 0.11, cz);
-    floor.receiveShadow = true;
+    floor.position.set(cx, y + 0.11, cz);
     scene.add(floor);
-    this.addStaticBox(world, groundMat, cx, 0.11, cz, w, 0.22, d);
+    this.addStaticBox(world, groundMat, cx, y + 0.11, cz, w, 0.22, d);
 
     const walls: [number, number, number, number, number, number][] = [
-      [cx, h * 0.5, cz - d * 0.5, w, h, 0.26],
-      [cx, h * 0.5, cz + d * 0.5, w, h, 0.26],
-      [cx - w * 0.5, h * 0.5, cz, 0.26, h, d],
-      [cx + w * 0.5, h * 0.42, cz, 0.26, h * 0.84, d]
+      [cx, y + h * 0.5, cz - d * 0.5, w, h, 0.26],
+      [cx, y + h * 0.5, cz + d * 0.5, w, h, 0.26],
+      [cx - w * 0.5, y + h * 0.5, cz, 0.26, h, d],
+      [cx + w * 0.5, y + h * 0.42, cz, 0.26, h * 0.84, d]
     ];
     for (const [wx, wy, wz, ww, wh, wd] of walls) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(ww, wh, wd), skipYellow);
       m.position.set(wx, wy, wz);
       m.castShadow = true;
-      m.receiveShadow = true;
       scene.add(m);
       this.addStaticBox(world, groundMat, wx, wy, wz, ww, wh, wd);
     }
 
-    this.registerZone(scene, 'scrap', 'Scrap Skip', new THREE.Vector3(cx, 0, cz), w + 0.4, d + 0.4, 0, 0xe84a22);
+    this.registerZone(scene, 'scrap', 'Scrap Skip', new THREE.Vector3(cx, y, cz), w + 0.4, d + 0.4, y, 0xe84a22);
   }
 
   private buildWorkshopAndToolShed(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Stone pebbledash farm workshop inspired directly by the building behind the Scorpion in the user's photo!
-    const wx = -26.2;
-    const wz = -3.0;
+    const wx = this.ox - 26.2;
+    const wz = this.oz - 3.0;
+    const y = this.oy;
     const pebbleMat = new THREE.MeshStandardMaterial({ map: createPebbledashTexture(), roughness: 0.94 });
     const roofMetal = new THREE.MeshStandardMaterial({
       map: createCorrugatedMetalTexture(),
@@ -664,27 +512,24 @@ export class FarmEnvironment {
     const timber = new THREE.MeshStandardMaterial({ color: 0x6f4f2f, roughness: 0.92 });
 
     const workshop = new THREE.Mesh(new THREE.BoxGeometry(5.6, 5.4, 17.5), pebbleMat);
-    workshop.position.set(wx, 2.7, wz);
+    workshop.position.set(wx, y + 2.7, wz);
     workshop.castShadow = true;
-    workshop.receiveShadow = true;
     scene.add(workshop);
-    this.addStaticBox(world, groundMat, wx, 2.7, wz, 5.6, 5.4, 17.5);
+    this.addStaticBox(world, groundMat, wx, y + 2.7, wz, 5.6, 5.4, 17.5);
 
-    // Lean-to timber tool canopy projecting east over the 5 Attachment Bays!
     const canopy = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.2, 16.8), roofMetal);
-    canopy.position.set(wx + 4.8, 4.15, wz);
+    canopy.position.set(wx + 4.8, y + 4.15, wz);
     canopy.rotation.z = -0.14;
     canopy.castShadow = true;
     scene.add(canopy);
 
     for (const sz of [-7.6, -2.5, 2.5, 7.6]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.26, 3.85, 0.26), timber);
-      post.position.set(wx + 7.1, 1.92, wz + sz);
+      post.position.set(wx + 7.1, y + 1.92, wz + sz);
       post.castShadow = true;
       scene.add(post);
     }
 
-    // 5 Attachment Rack stands along the shed bay (physical coupling!)
     const tools: { tool: RackSpot['tool']; label: string; color: number }[] = [
       { tool: 'forks', label: 'Pallet Forks', color: 0xe6b422 },
       { tool: 'spike', label: 'Bale Spike', color: 0xd94b26 },
@@ -697,24 +542,20 @@ export class FarmEnvironment {
       const pz = wz - 6.0 + idx * 3.0;
       const px = wx + 5.1;
       const stand = new THREE.Group();
-      stand.position.set(px, 0, pz);
+      stand.position.set(px, y, pz);
 
-      // Timber resting pallet skid
       const skid = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.14, 2.0), timber);
-      skid.position.y = 0.07;
-      skid.receiveShadow = true;
+      skid.position.y = 0.08;
       stand.add(skid);
 
-      // Subtle highlight ring (glows brighter when nearby!)
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(1.18, 1.34, 24),
         new THREE.MeshBasicMaterial({ color: t.color, side: THREE.DoubleSide, transparent: true, opacity: 0.35 })
       );
       ring.rotation.x = -Math.PI / 2;
-      ring.position.y = 0.04;
+      ring.position.y = 0.06;
       stand.add(ring);
 
-      // Clean painted wooden bay plaque on the workshop wall behind each tool
       const canvas = document.createElement('canvas');
       canvas.width = 256;
       canvas.height = 64;
@@ -742,7 +583,7 @@ export class FarmEnvironment {
       this.rackSpots.push({
         tool: t.tool,
         label: t.label,
-        pos: new THREE.Vector3(px, 0, pz),
+        pos: new THREE.Vector3(px, y, pz),
         standMesh: stand,
         ringMesh: ring
       });
@@ -750,64 +591,38 @@ export class FarmEnvironment {
   }
 
   private buildDuckPond(scene: THREE.Scene): void {
-    const { x, z } = this.pondCenter;
-
+    const { x, y, z } = this.pondCenter;
     const bank = new THREE.Mesh(
-      new THREE.CircleGeometry(this.pondRadius + 0.85, 28),
+      new THREE.CircleGeometry(this.pondRadius + 0.85, 24),
       new THREE.MeshStandardMaterial({ color: 0x8f8368, roughness: 0.96 })
     );
     bank.rotation.x = -Math.PI / 2;
-    bank.position.set(x, 0.015, z);
+    bank.position.set(x, y + 0.055, z);
     scene.add(bank);
 
     const water = new THREE.Mesh(
-      new THREE.CircleGeometry(this.pondRadius, 28),
+      new THREE.CircleGeometry(this.pondRadius, 24),
       new THREE.MeshStandardMaterial({
         color: 0x3b7f9c,
-        roughness: 0.22,
-        metalness: 0.14,
+        roughness: 0.2,
+        metalness: 0.25,
         transparent: true,
         opacity: 0.88
       })
     );
     water.rotation.x = -Math.PI / 2;
-    water.position.set(x, 0.04, z);
+    water.position.set(x, y + 0.075, z);
     scene.add(water);
-
-    const lilyMat = new THREE.MeshStandardMaterial({ color: 0x3f7533, roughness: 0.75 });
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 + 0.3;
-      const r = 2.2 + (i % 2) * 1.2;
-      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.04, 12), lilyMat);
-      pad.position.set(x + Math.cos(a) * r, 0.06, z + Math.sin(a) * r);
-      scene.add(pad);
-    }
 
     for (let i = 0; i < 3; i++) {
       const duck = new THREE.Group();
       const body = new THREE.Mesh(
-        new THREE.SphereGeometry(0.24, 10, 8),
-        new THREE.MeshStandardMaterial({ color: i === 0 ? 0xf2f0e8 : 0x7c6852, roughness: 0.72 })
+        new THREE.SphereGeometry(0.24, 8, 6),
+        new THREE.MeshStandardMaterial({ color: i === 0 ? 0xf2f0e8 : 0x7c6852 })
       );
       body.scale.set(1.25, 0.85, 0.9);
-      body.position.y = 0.21;
+      body.position.y = 0.22;
       duck.add(body);
-
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.15, 10, 8),
-        new THREE.MeshStandardMaterial({ color: i === 0 ? 0x1d5e37 : 0x6b5844, roughness: 0.65 })
-      );
-      head.position.set(0.22, 0.4, 0);
-      duck.add(head);
-
-      const beak = new THREE.Mesh(
-        new THREE.ConeGeometry(0.06, 0.16, 6),
-        new THREE.MeshStandardMaterial({ color: 0xd98a18, roughness: 0.55 })
-      );
-      beak.rotation.z = -Math.PI / 2;
-      beak.position.set(0.39, 0.38, 0);
-      duck.add(beak);
-
       scene.add(duck);
       this.ducks.push({
         group: duck,
@@ -818,58 +633,9 @@ export class FarmEnvironment {
     }
   }
 
-  private buildScenery(scene: THREE.Scene): void {
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4028, roughness: 0.95 });
-    const leafDark = new THREE.MeshStandardMaterial({ color: 0x35622e, roughness: 0.9 });
-    const leafBright = new THREE.MeshStandardMaterial({ color: 0x4b7e39, roughness: 0.88 });
-
-    // Perimeter trees kept clear of the north village roads (only west/east/south of farmyard!)
-    const treeSpots: [number, number, boolean][] = [
-      [-35, -24, true],
-      [35, -24, true],
-      [36, -12, false],
-      [37, 5, true],
-      [35, 24, false],
-      [24, 35, true],
-      [-2, 36, false],
-      [-24, 35, true],
-      [-37, 18, false],
-      [-37, -10, true]
-    ];
-
-    for (const [tx, tz, isPine] of treeSpots) {
-      const tree = new THREE.Group();
-      const s = 0.88 + Math.random() * 0.42;
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.38, 2.4, 8), trunkMat);
-      trunk.position.y = 1.2;
-      trunk.castShadow = true;
-      tree.add(trunk);
-
-      if (isPine) {
-        for (let tier = 0; tier < 3; tier++) {
-          const cone = new THREE.Mesh(
-            new THREE.ConeGeometry(1.95 - tier * 0.45, 2.4, 9),
-            tier % 2 === 0 ? leafDark : leafBright
-          );
-          cone.position.y = 2.6 + tier * 1.4;
-          cone.castShadow = true;
-          tree.add(cone);
-        }
-      } else {
-        const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(2.1, 1), leafBright);
-        crown.position.y = 3.5;
-        crown.scale.y = 0.9;
-        crown.castShadow = true;
-        tree.add(crown);
-      }
-      tree.scale.setScalar(s);
-      tree.position.set(tx, getTerrainHeight(tx, tz) - 0.1, tz);
-      scene.add(tree);
-    }
-
-    // Galvanized farm windmill in NE corner
+  private buildWindmill(scene: THREE.Scene): void {
     const wm = new THREE.Group();
-    wm.position.set(27, 0, -25);
+    wm.position.set(this.ox + 26, this.oy, this.oz - 24);
     const tower = new THREE.Mesh(
       new THREE.CylinderGeometry(0.45, 1.35, 11.5, 6),
       new THREE.MeshStandardMaterial({ color: 0x7c7972, roughness: 0.72, metalness: 0.35 })
@@ -888,34 +654,24 @@ export class FarmEnvironment {
       b.rotation.z = a - Math.PI / 2;
       blades.add(b);
     }
-    const hub = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.34, 0.34, 0.44, 10),
-      new THREE.MeshStandardMaterial({ color: 0xb83824, roughness: 0.55 })
-    );
-    hub.rotation.x = Math.PI / 2;
-    blades.add(hub);
     wm.add(blades);
     this.windmillBlades = blades;
     scene.add(wm);
   }
 
   public update(dt: number, elapsed: number): void {
-    if (this.windmillBlades) {
-      this.windmillBlades.rotation.z -= dt * 0.75;
-    }
-
+    if (this.windmillBlades) this.windmillBlades.rotation.z -= dt * 0.75;
     for (const d of this.ducks) {
       d.angle += dt * d.speed;
-      const nx = this.pondCenter.x + Math.cos(d.angle) * d.radius;
-      const nz = this.pondCenter.z + Math.sin(d.angle) * d.radius;
-      d.group.position.set(nx, Math.sin(elapsed * 4 + d.angle) * 0.03, nz);
+      d.group.position.set(
+        this.pondCenter.x + Math.cos(d.angle) * d.radius,
+        this.pondCenter.y + 0.08 + Math.sin(elapsed * 4 + d.angle) * 0.03,
+        this.pondCenter.z + Math.sin(d.angle) * d.radius
+      );
       d.group.rotation.y = -d.angle + Math.PI / 2;
     }
-
     if (this.hintsVisible) {
-      for (const z of this.zones) {
-        z.hintMesh.position.y = Math.sin(elapsed * 3) * 0.12;
-      }
+      for (const z of this.zones) z.hintMesh.position.y = Math.sin(elapsed * 3) * 0.12;
     }
   }
 }

@@ -70,7 +70,7 @@ export class TireTrackSystem {
 
   public stampWheel(worldX: number, worldZ: number, heading: number): void {
     const surface = getSurfaceType(worldX, worldZ);
-    if (surface === 'asphalt' || surface === 'cobble' || surface === 'water') return;
+    if (surface === 'asphalt' || surface === 'water') return;
 
     const y = getTerrainHeight(worldX, worldZ) + 0.032;
     getTerrainNormal(worldX, worldZ, this.normal);

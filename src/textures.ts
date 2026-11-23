@@ -550,11 +550,19 @@ export function createAsphaltTexture(): THREE.CanvasTexture {
     ctx.fillStyle = `rgb(${v},${v + 2},${v + 4})`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
+  // Subtle German Landstraße white edge markings & dashed centerline (u = across width, v = along road)
+  ctx.fillStyle = 'rgba(232, 236, 234, 0.42)';
+  ctx.fillRect(10, 0, 5, 256);
+  ctx.fillRect(241, 0, 5, 256);
+  ctx.fillStyle = 'rgba(240, 242, 238, 0.52)';
+  ctx.fillRect(125, 24, 6, 92);
+  ctx.fillRect(125, 152, 6, 92);
+
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(14, 2);
+  tex.repeat.set(1, 2);
   return tex;
 }
 

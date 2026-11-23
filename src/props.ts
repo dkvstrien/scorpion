@@ -6,6 +6,7 @@ import {
   createHayTexture,
   createWrappedSilageTexture
 } from './textures';
+import { FARM_CENTER, FARM_GROUND_Y, getTerrainHeight } from './terrain';
 
 export type PropKind =
   | 'hay_round'
@@ -81,58 +82,56 @@ export class PropManager {
   }
 
   public spawnInitialMess(): void {
-    // --- 1. Storm-fallen pine logs blocking the main yard lane & barn approach (puzzle!) ---
-    this.spawnProp('log', new THREE.Vector3(-1.4, 0.55, 0.2), 0.12);
-    this.spawnProp('log', new THREE.Vector3(2.8, 0.55, -8.8), -0.22);
-    this.spawnProp('log', new THREE.Vector3(-7.6, 0.55, -2.5), 1.35);
+    const ox = FARM_CENTER.x;
+    const oy = FARM_GROUND_Y;
+    const oz = FARM_CENTER.z;
 
-    // --- 2. Produce Pallets tumbled off the lane (need careful Pallet Forks stacking onto Flatbed Trailer!) ---
-    this.spawnProp('crate', new THREE.Vector3(6.8, 0.72, -1.8), 0.35);
-    this.spawnProp('crate', new THREE.Vector3(9.4, 0.72, 1.4), -0.45);
-    this.spawnProp('crate', new THREE.Vector3(5.2, 0.72, 5.6), 0.8);
-    this.spawnProp('crate', new THREE.Vector3(10.8, 0.72, -8.4), 0.18);
+    // 1. Storm-fallen pine logs blocking the farmyard lanes
+    this.spawnProp('log', new THREE.Vector3(ox - 1.4, oy + 0.65, oz + 0.2), 0.12);
+    this.spawnProp('log', new THREE.Vector3(ox + 2.8, oy + 0.65, oz - 8.8), -0.22);
+    this.spawnProp('log', new THREE.Vector3(ox - 7.6, oy + 0.65, oz - 2.5), 1.35);
 
-    // --- 3. Dry golden hay bales blown out across the yard (need Bale Spike -> Red Hay Barn) ---
-    this.spawnProp('hay_round', new THREE.Vector3(-3.8, 0.9, -9.2), 0.5);
-    this.spawnProp('hay_round', new THREE.Vector3(7.4, 0.9, -12.6), -0.4);
-    this.spawnProp('hay_square', new THREE.Vector3(1.2, 0.55, -13.2), 0.25);
-    this.spawnProp('hay_square', new THREE.Vector3(-6.4, 0.55, 5.2), 1.1);
+    // 2. Heavy Produce Pallets (650kg each — stack 2-high on flatbed trailer or deliver down to Lake Starnberg!)
+    this.spawnProp('crate', new THREE.Vector3(ox + 6.8, oy + 0.85, oz - 1.8), 0.35);
+    this.spawnProp('crate', new THREE.Vector3(ox + 9.4, oy + 0.85, oz + 1.4), -0.45);
+    this.spawnProp('crate', new THREE.Vector3(ox + 5.2, oy + 0.85, oz + 5.6), 0.8);
+    this.spawnProp('crate', new THREE.Vector3(ox + 10.8, oy + 0.85, oz - 8.4), 0.18);
 
-    // --- 4. Delicate plastic-wrapped silage bales (MUST use Bale Grabber gently -> Concrete Silage Clamp!) ---
-    this.spawnProp('silage_wrapped', new THREE.Vector3(-10.2, 0.85, -10.5), 0.2);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(-12.5, 0.85, -6.4), 0.9);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(-6.2, 0.85, -13.8), -0.3);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(-11.4, 0.85, 3.8), 0.6);
+    // 3. Dry golden hay bales (-> Red Hay Barn)
+    this.spawnProp('hay_round', new THREE.Vector3(ox - 3.8, oy + 1.0, oz - 9.2), 0.5);
+    this.spawnProp('hay_round', new THREE.Vector3(ox + 7.4, oy + 1.0, oz - 12.6), -0.4);
+    this.spawnProp('hay_square', new THREE.Vector3(ox + 1.2, oy + 0.65, oz - 13.2), 0.25);
+    this.spawnProp('hay_square', new THREE.Vector3(ox - 6.4, oy + 0.65, oz + 5.2), 1.1);
 
-    // --- 5. Loose pumpkins rolled across the east lane from a tipped garden basket (don't drive over them!) ---
-    this.spawnProp('pumpkin', new THREE.Vector3(4.2, 0.65, 11.4), 0);
-    this.spawnProp('pumpkin', new THREE.Vector3(7.1, 0.65, 10.1), 0.5);
-    this.spawnProp('pumpkin', new THREE.Vector3(9.6, 0.65, 12.6), 1.2);
-    this.spawnProp('pumpkin', new THREE.Vector3(11.8, 0.65, 8.6), 2.1);
+    // 4. Heavy plastic-wrapped silage bales (~850kg — handle carefully with Bale Grabber!)
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 10.2, oy + 0.95, oz - 10.5), 0.2);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 12.5, oy + 0.95, oz - 6.4), 0.9);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 6.2, oy + 0.95, oz - 13.8), -0.3);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 11.4, oy + 0.95, oz + 3.8), 0.6);
 
-    // --- 6. Rusty oil drums & old tires by the workshop mud track (-> Yellow Scrap Skip) ---
-    this.spawnProp('barrel', new THREE.Vector3(-9.8, 0.72, 8.8), 0.2);
-    this.spawnProp('barrel', new THREE.Vector3(-7.4, 0.72, 12.2), 1.1);
-    this.spawnProp('tire', new THREE.Vector3(-12.8, 0.35, 12.8), 0.4);
-    this.spawnProp('tire', new THREE.Vector3(-4.8, 0.35, 14.8), 0.9);
+    // 5. Loose pumpkins rolled across the east lane
+    this.spawnProp('pumpkin', new THREE.Vector3(ox + 4.2, oy + 0.72, oz + 11.4), 0);
+    this.spawnProp('pumpkin', new THREE.Vector3(ox + 7.1, oy + 0.72, oz + 10.1), 0.5);
+    this.spawnProp('pumpkin', new THREE.Vector3(ox + 9.6, oy + 0.72, oz + 12.6), 1.2);
+    this.spawnProp('pumpkin', new THREE.Vector3(ox + 11.8, oy + 0.72, oz + 8.6), 2.1);
+
+    // 6. Rusty oil drums & old tractor tires (-> Yellow Scrap Skip)
+    this.spawnProp('barrel', new THREE.Vector3(ox - 9.8, oy + 0.85, oz + 8.8), 0.2);
+    this.spawnProp('barrel', new THREE.Vector3(ox - 7.4, oy + 0.85, oz + 12.2), 1.1);
+    this.spawnProp('tire', new THREE.Vector3(ox - 12.8, oy + 0.45, oz + 12.8), 0.4);
+    this.spawnProp('tire', new THREE.Vector3(ox - 4.8, oy + 0.45, oz + 14.8), 0.9);
   }
 
-  public spawnExtraChaosWave(): void {
-    const kinds: PropKind[] = [
-      'crate',
-      'hay_round',
-      'silage_wrapped',
-      'pumpkin',
-      'log',
-      'barrel',
-      'tire'
-    ];
+  public spawnExtraChaosWave(aroundX = FARM_CENTER.x, aroundZ = FARM_CENTER.z): void {
+    const kinds: PropKind[] = ['crate', 'hay_round', 'silage_wrapped', 'pumpkin', 'log', 'barrel', 'tire'];
     for (let i = 0; i < 6; i++) {
       const kind = kinds[Math.floor(Math.random() * kinds.length)];
       const angle = Math.random() * Math.PI * 2;
-      const dist = 4 + Math.random() * 9;
-      const pos = new THREE.Vector3(Math.cos(angle) * dist, 5.2 + i * 0.9, Math.sin(angle) * dist);
-      this.spawnProp(kind, pos);
+      const dist = 5 + Math.random() * 8;
+      const px = aroundX + Math.cos(angle) * dist;
+      const pz = aroundZ + Math.sin(angle) * dist;
+      const py = getTerrainHeight(px, pz) + 4.8 + i * 0.9;
+      this.spawnProp(kind, new THREE.Vector3(px, py, pz));
     }
   }
 

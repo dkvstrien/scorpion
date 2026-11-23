@@ -1,26 +1,30 @@
 import * as THREE from 'three';
+import { FARM_CENTER, getShorelineX, OSM_DATA, REAL_SPOTS, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_X, WORLD_MIN_Z } from './terrain';
 
 export interface MiniMapMarker {
   x: number;
   z: number;
   color: string;
-  label?: string;
   pulse?: boolean;
 }
 
 export class MuensingMiniMap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private baseCanvas: HTMLCanvasElement;
 
-  // Map covers x: -135..85, z: -115..45
-  private minX = -132;
-  private maxX = 82;
-  private minZ = -112;
-  private maxZ = 42;
+  private minX = WORLD_MIN_X;
+  private maxX = WORLD_MAX_X;
+  private minZ = WORLD_MIN_Z;
+  private maxZ = WORLD_MAX_Z;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
+    this.baseCanvas = document.createElement('canvas');
+    this.baseCanvas.width = canvas.width;
+    this.baseCanvas.height = canvas.height;
+    this.bakeStaticOSMMap();
   }
 
   private toPX(x: number): number {
@@ -31,6 +35,84 @@ export class MuensingMiniMap {
     return ((z - this.minZ) / (this.maxZ - this.minZ)) * this.canvas.height;
   }
 
+  /**
+   * Pre-bakes all 202 real OpenStreetMap roads, Lake Starnberg shoreline, forests & Lübbach stream once!
+   */
+  private bakeStaticOSMMap(): void {
+    const ctx = this.baseCanvas.getContext('2d')!;
+    const w = this.baseCanvas.width;
+    const h = this.baseCanvas.height;
+
+    // Bavarian pasture base
+    ctx.fillStyle = '#3c5c30';
+    ctx.fillRect(0, 0, w, h);
+
+    // Real OSM forest patches
+    ctx.fillStyle = '#2c4724';
+    for (const f of OSM_DATA.forests) {
+      const rx = this.toPX(f.x - f.w * 0.5);
+      const rz = this.toPZ(f.z - f.d * 0.5);
+      const rw = Math.max(3, (f.w / (this.maxX - this.minX)) * w);
+      const rh = Math.max(3, (f.d / (this.maxZ - this.minZ)) * h);
+      ctx.fillRect(rx, rz, rw, rh);
+    }
+
+    // Real Starnberger See shoreline polygon on the west!
+    ctx.fillStyle = '#1e5b7d';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let z = this.minZ; z <= this.maxZ; z += 20) {
+      ctx.lineTo(this.toPX(getShorelineX(z) - 8), this.toPZ(z));
+    }
+    ctx.lineTo(0, h);
+    ctx.closePath();
+    ctx.fill();
+
+    // Lübbach stream
+    ctx.strokeStyle = '#3891bd';
+    ctx.lineWidth = 1.4;
+    for (const s of OSM_DATA.streams) {
+      ctx.beginPath();
+      s.pts.forEach(([x, z], idx) => {
+        if (idx === 0) ctx.moveTo(this.toPX(x), this.toPZ(z));
+        else ctx.lineTo(this.toPX(x), this.toPZ(z));
+      });
+      ctx.stroke();
+    }
+
+    // All 202 real OpenStreetMap roads!
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const r of OSM_DATA.roads) {
+      const isMain = r.hw === 'secondary' || r.hw === 'tertiary';
+      const isTrack = r.hw === 'track' || r.hw === 'service';
+      ctx.strokeStyle = isMain ? '#e2ded2' : isTrack ? 'rgba(176,164,142,0.55)' : 'rgba(210,208,200,0.8)';
+      ctx.lineWidth = isMain ? 2.2 : isTrack ? 0.9 : 1.3;
+      ctx.beginPath();
+      r.pts.forEach(([x, z], idx) => {
+        if (idx === 0) ctx.moveTo(this.toPX(x), this.toPZ(z));
+        else ctx.lineTo(this.toPX(x), this.toPZ(z));
+      });
+      ctx.stroke();
+    }
+
+    // Home Farmyard square in Wimpasing
+    ctx.fillStyle = 'rgba(159, 211, 46, 0.35)';
+    ctx.fillRect(this.toPX(FARM_CENTER.x - 32), this.toPZ(FARM_CENTER.z - 30), 11, 11);
+
+    // Crisp real hamlet labels matching the user's screenshot!
+    ctx.font = 'bold 8px Nunito, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(244, 249, 240, 0.92)';
+    ctx.fillText('Weipertshausen', this.toPX(REAL_SPOTS.weipertshausen.x), this.toPZ(REAL_SPOTS.weipertshausen.z) - 4);
+    ctx.fillText('Ried', this.toPX(REAL_SPOTS.ried.x), this.toPZ(REAL_SPOTS.ried.z) - 4);
+    ctx.fillText('Wimpasing', this.toPX(REAL_SPOTS.wimpasing.x), this.toPZ(REAL_SPOTS.wimpasing.z) + 10);
+    ctx.fillText('Münsing', this.toPX(REAL_SPOTS.muensingAltwirt.x), this.toPZ(REAL_SPOTS.muensingAltwirt.z) - 6);
+    ctx.fillStyle = '#9ee2ff';
+    ctx.fillText('Ammerland', this.toPX(REAL_SPOTS.schlossAmmerland.x) + 18, this.toPZ(REAL_SPOTS.schlossAmmerland.z) + 14);
+    ctx.fillText('SEE', this.toPX(-330), this.toPZ(-40));
+  }
+
   public render(
     tractorPos: THREE.Vector3,
     tractorHeading: number,
@@ -39,136 +121,40 @@ export class MuensingMiniMap {
     elapsed: number
   ): void {
     const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    ctx.drawImage(this.baseCanvas, 0, 0);
 
-    // Bavarian pasture background
-    ctx.fillStyle = '#486b35';
-    ctx.fillRect(0, 0, w, h);
-
-    // Starnberger See (Lake Starnberg) on the west!
-    const shoreX = this.toPX(-100);
-    ctx.fillStyle = '#256c8f';
-    ctx.fillRect(0, 0, shoreX, h);
-    ctx.strokeStyle = '#9db7a8';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(shoreX, 0);
-    ctx.lineTo(shoreX, h);
-    ctx.stroke();
-
-    // Farmyard gravel courtyard
-    ctx.fillStyle = '#8b8170';
-    ctx.fillRect(this.toPX(-31), this.toPZ(-30), this.toPX(31) - this.toPX(-31), this.toPZ(30) - this.toPZ(-30));
-
-    // Duck pond
-    ctx.fillStyle = '#3b86a8';
-    ctx.beginPath();
-    ctx.arc(this.toPX(12), this.toPZ(23), 4.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Kirchberg hill contour
-    ctx.fillStyle = 'rgba(130, 175, 92, 0.35)';
-    ctx.beginPath();
-    ctx.ellipse(this.toPX(-21), this.toPZ(-67.5), 14, 11, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Münsing Roads!
-    ctx.strokeStyle = '#2f343a';
-    ctx.lineCap = 'round';
-
-    // Hauptstraße + Ammerlander Straße down to Lake Starnberg pier!
-    ctx.lineWidth = 7.5;
-    ctx.beginPath();
-    ctx.moveTo(this.toPX(-106), this.toPZ(-40));
-    ctx.lineTo(this.toPX(80), this.toPZ(-40));
-    ctx.stroke();
-
-    // Gate drive
-    ctx.lineWidth = 6.5;
-    ctx.beginPath();
-    ctx.moveTo(this.toPX(-1.5), this.toPZ(-28));
-    ctx.lineTo(this.toPX(-1.5), this.toPZ(-40));
-    ctx.stroke();
-
-    // Weipertshausener Straße
-    ctx.lineWidth = 6.5;
-    ctx.beginPath();
-    ctx.moveTo(this.toPX(2), this.toPZ(-40));
-    ctx.lineTo(this.toPX(2), this.toPZ(-104));
-    ctx.stroke();
-
-    // Am Kirchberg loop & Bachstraße
-    ctx.lineWidth = 5.5;
-    ctx.beginPath();
-    ctx.moveTo(this.toPX(-38), this.toPZ(-40));
-    ctx.lineTo(this.toPX(-38), this.toPZ(-84));
-    ctx.lineTo(this.toPX(38), this.toPZ(-84));
-    ctx.lineTo(this.toPX(38), this.toPZ(-40));
-    ctx.stroke();
-
-    // Wooden Pier (Steg) at Starnberger See
-    ctx.strokeStyle = '#a87d4b';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.moveTo(this.toPX(-101), this.toPZ(-40));
-    ctx.lineTo(this.toPX(-120), this.toPZ(-40));
-    ctx.stroke();
-
-    // Landmark Dots & Tiny Labels
-    const landmarks: [number, number, string, string][] = [
-      [-21, -67.5, '⛪', '#f7f3e3'],
-      [22, -55, '🍺', '#ffe299'],
-      [60, -56, '🛒', '#5cc2ff'],
-      [-25, -3, '🔧', '#a2d730']
-    ];
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    for (const [lx, lz, icon] of landmarks) {
-      ctx.fillText(icon, this.toPX(lx), this.toPZ(lz));
-    }
-
-    // Crisp micro labels
-    ctx.font = 'bold 8px Nunito, sans-serif';
-    ctx.fillStyle = 'rgba(235, 248, 255, 0.88)';
-    ctx.fillText('SEE', this.toPX(-117), this.toPZ(-75));
-    ctx.fillText('MÜNSING', this.toPX(2), this.toPZ(-96));
-    ctx.fillText('FARM', this.toPX(0), this.toPZ(15));
-
-    // Village Cars
-    ctx.fillStyle = '#e8ecf0';
+    // Village cars
+    ctx.fillStyle = '#ffffff';
     for (const c of cars) {
       ctx.fillRect(this.toPX(c.x) - 1.5, this.toPZ(c.z) - 1.5, 3, 3);
     }
 
-    // Active Job Markers
+    // Active GPS Contract / Waypoint Markers
     for (const m of markers) {
       const mx = this.toPX(m.x);
       const mz = this.toPZ(m.z);
       if (m.pulse) {
-        const r = 4.5 + Math.sin(elapsed * 5) * 2.2;
+        const r = 4.5 + Math.sin(elapsed * 5) * 2.4;
         ctx.strokeStyle = m.color;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.6;
         ctx.beginPath();
         ctx.arc(mx, mz, r, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.fillStyle = m.color;
       ctx.beginPath();
-      ctx.arc(mx, mz, 3, 0, Math.PI * 2);
+      ctx.arc(mx, mz, 3.2, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // CLAAS Scorpion 741 live arrow!
+    // CLAAS Scorpion 741 live GPS arrow!
     const tx = this.toPX(tractorPos.x);
     const tz = this.toPZ(tractorPos.z);
     ctx.save();
     ctx.translate(tx, tz);
-    // heading = 0 faces -Z (up on canvas!)
     ctx.rotate(-tractorHeading);
     ctx.fillStyle = '#a2d730';
-    ctx.strokeStyle = '#151b14';
+    ctx.strokeStyle = '#121811';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(0, -6.5);

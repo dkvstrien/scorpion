@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SCORPION 741 — Münsing &amp; Starnberger See</title>
+    <title>OpenWorld Scorpion Simulator — Münsing &amp; Starnberger See</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -21,38 +21,37 @@
           <div class="brand-strip">
             <span class="claas-badge">CLAAS</span>
             <span class="model-name">SCORPION 741</span>
-            <span class="varipower-tag">VARIPOWER</span>
+            <span class="varipower-tag">REAL PHYSICS · REAL OSM MAP</span>
           </div>
-          <h1>Münsing &amp; Starnberger See</h1>
+          <h1>OpenWorld Scorpion Simulator</h1>
           <p class="subtitle">
-            Operate your 8-ton CLAAS Scorpion 741 with 4-wheel terrain suspension, load-moment tipping physics,
-            and 5 real attachments—organize the farmyard or cruise through <strong>Münsing</strong>, climb
-            <strong>Am Kirchberg</strong> past <strong>St. Mariä Himmelfahrt</strong>, and roll down to the
-            <strong>Starnberger See</strong> pier!
+            Built from <strong>real OpenStreetMap roads, 730+ buildings &amp; real DEM elevation</strong> across
+            <strong>Starnberger See, Schloss Ammerland, Wimpasing, Ried, Münsing &amp; Weipertshausen</strong>.
+            True 6.8-ton rigid-body physics: lift heavy loads too high or turn too fast and you <strong>will tip over</strong>!
           </p>
 
           <div class="mode-picker">
             <button id="pick-farm" class="mode-card selected" type="button">
-              <div class="mode-title">🚜 Farm Shift (Careful Work)</div>
+              <div class="mode-title">🚜 Bavarian Contracting Career</div>
               <div class="mode-desc">
-                Authentic telehandler work: couple the right tool at the shed, watch your 8-ton tires &amp; load stability, keep silage plastic sealed, and stack pallets cleanly onto the trailer.
+                Take real jobs from Wimpasing Farm to Fischerei Sebald on Lake Starnberg &amp; up the +68m Münsing climb to Zum Altwirt &amp; St. Mariä Himmelfahrt.
               </div>
             </button>
             <button id="pick-freeplay" class="mode-card freeplay" type="button">
               <div class="mode-title">🏔️ Open-World Free Play</div>
               <div class="mode-desc">
-                Pure open-ended Scorpion simulator across Münsing &amp; Lake Starnberg—any attachment grabs anything (including cars, benches &amp; trees), explore freely, or test wild physics!
+                Unrestricted CLAAS Scorpion 741 sandbox across the entire real Bavarian map—hoist 1.4-ton cars, test tipping limits, or cruise down to Lake Starnberg at sunset!
               </div>
             </button>
           </div>
 
           <div class="controls-grid">
             <div class="ctrl-group">
-              <h3>Drive, Precision &amp; World</h3>
-              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive &amp; Steer · <kbd>Shift</kbd> Fast · <kbd>Alt</kbd> Creep + Fork Laser</div>
-              <div><kbd>X</kbd> 4WS / 2WS / Crab · <kbd>V</kbd> Camera (Chase / Cab / Boom)</div>
-              <div><kbd>N</kbd> Time of Day · <kbd>L</kbd> LED Worklights · <kbd>H</kbd> Horn</div>
-              <div>🎮 Gamepad supported automatically!</div>
+              <h3>Drive, Stability &amp; World</h3>
+              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive · <kbd>Shift</kbd> Fast · <kbd>Alt</kbd> Creep + Fork Laser</div>
+              <div><kbd>X</kbd> 4WS / 2WS / Crab · <kbd>Backspace</kbd> Recovery Winch</div>
+              <div><kbd>V</kbd> Chase / Cab / Boom · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights · <kbd>H</kbd> Horn</div>
+              <div>🎮 Xbox / PlayStation Gamepad supported automatically</div>
             </div>
             <div class="ctrl-group">
               <h3>Telescopic Boom &amp; Tools</h3>
@@ -65,71 +64,84 @@
           </div>
 
           <button id="start-btn" class="primary-btn">Fire Up the Scorpion!</button>
-          <p class="hint-line">Drag mouse to orbit camera · Scroll to zoom · Switch modes &amp; lighting live anytime!</p>
+          <p class="hint-line">Drag mouse to orbit · Scroll to zoom · Watch your Tip-O-Meter on slopes &amp; heavy lifts!</p>
         </div>
       </div>
 
       <!-- In-Game HUD -->
       <div id="hud" class="hud hidden">
-        <!-- Top Left: Farm Shift Clipboard -->
+        <!-- Top Left: Bavarian Contracting Panel -->
         <div class="hud-panel top-left clipboard" id="farm-panel">
           <div class="tidy-header">
             <div class="title-row">
               <span class="mini-claas">CLAAS</span>
-              <span class="mini-model">FARM SHIFT</span>
+              <span class="mini-model">CONTRACTS</span>
             </div>
             <div class="score-pill">
+              <span id="career-bank" class="bank-val">€500</span>
               <span id="stars-val" class="stars">★★★</span>
-              <span id="score-val">0</span>
             </div>
           </div>
 
-          <div class="progress-wrap">
-            <div class="progress-label-row">
-              <span>Yard Organization</span>
-              <span id="tidy-pct">0%</span>
+          <div class="contract-selector">
+            <select id="contract-select" title="Choose Bavarian Contract"></select>
+          </div>
+          <p id="contract-desc" class="contract-desc"></p>
+
+          <div id="yard-progress-block">
+            <div class="progress-wrap">
+              <div class="progress-label-row">
+                <span>Wimpasing Yard Shift</span>
+                <span id="tidy-pct">0%</span>
+              </div>
+              <div class="progress-bar">
+                <div id="tidy-bar-fill" class="progress-fill" style="width: 0%"></div>
+              </div>
             </div>
-            <div class="progress-bar">
-              <div id="tidy-bar-fill" class="progress-fill" style="width: 0%"></div>
+
+            <div class="chore-list" id="chore-list">
+              <div class="chore-item" data-zone="logs">
+                <span class="chore-check">○</span>
+                <span class="chore-text">Logs → firewood rack</span>
+                <strong id="count-logs">0/3</strong>
+              </div>
+              <div class="chore-item" data-zone="crates">
+                <span class="chore-check">○</span>
+                <span class="chore-text">Pallets → flatbed trailer</span>
+                <strong id="count-crates">0/4</strong>
+              </div>
+              <div class="chore-item" data-zone="hay">
+                <span class="chore-check">○</span>
+                <span class="chore-text">Dry hay → red barn</span>
+                <strong id="count-hay">0/4</strong>
+              </div>
+              <div class="chore-item" data-zone="silage">
+                <span class="chore-check">○</span>
+                <span class="chore-text">Wrapped silage → clamp</span>
+                <strong id="count-silage">0/4</strong>
+              </div>
+              <div class="chore-item" data-zone="harvest">
+                <span class="chore-check">○</span>
+                <span class="chore-text">Pumpkins → shop bin</span>
+                <strong id="count-harvest">0/4</strong>
+              </div>
+              <div class="chore-item" data-zone="scrap">
+                <span class="chore-check">○</span>
+                <span class="chore-text">Drums &amp; scrap → skip</span>
+                <strong id="count-scrap">0/4</strong>
+              </div>
             </div>
           </div>
 
-          <div class="chore-list" id="chore-list">
-            <div class="chore-item" data-zone="logs">
-              <span class="chore-check">○</span>
-              <span class="chore-text">Clear fallen logs to firewood rack</span>
-              <strong id="count-logs">0/3</strong>
-            </div>
-            <div class="chore-item" data-zone="crates">
-              <span class="chore-check">○</span>
-              <span class="chore-text">Stack produce pallets on flatbed trailer</span>
-              <strong id="count-crates">0/4</strong>
-            </div>
-            <div class="chore-item" data-zone="hay">
-              <span class="chore-check">○</span>
-              <span class="chore-text">Stack dry hay bales in red barn</span>
-              <strong id="count-hay">0/4</strong>
-            </div>
-            <div class="chore-item" data-zone="silage">
-              <span class="chore-check">○</span>
-              <span class="chore-text">Line wrapped silage in concrete clamp</span>
-              <strong id="count-silage">0/4</strong>
-            </div>
-            <div class="chore-item" data-zone="harvest">
-              <span class="chore-check">○</span>
-              <span class="chore-text">Scoop loose pumpkins into shop bin</span>
-              <strong id="count-harvest">0/4</strong>
-            </div>
-            <div class="chore-item" data-zone="scrap">
-              <span class="chore-check">○</span>
-              <span class="chore-text">Clear drums, tires &amp; broken junk to skip</span>
-              <strong id="count-scrap">0/4</strong>
-            </div>
+          <div id="delivery-status-block" class="delivery-box hidden">
+            <div id="delivery-dist">Distance to target: 0m</div>
+            <div class="delivery-hint">Follow the green GPS beacon on the real OSM mini-map!</div>
           </div>
 
           <div class="damage-row">
-            <span>Damaged / Spoiled:</span>
-            <strong id="damaged-val" class="ok">0</strong>
+            <span>Damaged: <strong id="damaged-val" class="ok">0</strong></span>
+            <span>Rollovers: <strong id="rollover-val">0</strong></span>
+            <span>Odo: <strong id="odo-val">0.0 km</strong></span>
           </div>
         </div>
 
@@ -138,41 +150,48 @@
           <div class="tidy-header">
             <div class="title-row">
               <span class="mini-claas free-tag">FREE PLAY</span>
-              <span class="mini-model">MÜNSING, BAYERN</span>
+              <span class="mini-model">STARNBERGER SEE</span>
             </div>
+            <span id="freeplay-odo" class="bank-val">0.0 km</span>
           </div>
-          <div class="freeplay-location" id="location-readout">📍 Farmyard Plateau</div>
+          <div class="freeplay-location" id="location-readout">📍 Wimpasing Home Farm</div>
           <p class="freeplay-desc">
-            Open-ended CLAAS Scorpion 741 sandbox. Climb <strong>Am Kirchberg</strong> to the church, visit
-            <strong>Gasthof Alter Wirt</strong> &amp; <strong>EDEKA</strong>, or head west down
-            <strong>Ammerlander Straße</strong> to the <strong>Starnberger See</strong> pier!
+            Real OpenStreetMap terrain &amp; roads: drive west to <strong>Schloss Ammerland</strong> &amp;
+            <strong>Fischerei Sebald</strong>, climb east into <strong>Münsing</strong>, or head north to
+            <strong>Weipertshausen</strong>!
           </p>
-          <div class="freeplay-quick-row">
-            <button id="btn-tp-farm" class="hud-btn">Farmyard</button>
-            <button id="btn-tp-village" class="hud-btn">Dorfplatz</button>
-            <button id="btn-tp-lake" class="hud-btn">Lake Pier</button>
+          <div class="freeplay-quick-grid">
+            <button id="btn-tp-farm" class="hud-btn">Wimpasing Farm</button>
+            <button id="btn-tp-lake" class="hud-btn">Sebald &amp; Schloss</button>
+            <button id="btn-tp-village" class="hud-btn">Münsing Altwirt</button>
+            <button id="btn-tp-weipert" class="hud-btn">Weipertshausen</button>
           </div>
         </div>
 
         <!-- Top Right: Mode, Time-of-Day, Lights & Utilities -->
         <div class="hud-panel top-right">
           <div class="btn-row">
-            <button id="btn-mode" class="hud-btn mode-toggle-btn" title="Switch between Farm Shift and Open-World Free Play">
-              Mode: Farm Shift
+            <button id="btn-mode" class="hud-btn mode-toggle-btn" title="Switch Career / Free Play">
+              Mode: Career
             </button>
             <button id="btn-time" class="hud-btn" title="Cycle Time of Day (N)">☀ Afternoon</button>
-            <button id="btn-lights" class="hud-btn" title="Toggle Roof LED Worklights (L)">Lights: Off</button>
+            <button id="btn-lights" class="hud-btn" title="Toggle LED Worklights (L)">Lights: Off</button>
             <button id="btn-camera" class="hud-btn" title="Switch Camera (V)">Cam: Chase</button>
           </div>
           <div class="btn-row">
-            <button id="btn-hints" class="hud-btn" title="Toggle Subtle Destination Clues (M)">Hints: Off</button>
-            <button id="btn-sound" class="hud-btn" title="Toggle Sound">SFX: On</button>
-            <button id="btn-mess" class="hud-btn accent" title="Drop fresh farm clutter">
-              + More Clutter
-            </button>
-            <button id="btn-reset" class="hud-btn" title="Reset Tractor">Reset</button>
+            <button id="btn-winch" class="hud-btn" title="Right Tipped Tractor (Backspace)">Winch [⌫]</button>
+            <button id="btn-hints" class="hud-btn" title="Destination Hints (M)">Hints: Off</button>
+            <button id="btn-sound" class="hud-btn" title="Toggle Audio">SFX: On</button>
+            <button id="btn-mess" class="hud-btn accent" title="Spawn Extra Clutter Nearby">+ Clutter</button>
             <button id="btn-help" class="hud-btn" title="Controls">?</button>
           </div>
+        </div>
+
+        <!-- Tipped Over Recovery Banner -->
+        <div id="tipped-banner" class="tipped-banner hidden">
+          <strong>⚠️ SCORPION TIPPED OVER!</strong>
+          <span>Your load shifted past the tipping point — try pushing with the boom or winch upright!</span>
+          <button id="btn-banner-winch" class="primary-btn small">Recovery Winch [Backspace]</button>
         </div>
 
         <!-- Center Toasts / Meters / Prompt -->
@@ -188,8 +207,23 @@
 
         <div id="interact-prompt" class="interact-prompt hidden"></div>
 
-        <!-- Bottom Left: Boom, Stability & Steering Telemetry -->
+        <!-- Bottom Left: Real Automotive Dashboard + Tip-O-Meter + Boom Telemetry -->
         <div class="hud-panel bottom-left">
+          <div class="dash-top">
+            <div class="dash-metric">
+              <strong id="speed-val">0</strong>
+              <span>km/h</span>
+            </div>
+            <div class="dash-metric">
+              <strong id="elev-val">585</strong>
+              <span>m ü.NN</span>
+            </div>
+            <div class="tip-horizon" title="Live Pitch & Roll Tip-O-Meter">
+              <div id="tip-dot" class="tip-dot"></div>
+              <span id="tilt-readout" class="tilt-mini">0°</span>
+            </div>
+          </div>
+
           <div class="tele-row">
             <div class="gauge">
               <span class="gauge-lbl">BOOM LIFT</span>
@@ -200,17 +234,18 @@
               <div class="gauge-track"><div id="gauge-ext" class="gauge-fill green"></div></div>
             </div>
             <div class="gauge">
-              <span class="gauge-lbl">LEVEL / TILT</span>
+              <span class="gauge-lbl">CARRIAGE</span>
               <div class="gauge-track center-mark"><div id="gauge-tilt" class="gauge-fill orange"></div></div>
             </div>
             <div class="gauge">
-              <span class="gauge-lbl">STABILITY</span>
+              <span class="gauge-lbl">TIP RISK</span>
               <div class="gauge-track"><div id="gauge-stab" class="gauge-fill stab"></div></div>
             </div>
           </div>
           <div class="status-pills">
-            <span id="steer-badge" class="pill pill-green">4-Wheel Steer [X]</span>
-            <span id="creep-badge" class="pill hidden">Precision Laser [Alt]</span>
+            <span id="steer-badge" class="pill pill-green">4WS [X]</span>
+            <span id="wheels-badge" class="pill">4/4 Tires</span>
+            <span id="creep-badge" class="pill hidden">Laser [Alt]</span>
             <span id="hold-badge" class="pill">No Load</span>
           </div>
         </div>
@@ -221,31 +256,31 @@
             <div class="active-tool-readout">
               <span class="tool-readout-lbl">HITCHED TOOL</span>
               <strong id="active-tool-name">Pallet Forks</strong>
-              <span id="active-tool-tip" class="tool-tip">Hold [Alt] for precision laser guide</span>
+              <span id="active-tool-tip" class="tool-tip">Keep heavy loads low on slopes &amp; turns!</span>
             </div>
             <button id="btn-hitch-action" class="hud-btn hitch-btn" title="Couple or drop attachment (T)">
               [T] Drop / Couple
             </button>
           </div>
           <div class="mini-controls-hint">
-            <kbd>WASD</kbd> Drive · <kbd>Alt</kbd> Creep · <kbd>Q/E</kbd> Lift · <kbd>R/F</kbd> Extend · <kbd>Z/C</kbd> Tilt · <kbd>Space</kbd> Grab/Release · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights
+            <kbd>WASD</kbd> Drive · <kbd>Alt</kbd> Creep · <kbd>Q/E</kbd> Lift · <kbd>R/F</kbd> Extend · <kbd>Z/C</kbd> Tilt · <kbd>Space</kbd> Grab/Release · <kbd>⌫</kbd> Winch
           </div>
         </div>
 
-        <!-- Bottom Right: Live Münsing & Starnberger See GPS Mini-Map -->
+        <!-- Bottom Right: Real OpenStreetMap GPS Mini-Map -->
         <div class="hud-panel bottom-right minimap-wrap">
-          <canvas id="minimap-canvas" width="176" height="132"></canvas>
-          <div class="minimap-caption">Münsing · Starnberger See</div>
+          <canvas id="minimap-canvas" width="204" height="136"></canvas>
+          <div class="minimap-caption">Real OSM · Münsing — Starnberger See</div>
         </div>
       </div>
 
       <!-- Victory Banner -->
       <div id="victory-banner" class="victory-banner hidden">
-        <h2 id="victory-title">Morning Shift Complete!</h2>
-        <p id="victory-sub">The whole farmyard is tidy and ready for market pickup!</p>
+        <h2 id="victory-title">Contract Complete!</h2>
+        <p id="victory-sub">Payment deposited into your Bavarian Contracting account!</p>
         <div class="btn-row" style="justify-content: center; margin-top: 10px">
-          <button id="btn-victory-freeplay" class="primary-btn small">Explore Münsing &amp; Lake</button>
-          <button id="btn-victory-close" class="hud-btn">Keep Working</button>
+          <button id="btn-victory-freeplay" class="primary-btn small">Explore Open World</button>
+          <button id="btn-victory-close" class="hud-btn">Next Contract</button>
         </div>
       </div>
     </div>
