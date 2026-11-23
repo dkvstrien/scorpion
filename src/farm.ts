@@ -165,22 +165,71 @@ export class FarmEnvironment {
   }
 
   private buildBoundaries(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Authentic Yorkshire dry-stone wall along the north & west road edge!
+    // Authentic Yorkshire dry-stone wall along the north edge WITH A WIDE OPEN FARM GATE to the Village!
     const stoneTex = createStoneWallTexture();
     const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.95 });
     const copeMat = new THREE.MeshStandardMaterial({ color: 0x857f75, roughness: 0.93 });
 
-    const northWall = new THREE.Mesh(new THREE.BoxGeometry(66, 1.5, 0.95), stoneMat);
-    northWall.position.set(0, 0.75, -31);
-    northWall.castShadow = true;
-    northWall.receiveShadow = true;
-    scene.add(northWall);
+    // Left & Right north wall segments leaving a wide 12m open gate at x = -6..+6!
+    const wallSegments: [number, number][] = [
+      [-19, 26],
+      [19, 26]
+    ];
+    for (const [wx, ww] of wallSegments) {
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(ww, 1.5, 0.95), stoneMat);
+      seg.position.set(wx, 0.75, -31);
+      seg.castShadow = true;
+      seg.receiveShadow = true;
+      scene.add(seg);
 
-    const coping = new THREE.Mesh(new THREE.BoxGeometry(66.2, 0.22, 1.12), copeMat);
-    coping.position.set(0, 1.58, -31);
-    scene.add(coping);
+      const cope = new THREE.Mesh(new THREE.BoxGeometry(ww + 0.15, 0.22, 1.12), copeMat);
+      cope.position.set(wx, 1.58, -31);
+      scene.add(cope);
 
-    // Timber post-and-rail farm fencing on East, South, and West
+      this.addStaticBox(world, groundMat, wx, 1.0, -31, ww, 2.0, 1.1);
+    }
+
+    // Classic stone gateposts framing the open driveway out to Scorpion Green Village!
+    for (const gx of [-6.2, 6.2]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.2, 1.15), stoneMat);
+      post.position.set(gx, 1.1, -31);
+      post.castShadow = true;
+      scene.add(post);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.24, 1.32), copeMat);
+      cap.position.set(gx, 2.3, -31);
+      scene.add(cap);
+    }
+
+    // Wooden farm signpost right beside the gate pointing to Scorpion Green Village!
+    const postWood = new THREE.MeshStandardMaterial({ color: 0x6f4a28, roughness: 0.9 });
+    const signPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 2.7, 8), postWood);
+    signPost.position.set(7.4, 1.35, -30.6);
+    scene.add(signPost);
+
+    const sc = document.createElement('canvas');
+    sc.width = 256;
+    sc.height = 64;
+    const sctx = sc.getContext('2d')!;
+    sctx.fillStyle = '#f5f2e6';
+    sctx.fillRect(0, 0, 256, 64);
+    sctx.strokeStyle = '#24292b';
+    sctx.lineWidth = 6;
+    sctx.strokeRect(3, 3, 250, 58);
+    sctx.fillStyle = '#1f2622';
+    sctx.font = 'bold 22px sans-serif';
+    sctx.textAlign = 'center';
+    sctx.textBaseline = 'middle';
+    sctx.fillText('↑ SCORPION VILLAGE', 128, 33);
+    const sTex = new THREE.CanvasTexture(sc);
+    sTex.colorSpace = THREE.SRGBColorSpace;
+    const sBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(2.3, 0.62, 0.1),
+      new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.65 })
+    );
+    sBoard.position.set(7.4, 2.45, -30.6);
+    scene.add(sBoard);
+
+    // Timber post-and-rail farm fencing on West, East, and South sides of farmyard
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x7c5a37, roughness: 0.92 });
     const sides: { x1: number; z1: number; x2: number; z2: number }[] = [
       { x1: -32, z1: -31, x2: -32, z2: 31 },
@@ -211,10 +260,11 @@ export class FarmEnvironment {
       }
     }
 
-    this.addStaticBox(world, groundMat, 0, 4, -31.5, 66, 8, 1.2);
-    this.addStaticBox(world, groundMat, 0, 4, 31.5, 66, 8, 1.2);
-    this.addStaticBox(world, groundMat, -32.5, 4, 0, 1.2, 8, 64);
-    this.addStaticBox(world, groundMat, 32.5, 4, 0, 1.2, 8, 64);
+    // Wide outer world boundaries encompassing both Farmyard AND Scorpion Green Village!
+    this.addStaticBox(world, groundMat, 0, 4, -74, 144, 8, 1.4);
+    this.addStaticBox(world, groundMat, 0, 4, 33, 144, 8, 1.4);
+    this.addStaticBox(world, groundMat, -69, 4, -20, 1.4, 8, 110);
+    this.addStaticBox(world, groundMat, 69, 4, -20, 1.4, 8, 110);
   }
 
   private buildHayBarn(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {

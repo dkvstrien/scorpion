@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { createClaasDoorTexture } from './textures';
 import { FarmProp } from './props';
+import { DynamicVillageObj } from './village';
 
 export type AttachmentType = 'none' | 'forks' | 'spike' | 'grabber' | 'grapple' | 'bucket';
 export type SteeringMode = '4WS' | '2WS' | 'CRAB';
@@ -27,8 +28,8 @@ export interface DroppedAttachment {
 export interface TractorCallbacks {
   onSilagePopped: (prop: FarmProp, reason: string) => void;
   onPropDamaged: (prop: FarmProp, reason: string) => void;
-  onPropFling: (prop: FarmProp, speed: number) => void;
-  onPropGrabbed: (prop: FarmProp, tool: AttachmentType) => void;
+  onPropFling: (label: string, speed: number) => void;
+  onPropGrabbed: (label: string, tool: AttachmentType, isSilageIntact?: boolean) => void;
   onWrongTool: (message: string) => void;
   onToolChanged: (tool: AttachmentType, attached: boolean) => void;
   onDust: (pos: THREE.Vector3) => void;
@@ -225,9 +226,11 @@ export class ClaasScorpion {
   public headTilt = 0.0;
   public prevHeadTilt = 0.0;
 
-  // Start with Grapple Claw OR Pallet Forks? Start with Pallet Forks, and notice fallen logs block the lane!
+  // Start with Pallet Forks
   public activeTool: AttachmentType = 'forks';
+  public chaosMode = false;
   public heldProps: FarmProp[] = [];
+  public heldVillageObj: DynamicVillageObj | null = null;
   public clampClosed = false;
   public squeezePressure = 0;
   public hydroLoad = 0;
@@ -674,35 +677,73 @@ export class ClaasScorpion {
     return this.headPivot.localToWorld(new THREE.Vector3(0, 0.4, -0.4));
   }
 
-  public releaseAll(allowFling = true): void {
-    if (this.heldProps.length === 0) return;
+  public getTipSpeed(): number {
+    return this.smoothedTipVel.length();
+  }
+
+  public releaseAll(allowMomentum = true): void {
     const tipSpeed = this.smoothedTipVel.length();
-    const isFling = allowFling && tipSpeed > 3.6;
+    // PURE PHYSICS MOMENTUM RELEASE — zero artificial upward pop or magic snap!
+    // Stationary / slow creep = smooth gentle drop straight onto pallet stacks.
+    // Fast spin / extended boom whip = natural ω × r tangential throw!
+    const isGenuineThrow = allowMomentum && tipSpeed > 4.2;
+
+    if (this.heldVillageObj) {
+      const vo = this.heldVillageObj;
+      vo.heldByTractor = false;
+      vo.body.wakeUp();
+      if (allowMomentum && tipSpeed > 1.2) {
+        const vx = THREE.MathUtils.clamp(this.smoothedTipVel.x, -26, 26);
+        const vy = THREE.MathUtils.clamp(this.smoothedTipVel.y, -12, 14);
+        const vz = THREE.MathUtils.clamp(this.smoothedTipVel.z, -26, 26);
+        vo.body.velocity.set(vx, vy, vz);
+        vo.body.angularVelocity.set(
+          (Math.random() - 0.5) * Math.min(4, tipSpeed * 0.3),
+          this.yawRate * 1.4,
+          (Math.random() - 0.5) * Math.min(4, tipSpeed * 0.3)
+        );
+        if (isGenuineThrow) {
+          this.callbacks.onPropFling(vo.label, tipSpeed);
+        }
+      } else {
+        vo.body.velocity.set(0, -0.15, 0);
+        vo.body.angularVelocity.set(0, 0, 0);
+      }
+      this.heldVillageObj = null;
+      this.clampClosed = false;
+      this.squeezePressure = 0;
+      return;
+    }
+
+    if (this.heldProps.length === 0) return;
 
     for (const p of this.heldProps) {
       p.heldByTractor = false;
       p.body.wakeUp();
       this.holdOffsets.delete(p.id);
 
-      const vx = this.smoothedTipVel.x;
-      const vy = this.smoothedTipVel.y;
-      const vz = this.smoothedTipVel.z;
-
-      if (isFling) {
-        const boost = 1.38;
-        p.body.velocity.set(vx * boost, Math.max(2.4, vy * boost + tipSpeed * 0.32), vz * boost);
+      if (allowMomentum && tipSpeed > 1.6) {
+        // Pure real momentum inheritance (no artificial upward jump!)
+        const vx = THREE.MathUtils.clamp(this.smoothedTipVel.x, -26, 26);
+        const vy = THREE.MathUtils.clamp(this.smoothedTipVel.y, -10, 14);
+        const vz = THREE.MathUtils.clamp(this.smoothedTipVel.z, -26, 26);
+        p.body.velocity.set(vx, vy, vz);
         p.body.angularVelocity.set(
-          (Math.random() - 0.5) * 5,
-          (Math.random() - 0.5) * 5,
-          (Math.random() - 0.5) * 5
+          (Math.random() - 0.5) * Math.min(3.5, tipSpeed * 0.25),
+          this.yawRate * 1.3,
+          (Math.random() - 0.5) * Math.min(3.5, tipSpeed * 0.25)
         );
-        p.wasThrown = true;
-        p.throwOrigin.set(p.body.position.x, p.body.position.y, p.body.position.z);
-        this.callbacks.onPropFling(p, tipSpeed * boost);
+        if (isGenuineThrow) {
+          p.wasThrown = true;
+          p.throwOrigin.set(p.body.position.x, p.body.position.y, p.body.position.z);
+          this.callbacks.onPropFling(p.label, tipSpeed);
+        } else {
+          p.wasThrown = false;
+        }
       } else {
-        // Gentle set-down for accurate pallet & bale stacking!
-        p.body.velocity.set(vx * 0.25, Math.max(-0.4, vy * 0.25), vz * 0.25);
-        p.body.angularVelocity.scale(0.15, p.body.angularVelocity);
+        // Ultra-clean gentle set-down for realistic pallet & bale stacking!
+        p.body.velocity.set(0, -0.1, 0);
+        p.body.angularVelocity.set(0, 0, 0);
         p.wasThrown = false;
       }
     }
@@ -720,13 +761,35 @@ export class ClaasScorpion {
     }
   }
 
-  private tryGrabNearest(props: FarmProp[]): boolean {
-    if (this.activeTool === 'none') {
+  private tryGrabNearest(props: FarmProp[], villageObjs: DynamicVillageObj[]): boolean {
+    if (this.activeTool === 'none' && !this.chaosMode) {
       this.warnOnce('No attachment hitched! Drive to the Tool Shed & press [T]');
       return false;
     }
 
     const holdPos = this.getHoldWorldPos();
+
+    // Check village cars, phone boxes, benches, fallen trees first if right in front of the boom!
+    const vCandidates = villageObjs
+      .filter((o) => !o.heldByTractor)
+      .map((o) => {
+        const dp = new THREE.Vector3(o.body.position.x, o.body.position.y, o.body.position.z);
+        return { obj: o, dist: dp.distanceTo(holdPos) };
+      })
+      .filter((c) => c.dist < 2.2 + c.obj.radius * 0.65)
+      .sort((a, b) => a.dist - b.dist);
+
+    if (vCandidates.length > 0 && (this.chaosMode || vCandidates[0].obj.kind !== 'car')) {
+      const vo = vCandidates[0].obj;
+      vo.heldByTractor = true;
+      vo.cruiseActive = false;
+      vo.body.wakeUp();
+      this.heldVillageObj = vo;
+      this.clampClosed = true;
+      this.callbacks.onPropGrabbed(vo.label, this.activeTool, false);
+      return true;
+    }
+
     const maxCount = this.activeTool === 'bucket' ? 4 : 1;
     const grabRadius =
       this.activeTool === 'bucket'
@@ -753,60 +816,61 @@ export class ClaasScorpion {
       if (this.heldProps.length >= maxCount) break;
       const prop = c.prop;
 
-      // === REALISTIC TOOL-TO-TASK SKILL RULES ===
-      if (this.activeTool === 'forks') {
-        if (prop.kind !== 'crate') {
-          this.warnOnce(`Forks won't grip a ${prop.label} — swap tools at the Shed!`);
-          continue;
-        }
-        // Must have forks reasonably level & aligned beneath pallet height!
-        if (Math.abs(this.headTilt) > 0.34) {
-          this.warnOnce('Level your forks [Z / C] before lifting a pallet!');
-          continue;
-        }
-        if (Math.abs(c.dy) > 0.65) {
-          this.warnOnce('Adjust boom height [Q / E] to slide forks cleanly under the pallet!');
-          continue;
-        }
-      } else if (this.activeTool === 'spike') {
-        if (prop.isWrappedSilage) {
-          this.callbacks.onSilagePopped(prop, 'POP! Bale Spike punctured the silage plastic!');
-          continue;
-        }
-        if (prop.kind === 'crate') {
-          this.callbacks.onPropDamaged(prop, 'CRUNCH! Bale Spike splintered the produce pallet!');
-          continue;
-        }
-        if (prop.kind !== 'hay_round' && prop.kind !== 'hay_square') {
-          this.warnOnce(`Bale Spike is for Dry Hay Bales — swap tools at the Shed!`);
-          continue;
-        }
-      } else if (this.activeTool === 'grabber') {
-        if (prop.kind === 'log' || prop.kind === 'pumpkin') {
-          this.warnOnce(`Bale Grabber slips on ${prop.label} — try Grapple or Bucket!`);
-          continue;
-        }
-        if (prop.kind === 'crate' && !prop.isDamaged) {
-          this.warnOnce('Careful! Use Pallet Forks for intact Produce Pallets (Grabber can crush!)');
-        }
-      } else if (this.activeTool === 'grapple') {
-        if (prop.isWrappedSilage && !prop.isPopped) {
-          this.callbacks.onSilagePopped(prop, 'POP! Sharp Grapple teeth tore the silage wrap!');
-        }
-        if (prop.kind === 'crate' && !prop.isDamaged) {
-          this.callbacks.onPropDamaged(prop, 'CRUNCH! Grapple Claw crushed the produce pallet!');
-        }
-        if (prop.kind === 'pumpkin' && !prop.isDamaged) {
-          this.callbacks.onPropDamaged(prop, 'SPLAT! Grapple jaws squashed the pumpkin!');
-        }
-      } else if (this.activeTool === 'bucket') {
-        if (prop.kind === 'log' || prop.kind === 'hay_round' || prop.kind === 'silage_wrapped') {
-          this.warnOnce(`${prop.label} is too big for the Scoop Bucket!`);
-          continue;
-        }
-        if (this.headTilt > 0.36) {
-          this.warnOnce('Level or curl back the Scoop Bucket [Z] to scoop items!');
-          continue;
+      // In Careful Farm Shift mode, enforce authentic tool-to-task matching!
+      if (!this.chaosMode) {
+        if (this.activeTool === 'forks') {
+          if (prop.kind !== 'crate') {
+            this.warnOnce(`Forks won't grip a ${prop.label} — swap tools at the Shed!`);
+            continue;
+          }
+          if (Math.abs(this.headTilt) > 0.34) {
+            this.warnOnce('Level your forks [Z / C] before lifting a pallet!');
+            continue;
+          }
+          if (Math.abs(c.dy) > 0.65) {
+            this.warnOnce('Adjust boom height [Q / E] to slide forks cleanly under the pallet!');
+            continue;
+          }
+        } else if (this.activeTool === 'spike') {
+          if (prop.isWrappedSilage) {
+            this.callbacks.onSilagePopped(prop, 'POP! Bale Spike punctured the silage plastic!');
+            continue;
+          }
+          if (prop.kind === 'crate') {
+            this.callbacks.onPropDamaged(prop, 'CRUNCH! Bale Spike splintered the produce pallet!');
+            continue;
+          }
+          if (prop.kind !== 'hay_round' && prop.kind !== 'hay_square') {
+            this.warnOnce(`Bale Spike is for Dry Hay Bales — swap tools at the Shed!`);
+            continue;
+          }
+        } else if (this.activeTool === 'grabber') {
+          if (prop.kind === 'log' || prop.kind === 'pumpkin') {
+            this.warnOnce(`Bale Grabber slips on ${prop.label} — try Grapple or Bucket!`);
+            continue;
+          }
+          if (prop.kind === 'crate' && !prop.isDamaged) {
+            this.warnOnce('Careful! Use Pallet Forks for intact Produce Pallets (Grabber can crush!)');
+          }
+        } else if (this.activeTool === 'grapple') {
+          if (prop.isWrappedSilage && !prop.isPopped) {
+            this.callbacks.onSilagePopped(prop, 'POP! Sharp Grapple teeth tore the silage wrap!');
+          }
+          if (prop.kind === 'crate' && !prop.isDamaged) {
+            this.callbacks.onPropDamaged(prop, 'CRUNCH! Grapple Claw crushed the produce pallet!');
+          }
+          if (prop.kind === 'pumpkin' && !prop.isDamaged) {
+            this.callbacks.onPropDamaged(prop, 'SPLAT! Grapple jaws squashed the pumpkin!');
+          }
+        } else if (this.activeTool === 'bucket') {
+          if (prop.kind === 'log' || prop.kind === 'hay_round' || prop.kind === 'silage_wrapped') {
+            this.warnOnce(`${prop.label} is too big for the Scoop Bucket!`);
+            continue;
+          }
+          if (this.headTilt > 0.36) {
+            this.warnOnce('Level or curl back the Scoop Bucket [Z] to scoop items!');
+            continue;
+          }
         }
       }
 
@@ -821,7 +885,11 @@ export class ClaasScorpion {
           ? new THREE.Vector3(((idx % 2) - 0.5) * 0.62, 0.08 + Math.floor(idx / 2) * 0.36, (idx % 2) * 0.08)
           : new THREE.Vector3(0, 0, 0);
       this.holdOffsets.set(prop.id, offset);
-      this.callbacks.onPropGrabbed(prop, this.activeTool);
+      this.callbacks.onPropGrabbed(
+        prop.label,
+        this.activeTool,
+        prop.isWrappedSilage && !prop.isPopped && this.activeTool === 'grabber'
+      );
       grabbedAny = true;
     }
 
@@ -842,10 +910,16 @@ export class ClaasScorpion {
     this.headTilt = 0;
   }
 
-  public update(dt: number, elapsed: number, input: TractorInput, props: FarmProp[]): void {
+  public update(
+    dt: number,
+    elapsed: number,
+    input: TractorInput,
+    props: FarmProp[],
+    villageObjs: DynamicVillageObj[]
+  ): void {
     // --- 1. Driving, Precision Creep & Multi-Mode Steering ---
-    const maxSpeed = input.creep ? 3.2 : input.boost ? 13.5 : 8.8;
-    const accel = input.creep ? 10 : input.boost ? 20 : 14;
+    const maxSpeed = input.creep ? 3.0 : input.boost ? (this.chaosMode ? 17.0 : 13.5) : 9.2;
+    const accel = input.creep ? 10 : input.boost ? 22 : 14;
 
     if (Math.abs(input.throttle) > 0.01) {
       const target = input.throttle * maxSpeed;
@@ -869,30 +943,33 @@ export class ClaasScorpion {
       this.position.x -= Math.sin(moveAngle) * this.speed * dt;
       this.position.z -= Math.cos(moveAngle) * this.speed * dt;
     } else {
-      const turnMult = this.steeringMode === '4WS' ? 0.54 : 0.34;
+      const turnMult = this.steeringMode === '4WS' ? 0.56 : 0.34;
       const effectiveSpeed =
         Math.abs(this.speed) > 0.25
           ? this.speed
-          : Math.sign(input.throttle || 1) * (input.creep ? 0.45 : 0.95) * Math.abs(input.steer);
+          : Math.sign(input.throttle || 1) * (input.creep ? 0.45 : 1.05) * Math.abs(input.steer);
       this.yawRate = this.steerAngle * effectiveSpeed * turnMult;
       this.heading += this.yawRate * dt;
       this.position.x -= Math.sin(this.heading) * this.speed * dt;
       this.position.z -= Math.cos(this.heading) * this.speed * dt;
     }
 
-    const limit = 29.2;
-    if (this.position.x < -limit) {
-      this.position.x = -limit;
+    // Expanded Farmyard + Scorpion Green Village world bounds!
+    const limitX = 65.5;
+    const minZ = -70.5;
+    const maxZ = 29.8;
+    if (this.position.x < -limitX) {
+      this.position.x = -limitX;
       this.speed *= 0.3;
-    } else if (this.position.x > limit) {
-      this.position.x = limit;
+    } else if (this.position.x > limitX) {
+      this.position.x = limitX;
       this.speed *= 0.3;
     }
-    if (this.position.z < -28.2) {
-      this.position.z = -28.2;
+    if (this.position.z < minZ) {
+      this.position.z = minZ;
       this.speed *= 0.3;
-    } else if (this.position.z > 28.2) {
-      this.position.z = 28.2;
+    } else if (this.position.z > maxZ) {
+      this.position.z = maxZ;
       this.speed *= 0.3;
     }
 
@@ -941,11 +1018,12 @@ export class ClaasScorpion {
     const justPressed = input.actionHeld && !this.actionWasHeld;
     const justReleased = !input.actionHeld && this.actionWasHeld;
 
+    const hasLoad = this.heldProps.length > 0 || this.heldVillageObj !== null;
     if (justPressed) {
       this.holdTimer = 0;
       this.grabLockedOnPress = false;
-      if (this.heldProps.length === 0) {
-        if (this.tryGrabNearest(props)) {
+      if (!hasLoad) {
+        if (this.tryGrabNearest(props, villageObjs)) {
           this.grabLockedOnPress = true;
         } else {
           this.clampClosed = !this.clampClosed;
@@ -953,9 +1031,9 @@ export class ClaasScorpion {
       }
     }
 
-    if (input.actionHeld && this.heldProps.length > 0 && !this.grabLockedOnPress) {
+    if (input.actionHeld && hasLoad && !this.grabLockedOnPress) {
       this.holdTimer += dt;
-      if (this.activeTool === 'grabber' && this.holdTimer > 0.24) {
+      if (this.activeTool === 'grabber' && this.holdTimer > 0.24 && this.heldProps.length > 0) {
         this.squeezePressure = Math.min(1, this.squeezePressure + dt * 0.72);
         const held = this.heldProps[0];
         if (held) {
@@ -973,7 +1051,7 @@ export class ClaasScorpion {
     }
 
     if (justReleased) {
-      if (this.heldProps.length > 0 && !this.grabLockedOnPress && this.holdTimer < 0.3) {
+      if (hasLoad && !this.grabLockedOnPress && this.holdTimer < 0.32) {
         this.releaseAll(true);
       }
       this.squeezePressure = Math.max(0, this.squeezePressure - 0.5);
@@ -1074,14 +1152,24 @@ export class ClaasScorpion {
     );
     this.chassisBody.angularVelocity.set(0, (this.heading - prevHeading) / safeDt, 0);
 
-    // Keep held props cleanly aligned with attachment
+    // Keep held props & lifted village cars cleanly aligned with attachment
     const attachQuat = new THREE.Quaternion();
     this.attachmentMount.getWorldQuaternion(attachQuat);
+
+    if (this.heldVillageObj) {
+      const vo = this.heldVillageObj;
+      const targetPos = this.holdWorldPos.clone();
+      targetPos.y = Math.max(vo.halfHeight + 0.08, targetPos.y + 0.22);
+      vo.body.position.set(targetPos.x, targetPos.y, targetPos.z);
+      vo.body.velocity.set(0, 0, 0);
+      vo.body.angularVelocity.set(0, 0, 0);
+      vo.body.quaternion.set(attachQuat.x, attachQuat.y, attachQuat.z, attachQuat.w);
+    }
 
     for (const p of this.heldProps) {
       const localOff = this.holdOffsets.get(p.id) ?? new THREE.Vector3();
       const targetPos = this.holdWorldPos.clone().add(localOff.clone().applyQuaternion(attachQuat));
-      targetPos.y = Math.max(p.halfHeight + 0.04, targetPos.y);
+      targetPos.y = Math.max(p.halfHeight + 0.02, targetPos.y);
 
       p.body.position.set(targetPos.x, targetPos.y, targetPos.z);
       p.body.velocity.set(0, 0, 0);

@@ -6,8 +6,10 @@ import { ParticleSystem } from './particles';
 import { FarmEnvironment } from './farm';
 import { FarmProp, PropManager, ZoneKey } from './props';
 import { AttachmentType, buildAttachmentMesh, ClaasScorpion, TOOL_META, TractorInput } from './tractor';
+import { VillageWorld } from './village';
 
 type CameraMode = 'chase' | 'cab' | 'boom';
+type GameMode = 'farm' | 'chaos';
 
 class ScorpionGame {
   private renderer: THREE.WebGLRenderer;
@@ -17,6 +19,7 @@ class ScorpionGame {
   private audio = new FarmAudio();
   private particles: ParticleSystem;
   private farm: FarmEnvironment;
+  private village: VillageWorld;
   private propMgr: PropManager;
   private tractor: ClaasScorpion;
 
@@ -25,10 +28,18 @@ class ScorpionGame {
 
   private keys = new Set<string>();
   private started = false;
+  private mode: GameMode = 'farm';
   private score = 0;
   private damagedCount = 0;
   private hintsOn = false;
   private victoryShown = false;
+
+  // Village Chaos (GTA Destruct Mode) stats
+  private chaosBillGBP = 0;
+  private chaosCars = 0;
+  private chaosTrees = 0;
+  private chaosProps = 0;
+  private chaosPeds = 0;
 
   // Camera state
   private cameraMode: CameraMode = 'chase';
@@ -44,11 +55,25 @@ class ScorpionGame {
   // DOM Elements
   private startOverlay = document.getElementById('start-overlay')!;
   private hud = document.getElementById('hud')!;
+  private farmPanel = document.getElementById('farm-panel')!;
+  private chaosPanel = document.getElementById('chaos-panel')!;
+  private pickFarmBtn = document.getElementById('pick-farm')!;
+  private pickChaosBtn = document.getElementById('pick-chaos')!;
+  private btnMode = document.getElementById('btn-mode')!;
+
   private scoreEl = document.getElementById('score-val')!;
   private starsEl = document.getElementById('stars-val')!;
   private damagedEl = document.getElementById('damaged-val')!;
   private tidyPctEl = document.getElementById('tidy-pct')!;
   private tidyBarEl = document.getElementById('tidy-bar-fill')!;
+
+  private wantedStarsEl = document.getElementById('wanted-stars')!;
+  private chaosBillEl = document.getElementById('chaos-bill')!;
+  private statCarsEl = document.getElementById('stat-cars')!;
+  private statTreesEl = document.getElementById('stat-trees')!;
+  private statPropsEl = document.getElementById('stat-props')!;
+  private statPedsEl = document.getElementById('stat-peds')!;
+
   private toastContainer = document.getElementById('toast-container')!;
   private interactPrompt = document.getElementById('interact-prompt')!;
   private squeezeMeter = document.getElementById('squeeze-meter')!;
@@ -83,50 +108,57 @@ class ScorpionGame {
     this.renderer.toneMappingExposure = 1.02;
 
     this.scene = new THREE.Scene();
-    // Natural British afternoon sky & gentle countryside haze
     this.scene.background = new THREE.Color(0x98bdd6);
-    this.scene.fog = new THREE.Fog(0xb5cddc, 58, 165);
+    this.scene.fog = new THREE.Fog(0xb5cddc, 75, 195);
 
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 260);
+    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 290);
     this.camera.position.set(8, 7.5, 25);
 
     this.setupLightingAndSky();
 
+    // Dialed-in Cannon-es solver for realistic, zero-bounce wood-on-wood pallet stacking!
     this.world = new CANNON.World({
       gravity: new CANNON.Vec3(0, -16.5, 0)
     });
     this.world.broadphase = new CANNON.SAPBroadphase(this.world);
     this.world.allowSleep = true;
-    (this.world.solver as CANNON.GSSolver).iterations = 14;
+    (this.world.solver as CANNON.GSSolver).iterations = 20;
 
     const groundMat = new CANNON.Material('ground');
     const propMat = new CANNON.Material('prop');
     const tractorMat = new CANNON.Material('tractor');
 
-    // Crisp, grounded stacking friction so pallets stack solidly without sliding around!
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(groundMat, propMat, {
-        friction: 0.72,
-        restitution: 0.08
+        friction: 0.82,
+        restitution: 0.02,
+        contactEquationStiffness: 1e7,
+        contactEquationRelaxation: 4
       })
     );
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(propMat, propMat, {
-        friction: 0.78,
-        restitution: 0.06
+        friction: 0.86,
+        restitution: 0.02,
+        contactEquationStiffness: 1e7,
+        contactEquationRelaxation: 4
       })
     );
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(tractorMat, propMat, {
-        friction: 0.58,
-        restitution: 0.12
+        friction: 0.62,
+        restitution: 0.05
       })
     );
 
     this.particles = new ParticleSystem(this.scene);
     this.farm = new FarmEnvironment(this.scene, this.world, groundMat);
 
-    // Park the 5 physical attachments on the Workshop Tool Shed stands
+    // Whole countryside village of Scorpion Green right outside the north stone gate!
+    this.village = new VillageWorld(this.scene, this.world, groundMat, propMat, {
+      onChaosEvent: (category, label, costGBP, pos) => this.handleChaosEvent(category, label, costGBP, pos)
+    });
+
     for (const spot of this.farm.rackSpots) {
       const preview = buildAttachmentMesh(spot.tool);
       preview.position.set(0, 0.56, 0);
@@ -139,7 +171,7 @@ class ScorpionGame {
     this.propMgr.onImpact = (prop, speed) => {
       this.audio.playImpact(speed, prop.materialType);
       if (prop.isWrappedSilage && !prop.isPopped && speed > 12.5) {
-        this.handleSilagePop(prop, 'POP! Hard drop tore the silage plastic!');
+        this.handleSilagePop(prop, 'POP! Hard impact tore the silage plastic!');
       } else if (prop.kind === 'pumpkin' && !prop.isDamaged && speed > 13.5) {
         this.handlePropDamage(prop, 'SPLAT! Dropped the pumpkin too hard!');
       }
@@ -149,14 +181,16 @@ class ScorpionGame {
     this.tractor = new ClaasScorpion(this.scene, this.world, tractorMat, {
       onSilagePopped: (prop, reason) => this.handleSilagePop(prop, reason),
       onPropDamaged: (prop, reason) => this.handlePropDamage(prop, reason),
-      onPropFling: (prop, speed) => {
+      onPropFling: (label, speed) => {
         this.audio.playFling();
-        this.showToast(`LAUNCHED ${prop.label}! (${Math.round(speed * 2.2)} mph)`, 'trick');
+        this.showToast(`FLUNG ${label}! (${Math.round(speed * 2.2)} mph)`, 'trick');
       },
-      onPropGrabbed: (prop, tool) => {
+      onPropGrabbed: (label, _tool, isSilageIntact) => {
         this.audio.playHitch(true);
-        if (prop.isWrappedSilage && !prop.isPopped && tool === 'grabber') {
+        if (isSilageIntact) {
           this.showToast('Gentle Silage Grip — Plastic Sealed!');
+        } else if (this.mode === 'chaos') {
+          this.showToast(`HOISTED ${label.toUpperCase()}!`, 'trick');
         }
       },
       onWrongTool: (message) => {
@@ -181,12 +215,12 @@ class ScorpionGame {
     this.scene.add(hemi);
 
     const sun = new THREE.DirectionalLight(0xfff0cf, 1.75);
-    sun.position.set(28, 40, 22);
+    sun.position.set(36, 52, 26);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.camera.near = 5;
-    sun.shadow.camera.far = 125;
-    const d = 38;
+    sun.shadow.camera.far = 175;
+    const d = 68;
     sun.shadow.camera.left = -d;
     sun.shadow.camera.right = d;
     sun.shadow.camera.top = d;
@@ -195,22 +229,86 @@ class ScorpionGame {
     this.scene.add(sun);
 
     const rim = new THREE.DirectionalLight(0xaacbe6, 0.35);
-    rim.position.set(-24, 18, -28);
+    rim.position.set(-28, 22, -40);
     this.scene.add(rim);
 
-    // Overcast-bright British cumulus clouds
     const cloudMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f7, roughness: 0.96 });
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 12; i++) {
       const cloud = new THREE.Group();
       for (let p = 0; p < 4; p++) {
-        const puff = new THREE.Mesh(new THREE.SphereGeometry(2.6 + (p % 2) * 1.2, 10, 8), cloudMat);
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(2.8 + (p % 2) * 1.2, 10, 8), cloudMat);
         puff.position.set((p - 1.5) * 2.2, (p % 2) * 0.65, ((p % 3) - 1) * 0.85);
         puff.scale.y = 0.6;
         cloud.add(puff);
       }
-      cloud.position.set(-65 + i * 16, 26 + (i % 3) * 4, -50 + (i % 4) * 24);
+      cloud.position.set(-80 + i * 16, 28 + (i % 3) * 4, -75 + (i % 4) * 32);
       this.scene.add(cloud);
       this.clouds.push(cloud);
+    }
+  }
+
+  private setMode(next: GameMode): void {
+    this.mode = next;
+    this.tractor.chaosMode = next === 'chaos';
+
+    this.pickFarmBtn.classList.toggle('selected', next === 'farm');
+    this.pickChaosBtn.classList.toggle('selected', next === 'chaos');
+
+    this.farmPanel.classList.toggle('hidden', next !== 'farm');
+    this.chaosPanel.classList.toggle('hidden', next !== 'chaos');
+
+    this.btnMode.textContent = next === 'chaos' ? 'Mode: Village Chaos 🔥' : 'Mode: Farm Shift';
+    this.btnMode.classList.toggle('chaos-active', next === 'chaos');
+
+    if (this.started) {
+      if (next === 'chaos') {
+        this.audio.playHorn();
+        this.showToast('VILLAGE CHAOS ACTIVE! Drive north through the gate!', 'trick');
+      } else {
+        this.showToast('Farm Shift Mode — Careful handling & tool rules active!');
+      }
+    }
+  }
+
+  private handleChaosEvent(
+    category: 'car' | 'tree' | 'prop' | 'ped',
+    label: string,
+    costGBP: number,
+    pos: THREE.Vector3
+  ): void {
+    this.chaosBillGBP += costGBP;
+    if (category === 'car') {
+      this.chaosCars++;
+      this.audio.playCrush(true);
+      this.particles.spawnCrush(pos, [0xd94420, 0x747c82, 0xffe370]);
+    } else if (category === 'tree') {
+      this.chaosTrees++;
+      this.audio.playCrush(false);
+      this.particles.spawnCrush(pos, [0x4b7e39, 0x624228, 0x35622e]);
+    } else if (category === 'prop') {
+      this.chaosProps++;
+      this.audio.playCrush(false);
+      this.particles.spawnCrush(pos, [0xc9251e, 0x8f5d2b, 0xf2f0e6]);
+    } else {
+      this.chaosPeds++;
+      this.audio.playScoreChime(false);
+      this.particles.burst(pos, 8, { colors: [0xffe370, 0xffffff], speed: 3.5, upBias: 3, size: 0.14, life: 0.7 });
+    }
+
+    // Update Chaos HUD & GTA Wanted Stars!
+    this.chaosBillEl.textContent = `£${this.chaosBillGBP.toLocaleString()}`;
+    this.statCarsEl.textContent = String(this.chaosCars);
+    this.statTreesEl.textContent = String(this.chaosTrees);
+    this.statPropsEl.textContent = String(this.chaosProps);
+    this.statPedsEl.textContent = String(this.chaosPeds);
+
+    const stars = Math.min(5, Math.floor(this.chaosBillGBP / 2500) + (this.chaosBillGBP > 400 ? 1 : 0));
+    this.wantedStarsEl.textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+
+    if (this.mode === 'chaos') {
+      this.showToast(`${label}! +£${costGBP.toLocaleString()}`, category === 'car' ? 'trick' : 'danger');
+    } else if (category === 'car' || category === 'tree') {
+      this.showToast(`Careful! You hit a ${label} in the village!`, 'danger');
     }
   }
 
@@ -244,10 +342,12 @@ class ScorpionGame {
           : [0xbc864c, 0x8f5d2b, 0xd43828];
     this.particles.spawnCrush(pos, colors);
 
-    // Crushing scrap barrels is fun & harmless; smashing produce pallets or pumpkins counts as farm damage!
     if (prop.kind !== 'barrel') {
       this.recordDamage();
-      this.showToast(`${reason} (Toss wreckage in Skip!)`, 'danger');
+      this.showToast(
+        this.mode === 'chaos' ? `${reason}` : `${reason} (Toss wreckage in Skip!)`,
+        'danger'
+      );
     } else {
       this.addScore(50);
       this.showToast(`${reason} +50`, 'trick');
@@ -287,6 +387,10 @@ class ScorpionGame {
       this.renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
+    this.pickFarmBtn.addEventListener('click', () => this.setMode('farm'));
+    this.pickChaosBtn.addEventListener('click', () => this.setMode('chaos'));
+    this.btnMode.addEventListener('click', () => this.setMode(this.mode === 'farm' ? 'chaos' : 'farm'));
+
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
         e.preventDefault();
@@ -304,7 +408,8 @@ class ScorpionGame {
         this.toggleHints();
       } else if (e.code === 'KeyH') {
         this.audio.playHorn();
-        this.showToast('HONK HONK!');
+        const scared = this.village.scarePedestriansNear(this.tractor.position, 22);
+        this.showToast(scared > 0 ? `HONK! Scattered ${scared} villager(s)!` : 'HONK HONK!');
       } else if (e.code === 'KeyX') {
         const mode = this.tractor.cycleSteeringMode();
         const label =
@@ -346,7 +451,7 @@ class ScorpionGame {
       'wheel',
       (e) => {
         e.preventDefault();
-        this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.01, 6.0, 28);
+        this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.01, 6.0, 32);
       },
       { passive: false }
     );
@@ -357,7 +462,14 @@ class ScorpionGame {
       this.audio.playHorn();
       this.startOverlay.classList.add('hidden');
       this.hud.classList.remove('hidden');
-      this.showToast('Tip: Swap attachments at the Stone Workshop Shed [T]!');
+      this.setMode(this.mode);
+      if (this.mode === 'chaos') {
+        // Spawn right near the open north farm gate facing Scorpion Green Village for instant action!
+        this.tractor.position.set(0, 0, -25);
+        this.tractor.heading = 0;
+        this.tractor.equipTool('grapple', false);
+        this.updateToolReadout();
+      }
     });
 
     document.getElementById('btn-help')!.addEventListener('click', () => {
@@ -388,14 +500,12 @@ class ScorpionGame {
 
     document.getElementById('btn-reset')!.addEventListener('click', () => {
       this.tractor.resetPosition();
-      this.showToast('Scorpion Reset to South Lane');
+      this.showToast('Scorpion Reset to Farmyard');
     });
 
-    document.getElementById('btn-victory-mess')!.addEventListener('click', () => {
-      this.propMgr.spawnExtraChaosWave();
-      this.victoryShown = false;
+    document.getElementById('btn-victory-chaos')!.addEventListener('click', () => {
       this.victoryBanner.classList.add('hidden');
-      this.showToast('Fresh Storm Clutter Dropped!', 'trick');
+      this.setMode('chaos');
     });
 
     document.getElementById('btn-victory-close')!.addEventListener('click', () => {
@@ -490,7 +600,7 @@ class ScorpionGame {
 
       if (inBounds) {
         counts[p.targetZone]++;
-        const settled = p.body.velocity.length() < 1.8;
+        const settled = p.body.velocity.length() < 1.6;
 
         if (!p.scored && settled) {
           p.scored = true;
@@ -501,7 +611,7 @@ class ScorpionGame {
           if (p.wasThrown && throwDist > 5.5 && p.targetZone === 'scrap') {
             this.addScore(350);
             this.audio.playScoreChime(true);
-            this.showToast(`LONG-SHOT SKIP DUNK! +350`, 'trick');
+            this.showToast(`SPIN-THROW SKIP DUNK! +350`, 'trick');
           } else if (p.isWrappedSilage && !p.isPopped) {
             this.addScore(300);
             this.audio.playScoreChime(true);
@@ -522,7 +632,6 @@ class ScorpionGame {
           p.wasThrown = false;
         }
 
-        // Precision stacking bonus! (2nd tier on Flatbed Trailer > 2.2m OR stacked bales > 1.45m!)
         const stackThreshold = p.targetZone === 'crates' ? this.farm.trailerDeckY + 1.25 : 1.45;
         if (!p.stackAwarded && settled && p.body.position.y > stackThreshold) {
           p.stackAwarded = true;
@@ -557,14 +666,14 @@ class ScorpionGame {
     this.tidyPctEl.textContent = `${pct}%`;
     this.tidyBarEl.style.width = `${pct}%`;
 
-    if (pct === 100 && totalItems > 0 && !this.victoryShown) {
+    if (this.mode === 'farm' && pct === 100 && totalItems > 0 && !this.victoryShown) {
       this.victoryShown = true;
       this.audio.playScoreChime(true);
       this.victoryTitle.textContent =
         this.damagedCount === 0 ? '★★★ Spotless Master Operator!' : 'Morning Shift Complete!';
       this.victorySub.textContent =
         this.damagedCount === 0
-          ? `Zero items damaged — Score ${this.score}!`
+          ? `Zero items damaged — Score ${this.score}! Ready for Village Chaos?`
           : `Yard organized with ${this.damagedCount} damaged item(s) — Score ${this.score}!`;
       this.victoryBanner.classList.remove('hidden');
       this.particles.spawnConfetti(this.tractor.position.clone().add(new THREE.Vector3(0, 3.5, 0)));
@@ -615,7 +724,10 @@ class ScorpionGame {
     this.gaugeExt.style.width = `${Math.round(extPct)}%`;
     this.gaugeTilt.style.width = `${Math.round(tiltPct)}%`;
 
-    if (this.tractor.heldProps.length > 0) {
+    if (this.tractor.heldVillageObj) {
+      this.holdBadge.textContent = `Hoisting: ${this.tractor.heldVillageObj.label}`;
+      this.holdBadge.classList.add('pill-hot');
+    } else if (this.tractor.heldProps.length > 0) {
       const names = this.tractor.heldProps.map((p) => p.label).join(', ');
       this.holdBadge.textContent = `Load: ${names}`;
       this.holdBadge.classList.add('pill-hot');
@@ -712,17 +824,26 @@ class ScorpionGame {
     this.elapsed += dt;
 
     const input = this.readInput();
-    this.tractor.update(dt, this.elapsed, input, this.propMgr.props);
+    this.tractor.update(dt, this.elapsed, input, this.propMgr.props, this.village.objects);
 
-    this.world.step(1 / 60, dt, 3);
+    this.world.step(1 / 60, dt, 4);
     this.propMgr.syncMeshes();
 
     this.farm.update(dt, this.elapsed);
+    this.village.update(
+      dt,
+      this.elapsed,
+      this.tractor.position,
+      this.tractor.speed,
+      this.tractor.getHoldWorldPos(),
+      this.tractor.getTipSpeed(),
+      this.mode === 'chaos'
+    );
     this.particles.update(dt);
 
     for (const c of this.clouds) {
       c.position.x += dt * 0.4;
-      if (c.position.x > 82) c.position.x = -82;
+      if (c.position.x > 95) c.position.x = -95;
     }
 
     if (this.started) {
