@@ -85,9 +85,14 @@
           </div>
 
           <div class="contract-selector">
-            <select id="contract-select" title="Choose Bavarian Contract"></select>
+            <select id="contract-select" title="Choose Bavarian Contract (10 Jobs)"></select>
           </div>
           <p id="contract-desc" class="contract-desc"></p>
+          <div class="contract-meta-row">
+            <span id="contract-tool-hint" class="pill pill-green">Tool: Pallet Forks</span>
+            <span id="contract-timer" class="pill">0:00</span>
+            <button id="btn-replay-job" class="hud-btn small-btn" title="Respawn job cargo & restart timer">↻ Replay</button>
+          </div>
 
           <div id="yard-progress-block">
             <div class="progress-wrap">
@@ -135,8 +140,9 @@
           </div>
 
           <div id="delivery-status-block" class="delivery-box hidden">
+            <div id="delivery-progress" style="font-weight:800;color:#d8ff7a;margin-bottom:3px;">Progress: 0 / 1</div>
             <div id="delivery-dist">Distance to target: 0m</div>
-            <div class="delivery-hint">Follow the green GPS beacon on the real OSM mini-map!</div>
+            <div class="delivery-hint">Follow the green GPS beacon on the satellite mini-map!</div>
           </div>
 
           <div class="damage-row">

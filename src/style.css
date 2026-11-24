@@ -1081,6 +1081,18 @@ kbd {
 .pill.clickable {
   cursor: pointer;
 }
+.contract-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.hud-btn.small-btn {
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  margin-left: auto;
+}
 
 @media (max-width: 900px) {
   .mode-picker,

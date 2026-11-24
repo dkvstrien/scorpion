@@ -75,6 +75,9 @@ class ScorpionGame {
   private activeContractId: ContractId = 'yard_shift';
   private career: CareerStats = loadCareer();
   private damagedCount = 0;
+  private jobElapsedSec = 0;
+  private jobDamagedCount = 0;
+  private jobRollovers = 0;
   private hintsOn = false;
   private contractCompletedThisRun = new Set<string>();
   private churchBellTimer = 16;
@@ -105,8 +108,11 @@ class ScorpionGame {
 
   private contractSelect = document.getElementById('contract-select') as HTMLSelectElement;
   private contractDesc = document.getElementById('contract-desc')!;
+  private contractToolHint = document.getElementById('contract-tool-hint')!;
+  private contractTimerEl = document.getElementById('contract-timer')!;
   private yardProgressBlock = document.getElementById('yard-progress-block')!;
   private deliveryStatusBlock = document.getElementById('delivery-status-block')!;
+  private deliveryProgressEl = document.getElementById('delivery-progress')!;
   private deliveryDistEl = document.getElementById('delivery-dist')!;
 
   private careerBankEl = document.getElementById('career-bank')!;
@@ -303,6 +309,7 @@ class ScorpionGame {
         this.audio.playCrush(true);
         this.particles.spawnCrush(pos, [0x9fd32e, 0xd6c7a8, 0x525a60]);
         this.career.rollovers++;
+        this.jobRollovers++;
         saveCareer(this.career);
         this.refreshCareerUI();
         this.showToast('ROLLOVER! The Scorpion tipped over!', 'danger');
@@ -407,18 +414,48 @@ class ScorpionGame {
     for (const c of BAVARIAN_CONTRACTS) {
       const opt = document.createElement('option');
       opt.value = c.id;
-      const done = this.career.completedIds.includes(c.id) ? ' ✓' : '';
-      opt.textContent = `${c.title} (€${c.payoutEUR})${done}`;
+      const best = this.career.bestStars[c.id] ?? 0;
+      const starBadge = best > 0 ? ` ${'★'.repeat(best)}` : '';
+      opt.textContent = `${c.title} (€${c.payoutEUR})${starBadge}`;
       this.contractSelect.appendChild(opt);
     }
-    this.selectContract(this.activeContractId);
+    this.selectContract(this.activeContractId, false);
   }
 
-  private selectContract(id: ContractId): void {
+  private ensureContractPickupCargo(id: ContractId, forceRespawn = false): void {
+    const c = BAVARIAN_CONTRACTS.find((x) => x.id === id);
+    if (!c?.pickupSpawn) return;
+    const { x, z, kind, count } = c.pickupSpawn;
+    const nearby = this.propMgr.props.filter(
+      (p) =>
+        p.kind === kind &&
+        !p.isDamaged &&
+        !p.isPopped &&
+        Math.hypot(p.body.position.x - x, p.body.position.z - z) < 28
+    ).length;
+    const needed = forceRespawn ? count : Math.max(0, count - nearby);
+    for (let i = 0; i < needed; i++) {
+      const ox = x + (i - (needed - 1) * 0.5) * 2.5;
+      const oz = z + (i % 2) * 1.4;
+      const oy = getDrivableGroundY(ox, oz) + 1.05;
+      this.propMgr.spawnProp(kind, new THREE.Vector3(ox, oy, oz), i * 0.4);
+    }
+  }
+
+  private selectContract(id: ContractId, resetTimer = true): void {
     this.activeContractId = id;
     this.contractSelect.value = id;
     const c = BAVARIAN_CONTRACTS.find((x) => x.id === id)!;
     this.contractDesc.textContent = c.subtitle;
+    this.contractToolHint.textContent = `Tool: ${TOOL_META[c.recommendedTool].name}`;
+    if (resetTimer) {
+      this.jobElapsedSec = 0;
+      this.jobDamagedCount = 0;
+      this.jobRollovers = 0;
+      this.contractCompletedThisRun.delete(id);
+      this.victoryBanner.classList.add('hidden');
+      this.ensureContractPickupCargo(id, false);
+    }
 
     const isYard = id === 'yard_shift';
     this.yardProgressBlock.classList.toggle('hidden', !isYard);
@@ -579,6 +616,7 @@ class ScorpionGame {
 
   private recordDamage(): void {
     this.damagedCount++;
+    this.jobDamagedCount++;
     this.damagedEl.textContent = String(this.damagedCount);
     this.damagedEl.className = this.damagedCount > 0 ? 'warn' : 'ok';
     this.starsEl.textContent =
@@ -622,18 +660,28 @@ class ScorpionGame {
     if (this.contractCompletedThisRun.has(contractId)) return;
     this.contractCompletedThisRun.add(contractId);
     const c = BAVARIAN_CONTRACTS.find((x) => x.id === contractId)!;
-    this.career.bankEUR += c.payoutEUR;
+    const stars =
+      this.jobDamagedCount === 0 && this.jobRollovers === 0 && this.jobElapsedSec <= c.parSeconds
+        ? 3
+        : this.jobDamagedCount <= 1 && this.jobRollovers <= 1
+          ? 2
+          : 1;
+    const bonus = stars === 3 ? 300 : stars === 2 ? 100 : 0;
+    this.career.bankEUR += c.payoutEUR + bonus;
     if (!this.career.completedIds.includes(contractId)) {
       this.career.completedIds.push(contractId);
     }
+    this.career.bestStars[contractId] = Math.max(this.career.bestStars[contractId] ?? 0, stars);
     saveCareer(this.career);
     this.populateContractsUI();
     this.refreshCareerUI();
 
+    const mins = Math.floor(this.jobElapsedSec / 60);
+    const secs = String(Math.floor(this.jobElapsedSec % 60)).padStart(2, '0');
     this.audio.playScoreChime(true);
     this.particles.spawnConfetti(this.tractor.position.clone().add(new THREE.Vector3(0, 3.5, 0)));
-    this.victoryTitle.textContent = `${c.title} Complete!`;
-    this.victorySub.textContent = `Earned +€${c.payoutEUR.toLocaleString()} · Bank Balance: €${this.career.bankEUR.toLocaleString()}`;
+    this.victoryTitle.textContent = `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} ${c.title} Complete!`;
+    this.victorySub.textContent = `Time ${mins}:${secs} · Earned +€${(c.payoutEUR + bonus).toLocaleString()} · Completed ${this.career.completedIds.length}/${BAVARIAN_CONTRACTS.length} Jobs`;
     this.victoryBanner.classList.remove('hidden');
   }
 
@@ -671,7 +719,18 @@ class ScorpionGame {
     this.btnTime.addEventListener('click', () => this.cycleTimeOfDay());
     this.btnLights.addEventListener('click', () => this.setWorkLights(!this.tractor.workLightsOn));
     this.contractSelect.addEventListener('change', () => {
-      this.selectContract(this.contractSelect.value as ContractId);
+      this.selectContract(this.contractSelect.value as ContractId, true);
+      const c = BAVARIAN_CONTRACTS.find((x) => x.id === this.activeContractId)!;
+      this.showToast(`Contract: ${c.title} (${c.village})`);
+    });
+    document.getElementById('btn-replay-job')!.addEventListener('click', () => {
+      this.contractCompletedThisRun.delete(this.activeContractId);
+      this.jobElapsedSec = 0;
+      this.jobDamagedCount = 0;
+      this.jobRollovers = 0;
+      this.victoryBanner.classList.add('hidden');
+      this.ensureContractPickupCargo(this.activeContractId, true);
+      this.showToast('Job timer reset & fresh cargo ready!');
     });
 
     const doWinch = () => {
@@ -972,18 +1031,23 @@ class ScorpionGame {
         p.inWater = false;
       }
 
-      // Check cross-map delivery contracts (Sebald / Altwirt / Kirchberg)!
-      if (this.mode === 'farm' && activeContract.requiredKind !== 'any_yard') {
+      // Check all 10 Bavarian delivery & yard-precision contracts!
+      if (
+        this.mode === 'farm' &&
+        activeContract.requiredKind !== 'any_yard' &&
+        activeContract.requiredKind !== 'yard_silage' &&
+        activeContract.requiredKind !== 'yard_crates'
+      ) {
         const distTarget = Math.hypot(
           p.body.position.x - activeContract.targetX,
           p.body.position.z - activeContract.targetZ
         );
-        if (
-          !p.heldByTractor &&
-          !p.isDamaged &&
-          p.kind === activeContract.requiredKind &&
-          distTarget <= activeContract.targetRadius
-        ) {
+        const matchesKind =
+          activeContract.requiredKind === 'hay'
+            ? p.kind === 'hay_round' || p.kind === 'hay_square'
+            : p.kind === activeContract.requiredKind;
+        const intactOk = !activeContract.requireIntact || (!p.isDamaged && !p.isPopped);
+        if (!p.heldByTractor && intactOk && matchesKind && distTarget <= activeContract.targetRadius) {
           contractDelivered++;
         }
       }
@@ -1049,15 +1113,29 @@ class ScorpionGame {
     this.tidyPctEl.textContent = `${pct}%`;
     this.tidyBarEl.style.width = `${pct}%`;
 
+    const deliveredSilageIntact = this.propMgr.props.filter(
+      (p) => p.kind === 'silage_wrapped' && p.inZone && !p.isPopped && !p.isDamaged
+    ).length;
+    const deliveredCratesIntact = this.propMgr.props.filter(
+      (p) => p.kind === 'crate' && p.inZone && !p.isDamaged
+    ).length;
+
     if (this.mode === 'farm') {
       if (activeContract.id === 'yard_shift' && pct === 100 && totalItems > 0) {
         this.completeContract('yard_shift');
       } else if (activeContract.requiredKind !== 'any_yard') {
+        const deliveredNow =
+          activeContract.requiredKind === 'yard_silage'
+            ? deliveredSilageIntact
+            : activeContract.requiredKind === 'yard_crates'
+              ? deliveredCratesIntact
+              : contractDelivered;
         const distNow = Math.round(
           Math.hypot(this.tractor.position.x - activeContract.targetX, this.tractor.position.z - activeContract.targetZ)
         );
+        this.deliveryProgressEl.textContent = `Delivered (${activeContract.village}): ${deliveredNow} / ${activeContract.requiredCount}`;
         this.deliveryDistEl.textContent = `GPS Distance to Drop Zone: ${distNow} m`;
-        if (contractDelivered >= activeContract.requiredCount) {
+        if (deliveredNow >= activeContract.requiredCount) {
           this.completeContract(activeContract.id);
         }
       }
@@ -1134,6 +1212,17 @@ class ScorpionGame {
     this.gaugeExt.style.width = `${Math.round(extPct)}%`;
     this.gaugeTilt.style.width = `${Math.round(tiltPct)}%`;
     this.gaugeStab.style.width = `${stabPct}%`;
+
+    // Job Timer Display
+    if (this.mode === 'farm' && !this.contractCompletedThisRun.has(this.activeContractId)) {
+      this.jobElapsedSec += dt;
+    }
+    const curC = BAVARIAN_CONTRACTS.find((x) => x.id === this.activeContractId)!;
+    const jMin = Math.floor(this.jobElapsedSec / 60);
+    const jSec = String(Math.floor(this.jobElapsedSec % 60)).padStart(2, '0');
+    const pMin = Math.floor(curC.parSeconds / 60);
+    const pSec = String(curC.parSeconds % 60).padStart(2, '0');
+    this.contractTimerEl.textContent = `${jMin}:${jSec} / ${pMin}:${pSec}`;
 
     // Persistent Odometer
     this.saveTimer += dt;
@@ -1394,6 +1483,8 @@ class ScorpionGame {
         return true;
       },
       setTime: (tod: TimeOfDay) => this.applyTimeOfDay(tod),
+      selectContract: (id: ContractId) => this.selectContract(id, true),
+      listContracts: () => BAVARIAN_CONTRACTS.map((c) => ({ id: c.id, title: c.title, village: c.village, payout: c.payoutEUR })),
       setGear: (g: VaripowerGear) => {
         this.tractor.gear = g;
       },

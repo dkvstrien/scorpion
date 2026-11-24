@@ -96,3 +96,35 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 `Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=1, Finish=1, Stability=2`
 
 **Next**: Iteration 6 — Priority D (Core gameplay loop: 10 varied repeatable 3–5 min Bavarian contracting jobs across every village with star ratings & cargo spawning).
+
+---
+
+## Iteration 6 — Priority D: 10 Varied Repeatable Bavarian Contracting Jobs (2026-11-24)
+
+**Goal**: Expand the core contracting loop to 10 distinct, repeatable 3–5 minute jobs with clear finish criteria, par timers, 1–3 star ratings persisted in `localStorage`, and reasons to visit every village on the map.
+
+### Changes Made
+- Upgraded [src/contracts.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/contracts.ts) to **10 varied jobs** across every village:
+  1. *Wimpasing Morning Yard Shift* (Wimpasing Home Yard)
+  2. *Silage Precision: 6 Sealed Bales* (Wimpasing Clamp — Bale Grabber, zero torn wraps)
+  3. *Flatbed Weight-Limit Load* (Wimpasing Trailer — 4 intact pallets)
+  4. *Fischerei Sebald Lakeside Delivery* (Ammerland / Starnberger See)
+  5. *Schloss Ammerland Park Firewood* (Schloss Ammerland — Grapple Claw)
+  6. *Ried Meadow Hay Harvest* (Ried Hamlet — Bale Spike)
+  7. *Zum Altwirt Mountain Resupply* (Münsing Center — +68 m climb)
+  8. *Am Kirchberg Storm Timber Clear* (Münsing Church — Grapple Claw)
+  9. *EDEKA Graf Loading Dock* (East Münsing — Pallet Forks)
+  10. *Weipertshausen Northern Farm Run* (Weipertshausen — Bale Grabber)
+- Updated [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts), [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), and [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css):
+  - Added recommended attachment pill, live job timer vs par time, delivered counter, and `↻ Replay` cargo respawn button.
+  - Auto-spawns pickup cargo near village job origins so every job is cleanly playable & repeatable.
+  - Computes and persists 1–3 star ratings (`bestStars`) and earnings in `localStorage`.
+
+### Verification & Evidence (`.scratch/loop/6/`)
+- `npx tsc --noEmit && npm run build`: clean pass (`0` errors).
+- Browser test (`agent-browser`, 0 console errors): verified all 10 contracts enumerated, cargo spawned, GPS beacon positioned, and `job10_weipert_silage.png` inspected at **`60 fps`**.
+
+### Scorecard Update
+`Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=3, Finish=1, Stability=2`
+
+**Next**: Iteration 7 — Priority E (Free-play destruction: breakable fences/gates/bale stacks/woodpiles/walls/sheds/trees/lamps/signs with pre-split physics debris, dust/sound/camera shake, and a self-contained Old Gravel Pit demolition site at 60 fps).
