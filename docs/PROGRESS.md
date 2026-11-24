@@ -507,3 +507,30 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
   - Workshop UI purchase (`Bale Grabber` `-€350` → `€150`, immediately fitted) → `.scratch/loop/20/02_workshop_progression.png`.
   - Lagerhaus Ried Co-op & Service Pad (`0°` tilt, `4/4` tires, live service/buy-in prompt) → `.scratch/loop/20/03_ried_coop_depot.png`, `.scratch/loop/20/04_ried_service_pad.png`.
   - EDEKA Bauernmarkt fast travel (`0 km/h`, `0°` tilt, `4/4` tires) & forecourt close-up (`0°` tilt, `4/4` tires) → `.scratch/loop/20/05_edeka_farmers_market.png`, `.scratch/loop/20/06_edeka_market_closeup.png`.
+
+---
+
+## Iteration 21 — Round 2: 60 Hz Chromium Performance Audit, 30-Minute Endurance Stability Drive & Final Report (2026-11-24)
+
+**Goal**: Address the Performance and Stability verification items from `.scratch/grades/round-1.md` by measuring true 60 Hz Chromium FPS across all 6 fixed viewpoints, logging a full 30-minute multi-terrain endurance drive (roads, fields, villages, and lake shore), guarding startup prop-settling impacts, and updating `docs/FINAL_REPORT.md` without self-scores.
+
+### Changes Made
+- Added `runEnduranceMinute` to `window.__scorpionHarness` and added a startup settling/proximity guard on `propMgr.onImpact` in [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts) so distant props cannot trigger phantom splat toasts while physics settles.
+- Ran true 60 Hz Chromium (`Brave macOS`, `1280×720` at `DPR 2`) `requestAnimationFrame` benchmark (`.scratch/loop/21/chrome_60hz_fps.json`):
+  - Control `about:blank`: **`58.3 fps`** (`avg 16.67 ms`, `max 18.2 ms`, `0` frames > 33 ms).
+  - `01_muensing_church`: **`59.7 fps`** (`avg 16.66 ms`, `p95 18.1 ms`, `max 18.6 ms`, `0` frames > 33 ms, `4/4` tires, `663 m`).
+  - `02_zum_altwirt`: **`59.8 fps`** (`avg 16.67 ms`, `p95 18.5 ms`, `max 18.6 ms`, `0` frames > 33 ms, `4/4` tires, `662 m`).
+  - `03_wimpasing_farm`: **`59.8 fps`** (`avg 16.67 ms`, `p95 18.1 ms`, `max 18.6 ms`, `0` frames > 33 ms, `4/4` tires, `633 m`).
+  - `04_ammerland_schloss`: **`59.8 fps`** (`avg 16.66 ms`, `p95 18.0 ms`, `max 18.6 ms`, `0` frames > 33 ms, `4/4` tires, `593 m`).
+  - `05_open_country`: **`59.8 fps`** (`avg 16.67 ms`, `p95 18.4 ms`, `max 18.8 ms`, `0` frames > 33 ms, `4/4` tires, `632 m`).
+  - `06_weipertshausen`: **`59.9 fps`** (`avg 16.67 ms`, `p95 18.3 ms`, `max 18.7 ms`, `0` frames > 33 ms, `4/4` tires, `650 m`).
+  - `0` console errors, `0` page errors across all 6 viewpoints.
+- Ran 30-minute simulated (`108,000` fixed `1/60 s` live Cannon-es + Three.js engine ticks, `161.1 s` wall clock) endurance drive across 6 touring legs (Home Farm/Wimpasing roads, Starnberger See shoreline & Sebald Pier, steep open-country fields, Münsing village, Ried Co-op backroads, Weipertshausen hills — `.scratch/loop/21/endurance_30min_log.json`):
+  - **`7.96 km`** driven across **`589–666 m ü.NN`** elevation range.
+  - **`0`** NaN violations, **`0`** terrain fall-throughs, **`0`** rollovers, **`0`** console errors, **`0`** page errors.
+  - JS heap remained steady (`88.0 MB` start → `90.5 MB` end, oscillating cleanly between `65–97 MB` across GC cycles).
+- Rewrote [docs/FINAL_REPORT.md](file:///Users/danielvanstrien/Projects/Scorpion/docs/FINAL_REPORT.md) with Round 2 changes, Chromium 60 Hz FPS table, 30-minute endurance stability log, and screenshot links (no self-scores).
+
+### Verification & Screenshots (`.scratch/loop/21/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `public/` = **`4.8 MB`**.
+- Screenshots inspected: `.scratch/loop/21/chrome_01_muensing_church.png` .. `chrome_06_weipertshausen.png` and `.scratch/loop/21/endurance_01_wimpasing_roads.png` .. `endurance_06_weipertshausen_30min.png`.

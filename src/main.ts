@@ -417,7 +417,14 @@ class ScorpionGame {
 
     this.propMgr = new PropManager(this.scene, this.world, propMat);
     this.propMgr.onImpact = (prop, speed) => {
+      if (!this.started || this.elapsed < 3.5) return;
       this.audio.playImpact(speed, prop.materialType);
+      const nearPlayer =
+        Math.hypot(
+          prop.body.position.x - this.tractor.position.x,
+          prop.body.position.z - this.tractor.position.z
+        ) < 60;
+      if (!nearPlayer) return;
       if (prop.isWrappedSilage && !prop.isPopped && speed > 12.5) {
         this.handleSilagePop(prop, 'POP! Hard impact tore the silage plastic!');
       } else if (prop.kind === 'pumpkin' && !prop.isDamaged && speed > 13.5) {
@@ -2372,6 +2379,139 @@ class ScorpionGame {
         return this.tractor.getCarriedMassKg();
       },
       releaseLoad: () => this.tractor.releaseAll(false),
+      runEnduranceMinute: (waypoints: [number, number][], seedOffset = 0) => {
+        const dt = 1 / 60;
+        const ticks = 3600;
+        let wpIdx = seedOffset % Math.max(1, waypoints.length);
+        let distM = 0;
+        let speedSumKmh = 0;
+        let nanCount = 0;
+        let fallThroughCount = 0;
+        let rolloversRecovered = 0;
+        let stuckTicks = 0;
+        let reverseTicks = 0;
+        let minElevM = Infinity;
+        let maxElevM = -Infinity;
+        let prevX = this.tractor.chassisBody.position.x;
+        let prevZ = this.tractor.chassisBody.position.z;
+
+        for (let i = 0; i < ticks; i++) {
+          const px = this.tractor.chassisBody.position.x;
+          const py = this.tractor.chassisBody.position.y;
+          const pz = this.tractor.chassisBody.position.z;
+
+          if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) {
+            nanCount++;
+            break;
+          }
+          const gy = getDrivableGroundY(px, pz);
+          if (py < gy - 1.5) fallThroughCount++;
+
+          const elev = Math.round(getRealElevationMeters(px, pz));
+          if (elev < minElevM) minElevM = elev;
+          if (elev > maxElevM) maxElevM = elev;
+
+          const [wx, wz] = waypoints[wpIdx];
+          const dx = wx - px;
+          const dz = wz - pz;
+          if (Math.hypot(dx, dz) < 14) {
+            wpIdx = (wpIdx + 1) % waypoints.length;
+          }
+          const desiredHeading = Math.atan2(-dx, -dz);
+          let err = desiredHeading - this.tractor.heading;
+          while (err > Math.PI) err -= Math.PI * 2;
+          while (err < -Math.PI) err += Math.PI * 2;
+
+          let throttle = 0.92;
+          let steer = THREE.MathUtils.clamp(err * 1.45, -1, 1);
+          if (reverseTicks > 0) {
+            throttle = -0.85;
+            steer = -Math.sign(steer || 1) * 0.85;
+            reverseTicks--;
+          } else if (Math.abs(this.tractor.speed) < 0.35) {
+            stuckTicks++;
+            if (stuckTicks > 150) {
+              stuckTicks = 0;
+              reverseTicks = 95;
+            }
+          } else {
+            stuckTicks = 0;
+          }
+
+          if (this.tractor.isTipped) {
+            this.tractor.rightTractorInPlace();
+            rolloversRecovered++;
+          }
+
+          const stepInp: TractorInput = {
+            throttle,
+            steer,
+            boost: false,
+            creep: false,
+            boomLift: 0,
+            boomExtend: 0,
+            headTilt: 0,
+            actionHeld: false
+          };
+          this.latestInput = stepInp;
+          this.elapsed += dt;
+          this.world.step(dt);
+          this.tractor.update(dt, this.elapsed, stepInp, this.propMgr.props, this.realWorld.objects);
+          this.propMgr.syncMeshes(dt);
+          this.realWorld.update(
+            dt,
+            this.elapsed,
+            this.tractor.position,
+            this.tractor.speed,
+            this.tractor.getHoldWorldPos(),
+            this.tractor.getTipSpeed()
+          );
+          this.destruction.update(
+            dt,
+            this.tractor.position,
+            this.tractor.speed,
+            this.tractor.getHoldWorldPos(),
+            this.tractor.getTipSpeed()
+          );
+          this.particles.update(dt);
+          if (i % 6 === 0) this.evaluateZonesAndContracts();
+
+          const nx = this.tractor.chassisBody.position.x;
+          const nz = this.tractor.chassisBody.position.z;
+          const stepDist = Math.hypot(nx - prevX, nz - prevZ);
+          if (stepDist < 5) distM += stepDist;
+          prevX = nx;
+          prevZ = nz;
+          speedSumKmh += Math.abs(this.tractor.speed) * 3.6;
+        }
+
+        this.latestInput = {
+          throttle: 0,
+          steer: 0,
+          boost: false,
+          creep: false,
+          boomLift: 0,
+          boomExtend: 0,
+          headTilt: 0,
+          actionHeld: false
+        };
+        this.snapCameraToTractor();
+        const perfMem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+        return {
+          simSec: 60,
+          distKm: +(distM / 1000).toFixed(3),
+          avgKmh: +(speedSumKmh / ticks).toFixed(1),
+          minElevM,
+          maxElevM,
+          nanCount,
+          fallThroughCount,
+          rolloversRecovered,
+          wheels: this.tractor.wheelsOnGround,
+          x: Math.round(this.tractor.position.x),
+          z: Math.round(this.tractor.position.z),
+          heapMB: perfMem ? +(perfMem.usedJSHeapSize / 1048576).toFixed(1) : 0
+        };
+      },
       getAudioState: () => this.audio.getAudioState(),
       getSurfaceAt: (x: number, z: number) => getSurfaceType(x, z),
       getTelemetry: () => ({
