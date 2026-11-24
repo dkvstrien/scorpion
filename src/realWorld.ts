@@ -12,9 +12,12 @@ import {
 import {
   createAsphaltTexture,
   createBaroqueChurchTexture,
+  createBaroquePalaceEmissiveMap,
   createBaroquePalaceTexture,
   createBavarianParasolTexture,
+  createCrispGravelPadTexture,
   createGravelRoadTexture,
+  createLampGlowTexture,
   createVillageAsphaltTexture
 } from './textures';
 import { buildBavarianWorldDetails } from './worldDetails';
@@ -475,6 +478,76 @@ function createBavarianArchetypeTexture(
   return tex;
 }
 
+/**
+ * Matching window-pane emissive glow map for every habitable Bavarian archetype so village houses light up warmly
+ * at Golden Sunset and Blue Hour dusk while keeping stucco/timber walls and mullions crisp and dark!
+ */
+function createBavarianWindowEmissiveMap(
+  kind: 'einfirsthof' | 'einfirsthof_b' | 'lueftlmalerei' | 'timber' | 'landhaus' | 'detached'
+): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext('2d')!;
+  ctx.scale(2, 2);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, 256, 256);
+
+  const litWindow = (wx: number, wy: number, ww: number, wh: number, modern = false, warmHex = '#ffce70') => {
+    const hw = ww * 0.5;
+    const hh = wh * 0.5;
+    ctx.fillStyle = warmHex;
+    ctx.fillRect(wx - hw + 1.5, wy - hh + 1.5, ww - 3, wh - 3);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(wx - 1.2, wy - hh, 2.4, wh);
+    if (!modern) {
+      ctx.fillRect(wx - hw, wy - 2.2, ww, 2.4);
+    }
+  };
+
+  if (kind === 'einfirsthof') {
+    litWindow(64, 58, 28, 36, false, '#ffc966');
+    litWindow(42, 174, 24, 34, false, '#ffd682');
+    litWindow(128, 174, 26, 34, false, '#f2b858');
+    litWindow(214, 174, 24, 34, false, '#ffcf74');
+  } else if (kind === 'einfirsthof_b') {
+    litWindow(48, 62, 24, 34, false, '#f7c162');
+    litWindow(208, 62, 24, 34, false, '#ffd178');
+    litWindow(52, 176, 26, 34, false, '#ffca68');
+    litWindow(146, 176, 26, 34, false, '#ffd988');
+  } else if (kind === 'lueftlmalerei') {
+    litWindow(54, 66, 24, 34, false, '#ffd47e');
+    litWindow(202, 66, 24, 34, false, '#f5bd5c');
+    litWindow(54, 170, 24, 34, false, '#ffcb6b');
+    litWindow(128, 170, 24, 34, false, '#ffda8c');
+    litWindow(202, 170, 24, 34, false, '#f7c162');
+  } else if (kind === 'timber') {
+    litWindow(176, 56, 32, 34, false, '#ffd27a');
+    litWindow(48, 170, 26, 34, false, '#f2b858');
+    litWindow(128, 170, 26, 34, false, '#ffce70');
+  } else if (kind === 'detached') {
+    litWindow(52, 60, 34, 32, true, '#ffdfa0');
+    litWindow(52, 166, 38, 40, true, '#ffd584');
+    litWindow(204, 166, 30, 34, true, '#f8c86e');
+  } else {
+    // landhaus
+    litWindow(48, 58, 24, 34, false, '#f7c264');
+    litWindow(208, 58, 24, 34, false, '#ffd37c');
+    litWindow(48, 168, 24, 34, false, '#ffcb6c');
+    litWindow(208, 168, 24, 34, false, '#ffd886');
+    // Warm porch transom light over front door
+    ctx.fillStyle = '#ffd27a';
+    ctx.fillRect(120, 166, 16, 12);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 function createSolarPanelTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 256;
@@ -725,6 +798,9 @@ export class RealMuensingWorld {
   public warmWindowMat: THREE.MeshStandardMaterial;
   public lampBulbMat: THREE.MeshStandardMaterial;
   public lampPointLights: THREE.PointLight[] = [];
+  public litFacadeMats: THREE.MeshStandardMaterial[] = [];
+  public lampGlowSprites: THREE.Sprite[] = [];
+  public lampPoolMats: THREE.MeshBasicMaterial[] = [];
   public churchPos: THREE.Vector3;
 
   private sailboats: { group: THREE.Group; basePos: THREE.Vector3; phase: number; driftAmp: number }[] = [];
@@ -776,10 +852,20 @@ export class RealMuensingWorld {
   }
 
   public setNightMode(nightAmount: number): void {
-    this.warmWindowMat.emissiveIntensity = 0.22 + nightAmount * 1.5;
-    this.lampBulbMat.emissiveIntensity = 0.35 + nightAmount * 2.0;
+    this.warmWindowMat.emissiveIntensity = 0.22 + nightAmount * 1.65;
+    this.lampBulbMat.emissiveIntensity = 0.45 + nightAmount * 3.6;
+    for (const mat of this.litFacadeMats) {
+      mat.emissiveIntensity = nightAmount * 1.35;
+    }
     for (const pl of this.lampPointLights) {
-      pl.intensity = nightAmount * 18;
+      pl.intensity = nightAmount * 52;
+    }
+    for (const sp of this.lampGlowSprites) {
+      sp.visible = nightAmount > 0.15;
+      (sp.material as THREE.SpriteMaterial).opacity = Math.min(0.95, nightAmount * 0.92);
+    }
+    for (const pm of this.lampPoolMats) {
+      pm.opacity = nightAmount * 0.42;
     }
   }
 
@@ -967,42 +1053,35 @@ export class RealMuensingWorld {
    * colors and 5 Upper Bavarian architectural wall materials!
    */
   private buildRealBavarianBuildings(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
+    const makeLitFacadeMat = (
+      kind: 'einfirsthof' | 'einfirsthof_b' | 'lueftlmalerei' | 'timber' | 'landhaus' | 'detached',
+      roughness: number,
+      metalness = 0.02
+    ): THREE.MeshStandardMaterial => {
+      const m = new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture(kind),
+        emissive: 0xffc666,
+        emissiveMap: createBavarianWindowEmissiveMap(kind),
+        emissiveIntensity: 0,
+        vertexColors: true,
+        roughness,
+        metalness
+      });
+      this.litFacadeMats.push(m);
+      return m;
+    };
+
     const materials: THREE.MeshStandardMaterial[] = [
       // 0: Einfirsthof A (cream render lower + horizontal dark weathered larch upper)
-      new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture('einfirsthof'),
-        vertexColors: true,
-        roughness: 0.86,
-        metalness: 0.02
-      }),
+      makeLitFacadeMat('einfirsthof', 0.86),
       // 1: Einfirsthof B (warm sand render lower + vertical weathered larch upper + brown shutters)
-      new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture('einfirsthof_b'),
-        vertexColors: true,
-        roughness: 0.87,
-        metalness: 0.02
-      }),
+      makeLitFacadeMat('einfirsthof_b', 0.87),
       // 2: Lüftlmalerei Bavarian House (ornamental painted Baroque fresco window frames & frieze)
-      new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture('lueftlmalerei'),
-        vertexColors: true,
-        roughness: 0.84,
-        metalness: 0.02
-      }),
+      makeLitFacadeMat('lueftlmalerei', 0.84),
       // 3: Timber-Clad Alpine Chalet / Bauernhaus (full horizontal wood cladding)
-      new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture('timber'),
-        vertexColors: true,
-        roughness: 0.89,
-        metalness: 0.02
-      }),
+      makeLitFacadeMat('timber', 0.89),
       // 4: Traditional Pastel Bavarian Village House (varied cream/yellow/peach/sage render + blue-grey shutters & front door)
-      new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture('landhaus'),
-        vertexColors: true,
-        roughness: 0.84,
-        metalness: 0.02
-      }),
+      makeLitFacadeMat('landhaus', 0.84),
       // 5: Dark Weathered Vertical Timber Barn / Stadl + stone foundation
       new THREE.MeshStandardMaterial({
         map: createBavarianArchetypeTexture('barn'),
@@ -1018,12 +1097,7 @@ export class RealMuensingWorld {
         metalness: 0.25
       }),
       // 7: Newer Contemporary Detached Home (clean render + modern anthracite windows + larch wood accent)
-      new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture('detached'),
-        vertexColors: true,
-        roughness: 0.84,
-        metalness: 0.03
-      }),
+      makeLitFacadeMat('detached', 0.84, 0.03),
       // 8: ALL Overhanging LoD2 Roofs — clay tile relief multiplied by each building's REAL DOP20-sampled RGB roof color!
       new THREE.MeshStandardMaterial({
         map: createNeutralRoofTileTexture(),
@@ -1119,10 +1193,74 @@ export class RealMuensingWorld {
    * 3. Schloss Ammerland (authentic 1685 lakeside baroque palace with TWO copper Zwiebeltürme!)
    * 4. Fischereihofladen & Bootsverleih Sebald + 58m Wooden Pier, Rowboats & Sailboats
    */
+  private addCrispCourtyardPad(
+    scene: THREE.Scene,
+    cx: number,
+    cz: number,
+    w: number,
+    d: number,
+    rotY = 0
+  ): void {
+    const tex = createCrispGravelPadTexture(Math.max(4, Math.round(w / 4)), Math.max(4, Math.round(d / 4)));
+    const geo = new THREE.PlaneGeometry(w, d, 14, 14);
+    geo.rotateX(-Math.PI / 2);
+    const cos = Math.cos(rotY);
+    const sin = Math.sin(rotY);
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const lx = pos.getX(i);
+      const lz = pos.getZ(i);
+      const wx = cx + lx * cos + lz * sin;
+      const wz = cz - lx * sin + lz * cos;
+      pos.setY(i, getTerrainHeight(wx, wz) + 0.09);
+    }
+    geo.computeVertexNormals();
+    const hw = w * 0.44;
+    const hd = d * 0.44;
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex,
+      roughness: 0.93,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
+    });
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uHalf = { value: new THREE.Vector2(hw, hd) };
+      shader.vertexShader =
+        'varying vec2 vPadXZ;\n' +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          '#include <begin_vertex>\nvPadXZ = transformed.xz;'
+        );
+      shader.fragmentShader =
+        'uniform vec2 uHalf;\nvarying vec2 vPadXZ;\n' +
+        shader.fragmentShader.replace(
+          '#include <dithering_fragment>',
+          `vec2 q = abs(vPadXZ) - uHalf;
+          float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+          gl_FragColor.a *= 1.0 - smoothstep(0.2, 2.0, sd);
+          #include <dithering_fragment>`
+        );
+    };
+    mat.customProgramCacheKey = () => 'bavaria-courtyard-pad-v1';
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(cx, 0, cz);
+    mesh.rotation.y = rotY;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  }
+
   private buildHeroLandmarks(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
     const tileTex = createTileRoofTexture();
     const gableGeo = createBavarianGableRoofGeometry();
     const parasolTex = createBavarianParasolTexture();
+
+    // Crisp high-res tiled gravel courtyards for Münsing Church, Zum Altwirt & Schloss Ammerland (replaces blurry ground masks!)
+    this.addCrispCourtyardPad(scene, REAL_SPOTS.muensingChurch.x - 1, REAL_SPOTS.muensingChurch.z + 2, 34, 24, 0);
+    this.addCrispCourtyardPad(scene, REAL_SPOTS.muensingAltwirt.x - 2, REAL_SPOTS.muensingAltwirt.z - 2, 30, 22, 0);
+    this.addCrispCourtyardPad(scene, REAL_SPOTS.schlossAmmerland.x + 12, REAL_SPOTS.schlossAmmerland.z, 32, 34, 0.14);
 
     // === 1. PFARRKIRCHE ST. MARIÄ HIMMELFAHRT AT REAL GPS ===
     {
@@ -1386,9 +1524,13 @@ export class RealMuensingWorld {
 
       const innMat = new THREE.MeshStandardMaterial({
         map: createBavarianArchetypeTexture('lueftlmalerei'),
+        emissive: 0xffc666,
+        emissiveMap: createBavarianWindowEmissiveMap('lueftlmalerei'),
+        emissiveIntensity: 0,
         color: 0xfdf1d4,
         roughness: 0.84
       });
+      this.litFacadeMats.push(innMat);
       const innRoofMat = new THREE.MeshStandardMaterial({ map: tileTex, color: 0xaa4428, roughness: 0.78 });
       const darkWood = new THREE.MeshStandardMaterial({ color: 0x4b2e18, roughness: 0.88 });
       const plinthStone = new THREE.MeshStandardMaterial({ color: 0xaba292, roughness: 0.92 });
@@ -1559,11 +1701,17 @@ export class RealMuensingWorld {
 
       const palaceTex = createBaroquePalaceTexture();
       palaceTex.repeat.set(1.5, 1);
+      const palaceEmissive = createBaroquePalaceEmissiveMap();
+      palaceEmissive.repeat.set(1.5, 1);
       const castlePlaster = new THREE.MeshStandardMaterial({
         map: palaceTex,
+        emissive: 0xffc866,
+        emissiveMap: palaceEmissive,
+        emissiveIntensity: 0,
         color: 0xfdf3db,
         roughness: 0.8
       });
+      this.litFacadeMats.push(castlePlaster);
       const towerPlaster = new THREE.MeshStandardMaterial({ color: 0xf6e6be, roughness: 0.82 });
       const trimCream = new THREE.MeshStandardMaterial({ color: 0xfaf2e1, roughness: 0.78 });
       const plinthStone = new THREE.MeshStandardMaterial({ color: 0xc2b7a2, roughness: 0.9 });
@@ -2249,28 +2397,82 @@ export class RealMuensingWorld {
       });
     });
 
-    const lampSpots: [number, number][] = [
-      [REAL_SPOTS.muensingChurch.x + 16, REAL_SPOTS.muensingChurch.z + 22],
-      [REAL_SPOTS.muensingAltwirt.x - 8, REAL_SPOTS.muensingAltwirt.z - 18],
-      [REAL_SPOTS.muensingAltwirt.x + 20, REAL_SPOTS.muensingAltwirt.z - 22],
-      [REAL_SPOTS.sebaldPier.x + 8, REAL_SPOTS.sebaldPier.z + 10],
-      [REAL_SPOTS.wimpasing.x + 60, REAL_SPOTS.wimpasing.z - 5],
-      [FARM_YARD_CENTER.x + 24, FARM_YARD_CENTER.z - 11]
+    const lampGlowTex = createLampGlowTexture();
+    const lampSpots: [number, number, boolean][] = [
+      // Münsing village main street (Church -> Maibaum -> Zum Altwirt -> EDEKA)
+      [REAL_SPOTS.muensingChurch.x - 36, REAL_SPOTS.muensingChurch.z + 20, true],
+      [REAL_SPOTS.muensingChurch.x - 14, REAL_SPOTS.muensingChurch.z + 18, true],
+      [REAL_SPOTS.muensingChurch.x + 16, REAL_SPOTS.muensingChurch.z + 22, true],
+      [REAL_SPOTS.muensingAltwirt.x - 16, REAL_SPOTS.muensingAltwirt.z - 16, true],
+      [REAL_SPOTS.muensingAltwirt.x + 14, REAL_SPOTS.muensingAltwirt.z - 18, true],
+      [REAL_SPOTS.muensingAltwirt.x + 42, REAL_SPOTS.muensingAltwirt.z - 22, false],
+      [REAL_SPOTS.edeka.x - 14, REAL_SPOTS.edeka.z + 14, false],
+      // Ammerland & Schloss Ammerland & Fischerei Sebald lakeside road (flanking Schloss sightline cleanly!)
+      [REAL_SPOTS.schlossAmmerland.x + 44, REAL_SPOTS.schlossAmmerland.z - 30, true],
+      [REAL_SPOTS.schlossAmmerland.x + 44, REAL_SPOTS.schlossAmmerland.z + 24, true],
+      [REAL_SPOTS.sebaldPier.x + 8, REAL_SPOTS.sebaldPier.z + 10, true],
+      [REAL_SPOTS.sebaldPier.x + 12, REAL_SPOTS.sebaldPier.z - 26, false],
+      // Wimpasing & Home Farm village street
+      [FARM_YARD_CENTER.x + 24, FARM_YARD_CENTER.z - 11, true],
+      [-282, 910, true],
+      [-286, 944, false],
+      [REAL_SPOTS.wimpasing.x + 60, REAL_SPOTS.wimpasing.z - 5, false],
+      // Weipertshausen hamlet
+      [489, -1178, true],
+      [489, -1210, false],
+      // Ried
+      [REAL_SPOTS.ried.x + 12, REAL_SPOTS.ried.z + 8, false]
     ];
-    for (const [lx, lz] of lampSpots) {
+    for (const [lx, lz, hasRealLight] of lampSpots) {
       const ly = getTerrainHeight(lx, lz);
       const g = new THREE.Group();
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 4.8, 8), ironMat);
       pole.position.y = 2.4;
       g.add(pole);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.24, 6), ironMat);
+      cap.position.y = 5.32;
+      g.add(cap);
       const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.54, 0.42), this.lampBulbMat);
       lantern.position.y = 4.95;
       g.add(lantern);
 
-      const pl = new THREE.PointLight(0xffcb78, 0, 26, 1.8);
-      pl.position.set(0, 4.8, 0);
-      g.add(pl);
-      this.lampPointLights.push(pl);
+      // Soft additive warm halo sprite around the lantern globe at Sunset & Dusk
+      const haloMat = new THREE.SpriteMaterial({
+        map: lampGlowTex,
+        color: 0xffd27a,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const halo = new THREE.Sprite(haloMat);
+      halo.position.y = 4.95;
+      halo.scale.set(3.8, 3.8, 1);
+      halo.visible = false;
+      g.add(halo);
+      this.lampGlowSprites.push(halo);
+
+      // Warm glowing light pool on the ground directly beneath every street lamp!
+      const poolMat = new THREE.MeshBasicMaterial({
+        map: lampGlowTex,
+        color: 0xffc664,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(11.5, 11.5), poolMat);
+      pool.rotation.x = -Math.PI / 2;
+      pool.position.y = 0.16;
+      g.add(pool);
+      this.lampPoolMats.push(poolMat);
+
+      if (hasRealLight) {
+        const pl = new THREE.PointLight(0xffcb74, 0, 34, 1.5);
+        pl.position.set(0, 4.75, 0);
+        g.add(pl);
+        this.lampPointLights.push(pl);
+      }
 
       g.position.set(lx, ly, lz);
       this.scene.add(g);

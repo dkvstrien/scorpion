@@ -387,3 +387,27 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 ### Verification & Screenshots (`.scratch/loop/15/`)
 - `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
 - Screenshots inspected: `.scratch/loop/15/01_title_clean.png`, `.scratch/loop/15/02_career_spawn_hints_guide.png`, `.scratch/loop/15/03_job4_panel_guide.png`, `.scratch/loop/15/04_pause_settings_sens.png`, `.scratch/loop/15/05_pause_controls_rebind.png`, `.scratch/loop/15/06_sebald_schloss_landing.png`, `.scratch/loop/15/07_demo_label_clean.png`.
+
+---
+
+## Iteration 16 — Round 2: Crisp Village Ground, High-Res Yard Pavers, Textured Demolition Site & Lit Dusk/Sunset Windows & Lamps (2026-11-24)
+
+**Goal**: Address all Look items from `.scratch/grades/round-1.md`: eliminate blurry village blobs and ghost dark rectangles, replace pixelated Home Farm yard cobble, give the Old Farmstead demolition site Bavarian brick/timber architecture on a crisp gravel pad, and light up house windows and village street lamps at sunset and dusk.
+
+### Changes Made
+- **Crisp village & countryside ground** ([scripts/build-stylized-ground.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/build-stylized-ground.mjs), `public/map/dop_nw..se.jpg`):
+  - Filtered remaining grey/purple DOP20 smears (`sat < 0.30 || b > g * 0.88`), raised residential village lawn opacity to `0.96`, removed blurry `4.4 m` grey building halos and ghost footprints inside hero landmark zones (Münsing Church, Zum Altwirt, Schloss Ammerland, Fischerei Sebald), and removed blurry `1 m/px` elliptical plaza discs.
+  - Added distinct DOP-inspired open-countryside field patchwork (mown grass stripes, golden wheat, maize stubble, ploughed earth, clover, and field-edge dirt track borders).
+- **High-res Home Farm yard pavers & hero courtyards** ([src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts), [src/farm.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/farm.ts), [src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts)):
+  - Replaced stretched yard texture with tiled `512×512` Bavarian *Hofpflaster* cobble/gravel (`repeat 13×12`, mipmaps + 8× anisotropy) with a smooth shader-feathered rounded border.
+  - Added terrain-conformed tiled high-res gravel courtyards for St. Mariä Himmelfahrt, Gasthaus Zum Altwirt, and Schloss Ammerland.
+- **Architectural Old Farmstead Demolition Site** ([src/destruction.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/destruction.ts), [src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts)):
+  - Added a terrain-conformed tiled limestone gravel pad (`repeat 9×8`) with feathered grass edge.
+  - Textured the breakable barn with weathered running-bond red brick, timber *Fachwerk* beams, stone plinths, shuttered loft windows, framed timber barn door, and corrugated roof slabs; upgraded the two breakable sheds with barn-wood planks, corner posts, braced plank doors, and stone plinths; applied real hay texture to bales.
+- **Lit Dusk & Sunset Windows and Street Lamps** ([src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts), [src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts)):
+  - Added matched window-pane `emissiveMap` textures for all 6 habitable LoD2 facade styles plus Schloss Ammerland and Gasthaus Zum Altwirt, driven smoothly by `setNightMode(nightAmount)`.
+  - Expanded village street lamps to 18 across Münsing, Ammerland, Wimpasing, Weipertshausen, and Ried with additive warm lantern halos, warm ground light pools, and physical-unit `PointLight` illumination.
+
+### Verification & Screenshots (`.scratch/loop/16/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Screenshots inspected: `.scratch/loop/16/01_home_farm_cobble.png`, `.scratch/loop/16/02_muensing_church_clean.png`, `.scratch/loop/16/03_schloss_ammerland_clean.png`, `.scratch/loop/16/04_demo_site_architectural.png`, `.scratch/loop/16/05_church_dusk_lit.png`, `.scratch/loop/16/06_schloss_dusk_lit.png`, `.scratch/loop/16/07_church_sunset_lit.png`, `.scratch/loop/16/08_open_country_fields.png`.

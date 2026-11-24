@@ -851,3 +851,184 @@ export function createBavarianParasolTexture(): THREE.CanvasTexture {
   tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
+
+export function createTiledYardGravelTexture(repeatX = 13, repeatY = 12): THREE.CanvasTexture {
+  // High-resolution seamlessly tileable Bavarian Hofpflaster & crushed limestone yard gravel (zero pixel blocks!)
+  const [c, ctx] = makeCanvas(512, 512);
+  ctx.fillStyle = '#8b8375';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Subtle interlocking Bavarian granite courtyard pavers (Hofpflaster) with fine sandy joints
+  const paverShades = ['#979083', '#8c8578', '#a0988a', '#817b6f', '#928a7d', '#9b9384'];
+  const rowH = 32;
+  for (let row = 0; row < 512 / rowH; row++) {
+    const y = row * rowH;
+    const offset = (row % 2) * 24;
+    for (let x = -32; x < 544; x += 48) {
+      const shade = paverShades[(row * 7 + Math.floor((x + 64) / 48) * 3) % paverShades.length];
+      ctx.fillStyle = shade;
+      ctx.beginPath();
+      ctx.roundRect(x + offset + 2, y + 2, 44, rowH - 4, 4);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(72, 67, 58, 0.36)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+  }
+
+  // Fine high-frequency crushed limestone grit & dust speckles across stones and joints
+  for (let i = 0; i < 8500; i++) {
+    const gx = (i * 197) % 512;
+    const gy = (i * 331) % 512;
+    const v = 104 + ((i * 53) % 68);
+    ctx.fillStyle = `rgba(${v},${v - 5},${v - 13},0.34)`;
+    ctx.fillRect(gx, gy, 1.8, 1.8);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  tex.anisotropy = 8;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  return tex;
+}
+
+export function createCrispGravelPadTexture(repeatX = 9, repeatY = 9): THREE.CanvasTexture {
+  // Crisp high-resolution compacted Bavarian limestone gravel (for churchyards, Schloss terrace, and Demo Site!)
+  const [c, ctx] = makeCanvas(512, 512);
+  ctx.fillStyle = '#928979';
+  ctx.fillRect(0, 0, 512, 512);
+
+  for (let i = 0; i < 14000; i++) {
+    const gx = (i * 173 + (i % 19) * 7) % 512;
+    const gy = (i * 293 + (i % 13) * 11) % 512;
+    const v = 96 + ((i * 47) % 86);
+    ctx.fillStyle = `rgba(${v},${v - 6},${v - 15},0.42)`;
+    const sz = 1.5 + (i % 3) * 1.1;
+    ctx.fillRect(gx, gy, sz, sz);
+  }
+  for (let i = 0; i < 45; i++) {
+    const rx = (i * 113) % 512;
+    const ry = (i * 211) % 512;
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(116, 105, 86, 0.16)' : 'rgba(176, 168, 152, 0.14)';
+    ctx.beginPath();
+    ctx.arc(rx, ry, 18 + (i % 4) * 12, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  tex.anisotropy = 8;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = true;
+  return tex;
+}
+
+export function createWeatheredBrickWallTexture(): THREE.CanvasTexture {
+  // Authentic weathered Bavarian brick-and-timber barn wall (running bond brick, lime mortar, timber frame, stone plinth!)
+  const [c, ctx] = makeCanvas(512, 512);
+  ctx.fillStyle = '#b4aa9a';
+  ctx.fillRect(0, 0, 512, 512);
+
+  const brickPalette = ['#9a4934', '#8b3f2c', '#a8533c', '#7f3a29', '#a34e37', '#904431'];
+  const bw = 54;
+  const bh = 22;
+  for (let row = 0; row < 20; row++) {
+    const y = row * (bh + 3);
+    const off = (row % 2) * (bw * 0.5);
+    for (let x = -bw; x < 540; x += bw + 3) {
+      ctx.fillStyle = brickPalette[(row * 5 + Math.floor((x + 60) / bw) * 3) % brickPalette.length];
+      ctx.fillRect(x + off, y, bw, bh);
+      ctx.fillStyle = 'rgba(40, 24, 16, 0.12)';
+      ctx.fillRect(x + off, y + bh - 4, bw, 4);
+    }
+  }
+
+  // Timber Fachwerk horizontal & vertical structural beams
+  ctx.fillStyle = '#4f331c';
+  ctx.fillRect(0, 0, 512, 22);
+  ctx.fillRect(0, 232, 512, 18);
+  ctx.fillRect(0, 0, 20, 440);
+  ctx.fillRect(246, 0, 20, 440);
+  ctx.fillRect(492, 0, 20, 440);
+
+  // Small shuttered dark loft openings
+  for (const wx of [104, 344]) {
+    ctx.fillStyle = '#3d2614';
+    ctx.fillRect(wx - 6, 74, 76, 86);
+    ctx.fillStyle = '#1f1914';
+    ctx.fillRect(wx, 80, 64, 74);
+    ctx.fillStyle = '#634125';
+    ctx.fillRect(wx + 29, 80, 6, 74);
+    ctx.fillRect(wx, 114, 64, 6);
+  }
+
+  // Weathered fieldstone foundation plinth
+  ctx.fillStyle = '#7e786e';
+  ctx.fillRect(0, 434, 512, 78);
+  for (let y = 440; y < 508; y += 22) {
+    for (let x = (y % 44 === 0 ? 4 : -14); x < 512; x += 48) {
+      ctx.fillStyle = (x + y) % 3 === 0 ? '#8f887d' : '#706a61';
+      ctx.beginPath();
+      ctx.roundRect(x, y, 42, 18, 4);
+      ctx.fill();
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+export function createBaroquePalaceEmissiveMap(): THREE.CanvasTexture {
+  // Exact window-pane glow mask matching createBaroquePalaceTexture() for dusk & sunset warmth!
+  const [c, ctx] = makeCanvas(512, 512);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, 512, 512);
+  const rows = [
+    { y: 58, h: 102 },
+    { y: 224, h: 108 },
+    { y: 392, h: 92 }
+  ];
+  rows.forEach((r, ri) => {
+    for (let col = 0; col < 4; col++) {
+      if ((ri * 3 + col) % 4 === 2) continue;
+      const wx = col * 128 + 38;
+      const ww = 52;
+      ctx.fillStyle = (ri + col) % 2 === 0 ? '#ffcf76' : '#f2b85c';
+      ctx.fillRect(wx + 2, r.y + 2, ww - 4, r.h - 4);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(wx + ww / 2 - 2, r.y, 4, r.h);
+      ctx.fillRect(wx, r.y + r.h * 0.36, ww, 3);
+      ctx.fillRect(wx, r.y + r.h * 0.68, ww, 3);
+    }
+  });
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+export function createLampGlowTexture(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(128, 128);
+  const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+  g.addColorStop(0, 'rgba(255, 232, 165, 1.0)');
+  g.addColorStop(0.28, 'rgba(255, 200, 108, 0.58)');
+  g.addColorStop(0.65, 'rgba(255, 175, 76, 0.18)');
+  g.addColorStop(1, 'rgba(255, 160, 60, 0.0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}

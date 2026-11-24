@@ -5,11 +5,11 @@ import {
   createConcreteTexture,
   createCorrugatedMetalTexture,
   createDetailBumpTexture,
-  createFarmGroundTexture,
   createHayTexture,
   createMeadowDetailTexture,
   createPebbledashTexture,
   createStoneWallTexture,
+  createTiledYardGravelTexture,
   createWrappedSilageTexture
 } from './textures';
 import {
@@ -141,9 +141,9 @@ export class FarmEnvironment {
     const { waterMesh } = buildRealMuensingTerrain(scene, world, groundMat, detailBump, meadowTex);
     this.lakeWaterMesh = waterMesh;
 
-    // Compacted Bavarian gravel farmyard apron conformed smoothly to terrain mesh so grass NEVER pokes through!
-    const groundTex = createFarmGroundTexture();
-    const apronGeo = new THREE.PlaneGeometry(52, 48, 26, 24);
+    // High-resolution tiled Bavarian Hofpflaster & gravel farmyard apron with crisp mipmaps & feathered grass border!
+    const groundTex = createTiledYardGravelTexture(13, 12);
+    const apronGeo = new THREE.PlaneGeometry(52, 48, 28, 26);
     apronGeo.rotateX(-Math.PI / 2);
     const apos = apronGeo.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < apos.count; i++) {
@@ -152,21 +152,43 @@ export class FarmEnvironment {
       apos.setY(i, getTerrainHeight(wx, wz) + 0.14);
     }
     apronGeo.computeVertexNormals();
-    const ground = new THREE.Mesh(
-      apronGeo,
-      new THREE.MeshStandardMaterial({
-        map: groundTex,
-        bumpMap: detailBump,
-        bumpScale: 0.08,
-        roughness: 0.95,
-        metalness: 0.02,
-        transparent: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2
-      })
-    );
+    const apronMat = new THREE.MeshStandardMaterial({
+      map: groundTex,
+      bumpMap: detailBump,
+      bumpScale: 0.06,
+      roughness: 0.92,
+      metalness: 0.02,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    });
+    // Crisp smooth rounded-rectangle alpha edge mask + subtle driveway track darkening in local yard coordinates!
+    apronMat.onBeforeCompile = (shader) => {
+      shader.vertexShader =
+        'varying vec2 vYardLocal;\n' +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          '#include <begin_vertex>\nvYardLocal = transformed.xz;'
+        );
+      shader.fragmentShader =
+        'varying vec2 vYardLocal;\n' +
+        shader.fragmentShader.replace(
+          '#include <dithering_fragment>',
+          `vec2 q = abs(vYardLocal) - vec2(21.5, 19.5);
+          float edgeDist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+          float alphaMask = 1.0 - smoothstep(1.2, 4.2, edgeDist);
+          // Subtle compacted tire path along main East-West exit lane (z = -4)
+          float lane = 1.0 - smoothstep(1.2, 3.2, abs(vYardLocal.y + 4.0));
+          gl_FragColor.rgb *= (1.0 - lane * 0.11);
+          gl_FragColor.a *= alphaMask;
+          #include <dithering_fragment>`
+        );
+    };
+    apronMat.customProgramCacheKey = () => 'bavaria-yard-apron-v2';
+
+    const ground = new THREE.Mesh(apronGeo, apronMat);
     ground.position.set(this.ox, 0, this.oz);
     ground.receiveShadow = true;
     scene.add(ground);

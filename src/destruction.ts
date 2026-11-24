@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { FARM_YARD_CENTER, getTerrainHeight, REAL_SPOTS } from './terrain';
+import {
+  createBarnWoodTexture,
+  createCorrugatedMetalTexture,
+  createCrispGravelPadTexture,
+  createHayTexture,
+  createStoneWallTexture,
+  createWeatheredBrickWallTexture
+} from './textures';
 
 export const DEMO_SITE_CENTER = { x: 165, z: 620 };
 
@@ -61,13 +69,13 @@ export class DestructionManager {
   private propMat: CANNON.Material;
   private callbacks: DestructionCallbacks;
 
-  private woodMat = new THREE.MeshStandardMaterial({ color: 0x7b5634, roughness: 0.92 });
-  private darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x52361d, roughness: 0.94 });
-  private brickMat = new THREE.MeshStandardMaterial({ color: 0x9c4b36, roughness: 0.92 });
-  private stoneMat = new THREE.MeshStandardMaterial({ color: 0x8e8b82, roughness: 0.94 });
-  private roofTileMat = new THREE.MeshStandardMaterial({ color: 0xa6412a, roughness: 0.82 });
-  private metalMat = new THREE.MeshStandardMaterial({ color: 0x677276, roughness: 0.65, metalness: 0.35 });
-  private hayMat = new THREE.MeshStandardMaterial({ color: 0xd8b44e, roughness: 0.94 });
+  private woodMat = new THREE.MeshStandardMaterial({ map: createBarnWoodTexture(), color: 0xb88b62, roughness: 0.9 });
+  private darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x4f331c, roughness: 0.94 });
+  private brickMat = new THREE.MeshStandardMaterial({ map: createWeatheredBrickWallTexture(), roughness: 0.9 });
+  private stoneMat = new THREE.MeshStandardMaterial({ map: createStoneWallTexture(), roughness: 0.94 });
+  private roofTileMat = new THREE.MeshStandardMaterial({ map: createCorrugatedMetalTexture(), color: 0xb64a2e, roughness: 0.8 });
+  private metalMat = new THREE.MeshStandardMaterial({ map: createCorrugatedMetalTexture(), roughness: 0.62, metalness: 0.32 });
+  private hayMat = new THREE.MeshStandardMaterial({ map: createHayTexture(), roughness: 0.94 });
   private signYellowMat = new THREE.MeshStandardMaterial({ color: 0xf0c21a, roughness: 0.4 });
 
   constructor(
@@ -249,18 +257,42 @@ export class DestructionManager {
 
   private makeShedMesh(): THREE.Group {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.7, 3.4), this.woodMat);
-    body.position.y = 1.35;
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(4.36, 0.42, 3.56), this.stoneMat);
+    plinth.position.y = 0.21;
+    g.add(plinth);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.75, 3.4), this.woodMat);
+    body.position.y = 1.48;
     body.castShadow = true;
+    body.receiveShadow = true;
     g.add(body);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.1, 0.12), this.darkWoodMat);
-    door.position.set(0, 1.05, 1.72);
+    // Corner framing posts & eaves beam
+    for (const sx of [-2.06, 2.06]) {
+      for (const sz of [-1.66, 1.66]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.85, 0.16), this.darkWoodMat);
+        post.position.set(sx, 1.48, sz);
+        g.add(post);
+      }
+    }
+    // Framed timber barn door with cross brace
+    const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.58, 2.22, 0.1), this.darkWoodMat);
+    doorFrame.position.set(0, 1.15, 1.71);
+    g.add(doorFrame);
+    const door = new THREE.Mesh(new THREE.BoxGeometry(1.38, 2.08, 0.14), this.woodMat);
+    door.position.set(0, 1.12, 1.73);
     g.add(door);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.22, 4.0), this.metalMat);
-    roof.position.y = 2.84;
-    roof.rotation.x = 0.14;
+    const brace = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.12, 0.16), this.darkWoodMat);
+    brace.position.set(0, 1.12, 1.74);
+    brace.rotation.z = 0.65;
+    g.add(brace);
+    // Overhanging corrugated pitched roof + timber fascia
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(5.0, 0.2, 4.3), this.metalMat);
+    roof.position.y = 2.98;
+    roof.rotation.x = 0.16;
     roof.castShadow = true;
     g.add(roof);
+    const fascia = new THREE.Mesh(new THREE.BoxGeometry(5.06, 0.18, 0.14), this.darkWoodMat);
+    fascia.position.set(0, 2.66, 2.1);
+    g.add(fascia);
     return g;
   }
 
@@ -462,20 +494,80 @@ export class DestructionManager {
     const cx = DEMO_SITE_CENTER.x;
     const cz = DEMO_SITE_CENTER.z;
 
+    // 0. Crisp high-resolution tiled gravel pad conformed smoothly to terrain (zero blurry grey disc!)
+    const padTex = createCrispGravelPadTexture(9, 8);
+    const padGeo = new THREE.PlaneGeometry(44, 42, 20, 20);
+    padGeo.rotateX(-Math.PI / 2);
+    const ppos = padGeo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < ppos.count; i++) {
+      const wx = ppos.getX(i) + cx;
+      const wz = ppos.getZ(i) + cz;
+      ppos.setY(i, getTerrainHeight(wx, wz) + 0.12);
+    }
+    padGeo.computeVertexNormals();
+    const padMat = new THREE.MeshStandardMaterial({
+      map: padTex,
+      roughness: 0.94,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    });
+    padMat.onBeforeCompile = (shader) => {
+      shader.vertexShader =
+        'varying vec2 vPadLocal;\n' +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          '#include <begin_vertex>\nvPadLocal = transformed.xz;'
+        );
+      shader.fragmentShader =
+        'varying vec2 vPadLocal;\n' +
+        shader.fragmentShader.replace(
+          '#include <dithering_fragment>',
+          `vec2 q = abs(vPadLocal) - vec2(17.5, 16.5);
+          float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+          gl_FragColor.a *= 1.0 - smoothstep(0.8, 3.6, d);
+          #include <dithering_fragment>`
+        );
+    };
+    padMat.customProgramCacheKey = () => 'bavaria-demo-pad-v1';
+    const padMesh = new THREE.Mesh(padGeo, padMat);
+    padMesh.position.set(cx, 0, cz);
+    padMesh.receiveShadow = true;
+    this.scene.add(padMesh);
+
     // 1. OLD BAVARIAN BRICK-AND-TIMBER FARMHOUSE SHELL (6 breakable brick wall panels + 4 collapsing roof slabs!)
     const bx = cx - 4;
     const bz = cz - 6;
 
-    const makeBrickPanel = (w: number, h: number): THREE.Group => {
+    const makeBrickPanel = (w: number, h: number, withDoor = false): THREE.Group => {
       const g = new THREE.Group();
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, 0.55, 0.64), this.stoneMat);
+      plinth.position.y = 0.27;
+      g.add(plinth);
       const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.54), this.brickMat);
       wall.position.y = h * 0.5;
       wall.castShadow = true;
       wall.receiveShadow = true;
       g.add(wall);
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.24, 0.62), this.darkWoodMat);
+      // Horizontal eaves plate & vertical corner timber posts
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(w + 0.16, 0.26, 0.68), this.darkWoodMat);
       beam.position.y = h - 0.12;
       g.add(beam);
+      for (const px of [-w * 0.48, w * 0.48]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, h, 0.62), this.darkWoodMat);
+        post.position.set(px, h * 0.5, 0);
+        g.add(post);
+      }
+      if (withDoor) {
+        const door = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.55, 0.62), this.woodMat);
+        door.position.set(0, 1.32, 0);
+        g.add(door);
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.22, 0.68), this.darkWoodMat);
+        lintel.position.set(0, 2.66, 0);
+        g.add(lintel);
+      }
       return g;
     };
 
@@ -568,7 +660,7 @@ export class DestructionManager {
       [bx - 5.1, bz, Math.PI / 2, 6.6, [roofSlabs[0].id, roofSlabs[2].id]],
       [bx + 5.1, bz, Math.PI / 2, 6.6, [roofSlabs[1].id, roofSlabs[3].id]]
     ];
-    for (const [wx, wz, wrot, ww, collapseIds] of wallConfigs) {
+    wallConfigs.forEach(([wx, wz, wrot, ww, collapseIds], wi) => {
       const wItem = this.addBreakable(
         'brick_wall',
         'Old Brick Barn Wall',
@@ -577,7 +669,7 @@ export class DestructionManager {
         wrot,
         2.6,
         3.6,
-        makeBrickPanel(ww, 3.5),
+        makeBrickPanel(ww, 3.5, wi === 1),
         true,
         [0x9c4b36, 0x7e3a29, 0x8e8b82, 0x52361d],
         [0.85, 0.62, 0.52],
@@ -585,7 +677,7 @@ export class DestructionManager {
         'metal'
       );
       wItem.collapseIds = collapseIds;
-    }
+    });
 
     // 2. Two Breakable Timber Sheds beside the barn
     this.addBreakable(

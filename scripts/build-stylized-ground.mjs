@@ -110,15 +110,15 @@ function sanitizeDopToMeadowBase(rawBuf, w, h, ch) {
     const lum = 0.299 * r + 0.587 * g + 0.114 * b;
     const sat = maxC > 1 ? (maxC - minC) / maxC : 0;
 
-    // 1. Any bright white/grey concrete, roof, road, car, or pale smear -> clean meadow green!
+    // 1. Any bright white/grey/purple concrete, roof, road, car, or pale smear -> clean meadow green!
     // 2. Any pitch-black tree/building cast shadow -> clean deep meadow green!
-    // 3. Any red/orange roof tiles leaking through raw aerial -> clean meadow green!
-    const isWhiteOrGreySmear = lum > 136 && sat < 0.26;
-    const isGlare = lum > 175 || (b > 135 && r > 135);
-    const isRoofRed = r > g + 18 && r > b + 22;
-    const isBlueWaterOrPool = b > g + 8 && b > r + 12;
+    // 3. Any red/orange roof tiles or blue/purple glare leaking through raw aerial -> clean meadow green!
+    const isWhiteOrGreySmear = lum > 128 && sat < 0.30;
+    const isPurpleOrBlueSmear = b > g * 0.88 && lum > 50;
+    const isGlare = lum > 168 || (b > 128 && r > 128);
+    const isRoofRed = r > g + 16 && r > b + 20;
 
-    if (isWhiteOrGreySmear || isGlare || isRoofRed || isBlueWaterOrPool) {
+    if (isWhiteOrGreySmear || isPurpleOrBlueSmear || isGlare || isRoofRed) {
       out[o] = baseR;
       out[o + 1] = baseG;
       out[o + 2] = baseB;
@@ -127,29 +127,27 @@ function sanitizeDopToMeadowBase(rawBuf, w, h, ch) {
 
     if (lum < 56) {
       // Dark forest / shadow -> rich woodland green (never charcoal smudge!)
-      out[o] = 66;
-      out[o + 1] = 102;
+      out[o] = 68;
+      out[o + 1] = 104;
       out[o + 2] = 48;
       continue;
     }
 
-    // Natural vegetation / pasture / soil pixels: gently map toward our cohesive Bavarian meadow palette!
-    // Keep subtle warm/cool organic variation (+/- 18% around base meadow) without any muddy grey or snow white.
-    const isSoil = r > g * 0.98 && r > b * 1.18 && lum < 145;
+    // Natural vegetation / pasture / soil pixels: preserve genuine Bavarian crop & meadow color differences
+    // (golden harvest, ploughed earth, lush clover, dark pasture) with zero muddy grey/purple smears!
+    const isSoil = r > g * 0.96 && r > b * 1.18 && lum < 146;
     if (isSoil) {
-      // Warm Bavarian tilled soil / golden harvest field hint blended softly
-      out[o] = Math.round(baseR * 0.45 + Math.min(148, r) * 0.55);
-      out[o + 1] = Math.round(baseG * 0.48 + Math.min(136, g) * 0.52);
-      out[o + 2] = Math.round(baseB * 0.52 + Math.min(84, b) * 0.48);
+      out[o] = Math.round(baseR * 0.32 + Math.min(156, r) * 0.68);
+      out[o + 1] = Math.round(baseG * 0.36 + Math.min(142, g) * 0.64);
+      out[o + 2] = Math.round(baseB * 0.44 + Math.min(84, b) * 0.56);
     } else {
-      // Lush meadow / pasture / tree canopy green
-      const lumFactor = Math.max(0.76, Math.min(1.16, lum / 105));
-      const nr = Math.round(baseR * (0.62 + 0.38 * lumFactor) + (r - lum) * 0.25);
-      const ng = Math.round(baseG * (0.62 + 0.38 * lumFactor) + (g - lum) * 0.3);
-      const nb = Math.round(baseB * (0.62 + 0.38 * lumFactor) + (b - lum) * 0.2);
-      out[o] = Math.max(58, Math.min(132, nr));
-      out[o + 1] = Math.max(92, Math.min(156, ng));
-      out[o + 2] = Math.max(42, Math.min(82, nb));
+      const lumFactor = Math.max(0.74, Math.min(1.2, lum / 104));
+      const nr = Math.round(baseR * (0.58 + 0.42 * lumFactor) + (r - lum) * 0.34);
+      const ng = Math.round(baseG * (0.58 + 0.42 * lumFactor) + (g - lum) * 0.38);
+      const nb = Math.round(baseB * (0.58 + 0.42 * lumFactor) + (b - lum) * 0.16);
+      out[o] = Math.max(58, Math.min(142, nr));
+      out[o + 1] = Math.max(92, Math.min(162, ng));
+      out[o + 2] = Math.max(40, Math.min(76, nb));
     }
   }
   return out;
@@ -178,86 +176,123 @@ function buildQuadrantSvg(q, W, H, osm) {
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`);
   parts.push(`<defs>
     <pattern id="plough" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(24)">
-      <rect width="14" height="14" fill="#826b49"/>
-      <line x1="0" y1="3" x2="14" y2="3" stroke="#6f583a" stroke-width="2.5"/>
-      <line x1="0" y1="10" x2="14" y2="10" stroke="#967e58" stroke-width="1.8"/>
+      <rect width="14" height="14" fill="#826846"/>
+      <line x1="0" y1="3" x2="14" y2="3" stroke="#6c5335" stroke-width="2.8"/>
+      <line x1="0" y1="10" x2="14" y2="10" stroke="#987d56" stroke-width="2.0"/>
     </pattern>
     <pattern id="stubble" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(-18)">
-      <rect width="16" height="16" fill="#9c914d"/>
-      <line x1="0" y1="4" x2="16" y2="4" stroke="#8a7f40" stroke-width="2.5"/>
-      <line x1="0" y1="12" x2="16" y2="12" stroke="#afa55c" stroke-width="2"/>
+      <rect width="16" height="16" fill="#a8984e"/>
+      <line x1="0" y1="4" x2="16" y2="4" stroke="#92823d" stroke-width="2.8"/>
+      <line x1="0" y1="12" x2="16" y2="12" stroke="#bdb062" stroke-width="2.2"/>
+    </pattern>
+    <pattern id="wheat" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(8)">
+      <rect width="14" height="14" fill="#c2a44c"/>
+      <rect x="0" y="0" width="14" height="7" fill="#cfb35c" fill-opacity="0.55"/>
     </pattern>
     <pattern id="mown" width="18" height="18" patternUnits="userSpaceOnUse" patternTransform="rotate(14)">
-      <rect width="18" height="18" fill="#6f9845"/>
-      <rect x="0" y="0" width="18" height="9" fill="#7aa34e" fill-opacity="0.45"/>
+      <rect width="18" height="18" fill="#63903d"/>
+      <rect x="0" y="0" width="18" height="9" fill="#77a74b" fill-opacity="0.62"/>
+    </pattern>
+    <pattern id="mown2" width="18" height="18" patternUnits="userSpaceOnUse" patternTransform="rotate(-28)">
+      <rect width="18" height="18" fill="#578538"/>
+      <rect x="0" y="0" width="18" height="9" fill="#6ea046" fill-opacity="0.58"/>
+    </pattern>
+    <pattern id="clover" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(36)">
+      <rect width="16" height="16" fill="#4f7e34"/>
+      <rect x="0" y="0" width="16" height="8" fill="#5d8f3e" fill-opacity="0.52"/>
     </pattern>
   </defs>`);
 
-  // 1. OSM Farmland patchwork (mown meadow, maize stubble, ploughed fields, spring barley)
-  const farmFills = ['url(#mown)', 'url(#stubble)', 'url(#plough)', '#6b9443', '#7ea149'];
+  // 1. OSM Farmland patchwork (mown hay stripes, golden wheat, maize stubble, ploughed earth, clover)
+  const farmFills = ['url(#mown)', 'url(#stubble)', 'url(#plough)', 'url(#wheat)', 'url(#mown2)', 'url(#clover)'];
   for (const f of osm.farmlands) {
     if (!overlaps(f.pts)) continue;
     const fill = farmFills[f.id % farmFills.length];
-    parts.push(`<polygon points="${toPointsAttr(f.pts)}" fill="${fill}" fill-opacity="0.82" stroke="#537a37" stroke-width="${(2.6 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
+    // Crisp earthen headland track & hedgerow border along every field boundary
+    parts.push(`<polygon points="${toPointsAttr(f.pts)}" fill="${fill}" fill-opacity="0.90" stroke="#7d7452" stroke-width="${(3.2 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
+    parts.push(`<polygon points="${toPointsAttr(f.pts)}" fill="none" stroke="#476e2e" stroke-width="${(1.5 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
   }
 
-  // 2. OSM Meadows (fresh lush Bavarian meadow green with clean field-edge strips)
-  const meadowFills = ['#5f8c40', '#679445', '#5a863d'];
+  // 2. OSM Meadows (striped mown hayfields & varied Bavarian pasture greens with crisp boundaries!)
+  const meadowFills = ['url(#mown)', 'url(#mown2)', 'url(#clover)', '#639040', '#709c48'];
   for (const m of osm.meadows) {
     if (!overlaps(m.pts)) continue;
     const fill = meadowFills[m.id % meadowFills.length];
-    parts.push(`<polygon points="${toPointsAttr(m.pts)}" fill="${fill}" fill-opacity="0.58" stroke="#4f7735" stroke-width="${(1.8 * pxPerM).toFixed(1)}"/>`);
+    parts.push(`<polygon points="${toPointsAttr(m.pts)}" fill="${fill}" fill-opacity="0.86" stroke="#5c783f" stroke-width="${(2.2 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
   }
 
-  // 3. OSM Forests / Woods (deep mossy Bavarian woodland floor)
+  // 2b. Break up any large unmapped open-country slopes along Münsinger Straße (x 200..1180, z 450..1180)
+  // with authentic Bavarian mowed hay stripes, barley/maize field patches & dirt field-edge tracks!
+  const openCountryFields = [
+    { pts: [[210, 880], [435, 865], [448, 955], [220, 975]], fill: 'url(#mown)' },
+    { pts: [[448, 840], [670, 835], [682, 950], [456, 955]], fill: 'url(#wheat)' },
+    { pts: [[682, 855], [910, 845], [925, 960], [690, 965]], fill: 'url(#mown2)' },
+    { pts: [[922, 860], [1145, 875], [1155, 975], [932, 970]], fill: 'url(#stubble)' },
+    { pts: [[260, 995], [510, 985], [525, 1110], [275, 1125]], fill: 'url(#stubble)' },
+    { pts: [[525, 980], [775, 978], [790, 1115], [538, 1115]], fill: 'url(#mown)' },
+    { pts: [[790, 985], [1055, 995], [1065, 1120], [802, 1115]], fill: 'url(#plough)' },
+    { pts: [[235, 675], [465, 670], [480, 820], [248, 825]], fill: 'url(#plough)' },
+    { pts: [[480, 675], [735, 685], [748, 825], [492, 820]], fill: 'url(#clover)' },
+    { pts: [[748, 695], [1015, 705], [1025, 835], [760, 825]], fill: 'url(#mown)' },
+    // North meadow corridor toward Ried & Weipertshausen
+    { pts: [[-180, 480], [95, 470], [105, 610], [-165, 620]], fill: 'url(#mown2)' },
+    { pts: [[-140, 180], [160, 175], [175, 345], [-125, 355]], fill: 'url(#wheat)' },
+    { pts: [[195, -520], [440, -510], [450, -320], [210, -330]], fill: 'url(#stubble)' },
+    { pts: [[280, -960], [475, -955], [482, -760], [295, -770]], fill: 'url(#mown)' },
+    { pts: [[535, -1040], [765, -1030], [772, -820], [545, -830]], fill: 'url(#wheat)' }
+  ];
+  for (const cf of openCountryFields) {
+    if (!overlaps(cf.pts)) continue;
+    parts.push(`<polygon points="${toPointsAttr(cf.pts)}" fill="${cf.fill}" fill-opacity="0.82" stroke="#7d7252" stroke-width="${(3.0 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
+  }
+
+  // 3. OSM Forests / Woods (deep mossy Bavarian woodland floor with rich darker forest edge)
   for (const pts of osm.forests) {
     if (!overlaps(pts)) continue;
-    parts.push(`<polygon points="${toPointsAttr(pts)}" fill="#3e6130" fill-opacity="0.78" stroke="#37572a" stroke-width="${(3.5 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
+    parts.push(`<polygon points="${toPointsAttr(pts)}" fill="#3d602f" fill-opacity="0.88" stroke="#325226" stroke-width="${(3.8 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
   }
 
-  // 4. OSM Residential village zones (clean trimmed Bavarian village garden grass — ZERO melting snow!)
+  // 4. OSM Residential village zones (crisp clean Bavarian garden lawns — 96% opaque so ZERO purple/grey DOP20 smears bleed through!)
   for (const pts of osm.residentials) {
     if (!overlaps(pts)) continue;
-    parts.push(`<polygon points="${toPointsAttr(pts)}" fill="#5f8b42" fill-opacity="0.72" stroke="#547f3a" stroke-width="${(2.2 * pxPerM).toFixed(1)}"/>`);
+    parts.push(`<polygon points="${toPointsAttr(pts)}" fill="#5c8a3f" fill-opacity="0.96" stroke="#527d38" stroke-width="${(2.2 * pxPerM).toFixed(1)}"/>`);
   }
 
-  // 5. Key Village Courtyards, Church Plaza, Gravel Yards & Demolition Gravel Pit (warm stone/gravel, NEVER snow-white!)
+  // 5. Only EDEKA asphalt loading lot & Sebald compact pad stay on map; Church, Altwirt, Schloss, Home Farm & Demo Site
+  // use crisp high-resolution tiled 3D gravel/cobble meshes in Three.js (zero blurry 1 m/px oval discs!)
   const spots = muensingData.spots;
   const plazas = [
-    // Münsing St. Mariä Himmelfahrt churchyard gravel/cobble square
-    { x: spots.muensingChurch[0] + 6, z: spots.muensingChurch[1] + 6, rx: 24, ry: 18, col: '#8d8576', edge: '#6f695c' },
-    // Münsing Gasthaus Zum Altwirt & Biergarten gravel forecourt
-    { x: spots.muensingAltwirt[0] - 2, z: spots.muensingAltwirt[1] - 4, rx: 22, ry: 16, col: '#8c8475', edge: '#6d675b' },
-    // EDEKA Graf loading yard
-    { x: spots.edeka[0], z: spots.edeka[1] + 4, rx: 24, ry: 18, col: '#696c6e', edge: '#555a58' },
-    // Schloss Ammerland gravel park forecourt
-    { x: spots.schlossAmmerland[0] + 10, z: spots.schlossAmmerland[1], rx: 24, ry: 22, col: '#8f8778', edge: '#716a5d' },
-    // Fischerei Sebald lakeside courtyard
-    { x: spots.sebaldPier[0] + 4, z: spots.sebaldPier[1] - 4, rx: 18, ry: 16, col: '#8e8677', edge: '#70695d' },
-    // Home Farm working gravel yard
-    { x: spots.farm[0] - 33.5, z: spots.farm[1] + 16.4, rx: 25, ry: 22, col: '#8a8274', edge: '#69724e' },
-    // Old Gravel Pit Farmstead demolition yard
-    { x: 165, z: 620, rx: 26, ry: 24, col: '#8f8470', edge: '#6f734d' }
+    { x: spots.edeka[0], z: spots.edeka[1] + 4, rx: 22, ry: 16, col: '#5a5f63', edge: '#4a5052' }
   ];
   for (const p of plazas) {
     if (p.x + p.rx < q.minX - 20 || p.x - p.rx > q.maxX + 20 || p.z + p.ry < q.minZ - 20 || p.z - p.ry > q.maxZ + 20) continue;
-    parts.push(`<ellipse cx="${sx(p.x)}" cy="${sy(p.z)}" rx="${(p.rx * pxPerM).toFixed(1)}" ry="${(p.ry * pxPerM).toFixed(1)}" fill="${p.col}" stroke="${p.edge}" stroke-width="${(2.0 * pxPerM).toFixed(1)}"/>`);
+    parts.push(`<rect x="${sx(p.x - p.rx)}" y="${sy(p.z - p.ry)}" width="${(p.rx * 2 * pxPerM).toFixed(1)}" height="${(p.ry * 2 * pxPerM).toFixed(1)}" rx="6" fill="${p.col}" stroke="${p.edge}" stroke-width="${(1.8 * pxPerM).toFixed(1)}"/>`);
   }
 
   // 6. Clean warm gravel farm tracks & driveways (track + service)
   for (const pts of osm.roadsTrack) {
     if (!overlaps(pts)) continue;
     const pAttr = toPointsAttr(pts);
-    parts.push(`<polyline points="${pAttr}" fill="none" stroke="#6f7e49" stroke-width="${(5.4 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    parts.push(`<polyline points="${pAttr}" fill="none" stroke="#928772" stroke-width="${(3.4 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<polyline points="${pAttr}" fill="none" stroke="#6a7a46" stroke-width="${(5.2 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<polyline points="${pAttr}" fill="none" stroke="#8e836e" stroke-width="${(3.2 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
 
-  // 7. Clean Building Courtyards / Drip Edges (warm gravel perimeter + subtle foundation contact shadow under every building!)
+  // 7. Tight Building Foundation Pads ONLY under real buildings (skip hero landmark zones so zero ghost dark rectangles appear in front of Schloss Ammerland or Münsing Church!)
+  const heroClearZones = [
+    [spots.schlossAmmerland[0], spots.schlossAmmerland[1], 46],
+    [spots.muensingChurch[0], spots.muensingChurch[1], 36],
+    [spots.muensingAltwirt[0], spots.muensingAltwirt[1], 28],
+    [spots.sebaldPier[0], spots.sebaldPier[1], 24]
+  ];
   for (const pts of osm.buildings) {
     if (!overlaps(pts)) continue;
+    let cx = 0, cz = 0;
+    for (const [bx, bz] of pts) { cx += bx; cz += bz; }
+    cx /= pts.length; cz /= pts.length;
+    if (heroClearZones.some(([hx, hz, hr]) => Math.hypot(cx - hx, cz - hz) < hr)) continue;
     const pAttr = toPointsAttr(pts);
-    parts.push(`<polygon points="${pAttr}" fill="#6e685d" stroke="#8b8375" stroke-width="${(4.4 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
-    parts.push(`<polygon points="${pAttr}" fill="#505644"/>`);
+    // Crisp tight contact-shadow pad strictly inside footprint (no blurry 4.4 m grey halo smear!)
+    parts.push(`<polygon points="${pAttr}" fill="#4d6138" stroke="#6f7a58" stroke-width="${(1.1 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
   }
 
   // 8. Crisp Paved Road Corridors (clean green verge + dark charcoal asphalt roadbed right under the 3D road ribbons!)
