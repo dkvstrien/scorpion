@@ -1,5 +1,14 @@
 import * as THREE from 'three';
-import { FARM_CENTER, getShorelineX, OSM_DATA, REAL_SPOTS, WORLD_MAX_X, WORLD_MAX_Z, WORLD_MIN_X, WORLD_MIN_Z } from './terrain';
+import {
+  FARM_CENTER,
+  getShorelineX,
+  OSM_DATA,
+  REAL_SPOTS,
+  WORLD_MAX_X,
+  WORLD_MAX_Z,
+  WORLD_MIN_X,
+  WORLD_MIN_Z
+} from './terrain';
 
 export interface MiniMapMarker {
   x: number;
@@ -24,7 +33,12 @@ export class MuensingMiniMap {
     this.baseCanvas = document.createElement('canvas');
     this.baseCanvas.width = canvas.width;
     this.baseCanvas.height = canvas.height;
-    this.bakeStaticOSMMap();
+    this.bakeStaticOSMMap(null);
+
+    // Load official Bavaria DOP20 aerial orthophoto right into the live satellite GPS mini-map!
+    const img = new Image();
+    img.onload = () => this.bakeStaticOSMMap(img);
+    img.src = './map/minimap_dop.jpg';
   }
 
   private toPX(x: number): number {
@@ -35,59 +49,38 @@ export class MuensingMiniMap {
     return ((z - this.minZ) / (this.maxZ - this.minZ)) * this.canvas.height;
   }
 
-  /**
-   * Pre-bakes all 202 real OpenStreetMap roads, Lake Starnberg shoreline, forests & Lübbach stream once!
-   */
-  private bakeStaticOSMMap(): void {
+  private bakeStaticOSMMap(aerialImg: HTMLImageElement | null): void {
     const ctx = this.baseCanvas.getContext('2d')!;
     const w = this.baseCanvas.width;
     const h = this.baseCanvas.height;
 
-    // Bavarian pasture base
-    ctx.fillStyle = '#3c5c30';
-    ctx.fillRect(0, 0, w, h);
-
-    // Real OSM forest patches
-    ctx.fillStyle = '#2c4724';
-    for (const f of OSM_DATA.forests) {
-      const rx = this.toPX(f.x - f.w * 0.5);
-      const rz = this.toPZ(f.z - f.d * 0.5);
-      const rw = Math.max(3, (f.w / (this.maxX - this.minX)) * w);
-      const rh = Math.max(3, (f.d / (this.maxZ - this.minZ)) * h);
-      ctx.fillRect(rx, rz, rw, rh);
-    }
-
-    // Real Starnberger See shoreline polygon on the west!
-    ctx.fillStyle = '#1e5b7d';
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    for (let z = this.minZ; z <= this.maxZ; z += 20) {
-      ctx.lineTo(this.toPX(getShorelineX(z) - 8), this.toPZ(z));
-    }
-    ctx.lineTo(0, h);
-    ctx.closePath();
-    ctx.fill();
-
-    // Lübbach stream
-    ctx.strokeStyle = '#3891bd';
-    ctx.lineWidth = 1.4;
-    for (const s of OSM_DATA.streams) {
+    if (aerialImg) {
+      ctx.drawImage(aerialImg, 0, 0, w, h);
+      // Slight contrast vignette so road lines and GPS cursor pop crisply
+      ctx.fillStyle = 'rgba(10, 18, 14, 0.16)';
+      ctx.fillRect(0, 0, w, h);
+    } else {
+      ctx.fillStyle = '#3c5c30';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#1e5b7d';
       ctx.beginPath();
-      s.pts.forEach(([x, z], idx) => {
-        if (idx === 0) ctx.moveTo(this.toPX(x), this.toPZ(z));
-        else ctx.lineTo(this.toPX(x), this.toPZ(z));
-      });
-      ctx.stroke();
+      ctx.moveTo(0, 0);
+      for (let z = this.minZ; z <= this.maxZ; z += 40) {
+        ctx.lineTo(this.toPX(getShorelineX(z) - 8), this.toPZ(z));
+      }
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fill();
     }
 
-    // All 202 real OpenStreetMap roads!
+    // Crisp translucent OSM road overlay aligned pixel-for-pixel over the Bavaria aerial photo!
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     for (const r of OSM_DATA.roads) {
       const isMain = r.hw === 'secondary' || r.hw === 'tertiary';
-      const isTrack = r.hw === 'track' || r.hw === 'service';
-      ctx.strokeStyle = isMain ? '#e2ded2' : isTrack ? 'rgba(176,164,142,0.55)' : 'rgba(210,208,200,0.8)';
-      ctx.lineWidth = isMain ? 2.2 : isTrack ? 0.9 : 1.3;
+      if (r.hw === 'track' || r.hw === 'service') continue;
+      ctx.strokeStyle = isMain ? 'rgba(255, 250, 232, 0.85)' : 'rgba(232, 234, 228, 0.45)';
+      ctx.lineWidth = isMain ? 1.8 : 0.9;
       ctx.beginPath();
       r.pts.forEach(([x, z], idx) => {
         if (idx === 0) ctx.moveTo(this.toPX(x), this.toPZ(z));
@@ -96,21 +89,34 @@ export class MuensingMiniMap {
       ctx.stroke();
     }
 
-    // Home Farmyard square in Wimpasing
-    ctx.fillStyle = 'rgba(159, 211, 46, 0.35)';
-    ctx.fillRect(this.toPX(FARM_CENTER.x - 32), this.toPZ(FARM_CENTER.z - 30), 11, 11);
+    // Home Farmyard marker
+    ctx.fillStyle = 'rgba(159, 211, 46, 0.55)';
+    ctx.strokeStyle = '#131b0e';
+    ctx.lineWidth = 1;
+    const fx = this.toPX(FARM_CENTER.x);
+    const fz = this.toPZ(FARM_CENTER.z);
+    ctx.fillRect(fx - 4, fz - 4, 8, 8);
+    ctx.strokeRect(fx - 4, fz - 4, 8, 8);
 
-    // Crisp real hamlet labels matching the user's screenshot!
-    ctx.font = 'bold 8px Nunito, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(244, 249, 240, 0.92)';
-    ctx.fillText('Weipertshausen', this.toPX(REAL_SPOTS.weipertshausen.x), this.toPZ(REAL_SPOTS.weipertshausen.z) - 4);
-    ctx.fillText('Ried', this.toPX(REAL_SPOTS.ried.x), this.toPZ(REAL_SPOTS.ried.z) - 4);
-    ctx.fillText('Wimpasing', this.toPX(REAL_SPOTS.wimpasing.x), this.toPZ(REAL_SPOTS.wimpasing.z) + 10);
-    ctx.fillText('Münsing', this.toPX(REAL_SPOTS.muensingAltwirt.x), this.toPZ(REAL_SPOTS.muensingAltwirt.z) - 6);
-    ctx.fillStyle = '#9ee2ff';
-    ctx.fillText('Ammerland', this.toPX(REAL_SPOTS.schlossAmmerland.x) + 18, this.toPZ(REAL_SPOTS.schlossAmmerland.z) + 14);
-    ctx.fillText('SEE', this.toPX(-330), this.toPZ(-40));
+    // Crisp dark-haloed real Bavarian place labels
+    const drawLabel = (text: string, x: number, z: number, color = '#f6faf0', ox = 0, oy = -4) => {
+      const px = this.toPX(x) + ox;
+      const pz = this.toPZ(z) + oy;
+      ctx.font = 'bold 8.5px Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = 'rgba(10, 14, 12, 0.85)';
+      ctx.strokeText(text, px, pz);
+      ctx.fillStyle = color;
+      ctx.fillText(text, px, pz);
+    };
+
+    drawLabel('Weipertshausen', REAL_SPOTS.weipertshausen.x, REAL_SPOTS.weipertshausen.z, '#f6faf0', 0, 11);
+    drawLabel('Ried', REAL_SPOTS.ried.x, REAL_SPOTS.ried.z, '#f6faf0', 0, -4);
+    drawLabel('Wimpasing', REAL_SPOTS.wimpasing.x, REAL_SPOTS.wimpasing.z, '#f6faf0', 0, 11);
+    drawLabel('Münsing', REAL_SPOTS.muensingAltwirt.x, REAL_SPOTS.muensingAltwirt.z, '#ffe785', -6, -6);
+    drawLabel('Ammerland', REAL_SPOTS.schlossAmmerland.x, REAL_SPOTS.schlossAmmerland.z, '#9ee5ff', 14, 11);
+    drawLabel('SEE', -1030, -40, '#9ee5ff', 0, 0);
   }
 
   public render(
@@ -155,7 +161,7 @@ export class MuensingMiniMap {
     ctx.rotate(-tractorHeading);
     ctx.fillStyle = '#a2d730';
     ctx.strokeStyle = '#121811';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(0, -6.5);
     ctx.lineTo(4.5, 5);

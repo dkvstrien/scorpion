@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import {
   FARM_CENTER,
+  getShorelineX,
   getTerrainHeight,
   OSM_DATA,
   REAL_SPOTS,
+  SEBALD_PIER,
   WATER_LEVEL
 } from './terrain';
 import { createAsphaltTexture } from './textures';
@@ -102,7 +104,7 @@ function createClockTexture(): THREE.CanvasTexture {
   c.width = 128;
   c.height = 128;
   const ctx = c.getContext('2d')!;
-  ctx.fillStyle = '#1d2530';
+  ctx.fillStyle = '#192028';
   ctx.beginPath();
   ctx.arc(64, 64, 60, 0, Math.PI * 2);
   ctx.fill();
@@ -111,14 +113,14 @@ function createClockTexture(): THREE.CanvasTexture {
   ctx.stroke();
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2;
-    ctx.strokeStyle = '#f2d36b';
+    ctx.strokeStyle = '#f4d672';
     ctx.lineWidth = i % 3 === 0 ? 4 : 2;
     ctx.beginPath();
-    ctx.moveTo(64 + Math.cos(a) * 42, 64 + Math.sin(a) * 42);
+    ctx.moveTo(64 + Math.cos(a) * 40, 64 + Math.sin(a) * 40);
     ctx.lineTo(64 + Math.cos(a) * 53, 64 + Math.sin(a) * 53);
     ctx.stroke();
   }
-  ctx.strokeStyle = '#f7df7c';
+  ctx.strokeStyle = '#f8e080';
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.moveTo(64, 64);
@@ -131,70 +133,172 @@ function createClockTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-function createBavarianFacadeTexture(): THREE.CanvasTexture {
+/**
+ * 4 Authentic Upper Bavarian Architectural Facade Textures (modeled directly from real Münsing & Starnberger See homes!):
+ * - 'einfirsthof': Signature cream-plaster ground floor + rich dark weathered brown larch timber upper story + carved balcony & red geraniums!
+ * - 'timber': Full warm weathered brown Alpine timber plank farmhouse / chalet with dark green shutters!
+ * - 'barn': Tall weathered dark-brown vertical timber Stadel planks + wide double wooden barn doors + hayloft hatch!
+ * - 'landhaus': Warm ochre/cream village plaster with painted Alpine window trim (Lüftlmalerei) + dark timber eaves & shutters!
+ */
+function createBavarianArchetypeTexture(
+  kind: 'einfirsthof' | 'timber' | 'barn' | 'landhaus'
+): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 256;
   c.height = 256;
   const ctx = c.getContext('2d')!;
 
-  // Warm Upper Bavarian lime plaster base (tinted per-instance via instanceColor!)
-  ctx.fillStyle = '#f6f2e8';
-  ctx.fillRect(0, 0, 256, 256);
-
-  // Subtle plaster grain
-  for (let i = 0; i < 650; i++) {
-    const x = Math.random() * 256;
-    const y = Math.random() * 256;
-    ctx.fillStyle = i % 2 === 0 ? 'rgba(0,0,0,0.035)' : 'rgba(255,255,255,0.05)';
-    ctx.fillRect(x, y, 2, 2);
-  }
-
-  // Dark stone foundation plinth at bottom
-  ctx.fillStyle = '#8b857b';
-  ctx.fillRect(0, 224, 256, 32);
-  ctx.fillStyle = '#6f6960';
-  ctx.fillRect(0, 222, 256, 4);
-
-  // Dark Alpine timber horizontal balcony rail across mid-floor
-  ctx.fillStyle = '#5c3c22';
-  ctx.fillRect(0, 114, 256, 10);
-  ctx.fillStyle = '#734b2b';
-  ctx.fillRect(0, 124, 256, 4);
-
-  // Two rows of classic Bavarian shuttered windows (3 per row)
-  const rows = [42, 148];
-  const cols = [42, 128, 214];
-  for (const wy of rows) {
-    for (const wx of cols) {
-      // Green wooden shutters flanking each window
-      ctx.fillStyle = '#2d5c3b';
-      ctx.fillRect(wx - 24, wy - 20, 10, 42);
-      ctx.fillRect(wx + 14, wy - 20, 10, 42);
-      ctx.strokeStyle = '#1f4229';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(wx - 24, wy - 20, 10, 42);
-      ctx.strokeRect(wx + 14, wy - 20, 10, 42);
-
-      // Warm glazed pane + white timber muntin cross
-      ctx.fillStyle = '#334652';
-      ctx.fillRect(wx - 13, wy - 19, 26, 40);
-      ctx.fillStyle = 'rgba(255, 223, 152, 0.32)';
-      ctx.fillRect(wx - 11, wy - 17, 22, 36);
-      ctx.fillStyle = '#f2ede2';
-      ctx.fillRect(wx - 1, wy - 19, 2, 40);
-      ctx.fillRect(wx - 13, wy - 1, 26, 2);
-
-      // Red geranium window flowerbox on upper floor!
-      if (wy < 100) {
-        ctx.fillStyle = '#5a3920';
-        ctx.fillRect(wx - 16, wy + 20, 32, 7);
-        ctx.fillStyle = '#2f6a34';
-        ctx.fillRect(wx - 15, wy + 17, 30, 4);
-        ctx.fillStyle = '#d6332c';
-        ctx.fillRect(wx - 12, wy + 15, 5, 4);
-        ctx.fillRect(wx - 2, wy + 14, 6, 4);
-        ctx.fillRect(wx + 7, wy + 15, 5, 4);
+  const drawPlanks = (y0: number, y1: number, baseHex: string, vertical = false) => {
+    ctx.fillStyle = baseHex;
+    ctx.fillRect(0, y0, 256, y1 - y0);
+    if (vertical) {
+      for (let x = 0; x < 256; x += 12) {
+        ctx.fillStyle = x % 24 === 0 ? 'rgba(0,0,0,0.14)' : 'rgba(255,220,175,0.06)';
+        ctx.fillRect(x, y0, 10, y1 - y0);
+        ctx.fillStyle = 'rgba(25,14,6,0.34)';
+        ctx.fillRect(x + 10, y0, 2, y1 - y0);
       }
+    } else {
+      for (let y = y0; y < y1; y += 11) {
+        ctx.fillStyle = y % 22 === 0 ? 'rgba(0,0,0,0.12)' : 'rgba(255,220,180,0.06)';
+        ctx.fillRect(0, y, 256, 9);
+        ctx.fillStyle = 'rgba(28,15,6,0.3)';
+        ctx.fillRect(0, y + 9, 256, 2);
+      }
+    }
+  };
+
+  const drawWindow = (wx: number, wy: number, shutterColor: string, flowers: boolean, lueftl = false) => {
+    if (lueftl) {
+      // Subtle painted Upper Bavarian Lüftlmalerei frame around window!
+      ctx.strokeStyle = '#9c6638';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(wx - 18, wy - 23, 36, 46);
+      ctx.fillStyle = '#c27b48';
+      ctx.fillRect(wx - 10, wy - 28, 20, 5);
+    }
+    if (shutterColor) {
+      ctx.fillStyle = shutterColor;
+      ctx.fillRect(wx - 24, wy - 19, 10, 40);
+      ctx.fillRect(wx + 14, wy - 19, 10, 40);
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(wx - 24, wy - 19, 10, 40);
+      ctx.strokeRect(wx + 14, wy - 19, 10, 40);
+    }
+    ctx.fillStyle = '#2b3b45';
+    ctx.fillRect(wx - 13, wy - 18, 26, 38);
+    ctx.fillStyle = 'rgba(255, 222, 152, 0.28)';
+    ctx.fillRect(wx - 11, wy - 16, 22, 34);
+    ctx.fillStyle = '#efe9dc';
+    ctx.fillRect(wx - 1, wy - 18, 2, 38);
+    ctx.fillRect(wx - 13, wy - 1, 26, 2);
+
+    if (flowers) {
+      ctx.fillStyle = '#4e2f18';
+      ctx.fillRect(wx - 17, wy + 19, 34, 7);
+      ctx.fillStyle = '#2d6330';
+      ctx.fillRect(wx - 16, wy + 16, 32, 4);
+      ctx.fillStyle = '#d62f29';
+      ctx.fillRect(wx - 13, wy + 13, 5, 5);
+      ctx.fillRect(wx - 3, wy + 12, 6, 5);
+      ctx.fillRect(wx + 7, wy + 13, 5, 5);
+    }
+  };
+
+  if (kind === 'einfirsthof') {
+    // Upper half: Rich dark weathered brown Bavarian timber!
+    drawPlanks(0, 128, '#6e472a', false);
+    // Lower half: Warm Bavarian cream-ochre lime plaster + stone foundation plinth
+    ctx.fillStyle = '#f2ead9';
+    ctx.fillRect(0, 128, 256, 100);
+    ctx.fillStyle = '#877f73';
+    ctx.fillRect(0, 228, 256, 28);
+
+    // Classic carved brown wooden Bavarian wrap-around balcony (Balkon) across mid-floor!
+    ctx.fillStyle = '#4e2f19';
+    ctx.fillRect(0, 104, 256, 28);
+    for (let x = 4; x < 256; x += 12) {
+      ctx.fillStyle = '#7c5130';
+      ctx.fillRect(x, 108, 7, 20);
+    }
+    ctx.fillStyle = '#3b2211';
+    ctx.fillRect(0, 102, 256, 4);
+    ctx.fillRect(0, 128, 256, 5);
+    // Bright red geranium boxes lined along the wooden balcony!
+    for (let x = 14; x < 244; x += 38) {
+      ctx.fillStyle = '#2b5e2e';
+      ctx.fillRect(x, 96, 28, 6);
+      ctx.fillStyle = '#d83029';
+      ctx.fillRect(x + 3, 93, 6, 5);
+      ctx.fillRect(x + 12, 92, 6, 5);
+      ctx.fillRect(x + 20, 93, 5, 5);
+    }
+
+    for (const wx of [44, 128, 212]) {
+      drawWindow(wx, 48, '#285234', false);
+      drawWindow(wx, 174, '#285234', true);
+    }
+  } else if (kind === 'timber') {
+    // Full warm weathered brown Bavarian larch-wood chalet/farmhouse!
+    drawPlanks(0, 226, '#7a4f2d', false);
+    ctx.fillStyle = '#7e766b';
+    ctx.fillRect(0, 226, 256, 30);
+
+    // Heavy horizontal timber mid-beam & carved timber rail
+    ctx.fillStyle = '#492b16';
+    ctx.fillRect(0, 114, 256, 12);
+    for (const wx of [44, 128, 212]) {
+      drawWindow(wx, 52, '#2a5636', true);
+      drawWindow(wx, 172, '#2a5636', false);
+    }
+  } else if (kind === 'barn') {
+    // Authentic Upper Bavarian weathered dark-brown vertical timber Stadel (Hay Barn)!
+    drawPlanks(0, 232, '#5a3a21', true);
+    ctx.fillStyle = '#6f685e';
+    ctx.fillRect(0, 232, 256, 24);
+    // Horizontal cross-bracing beams
+    ctx.fillStyle = '#3d2513';
+    ctx.fillRect(0, 112, 256, 10);
+    ctx.fillRect(0, 12, 256, 8);
+    // Wide double sliding wooden barn doors in center
+    ctx.fillStyle = '#472c18';
+    ctx.fillRect(72, 128, 112, 104);
+    ctx.strokeStyle = '#2c190c';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(72, 128, 56, 104);
+    ctx.strokeRect(128, 128, 56, 104);
+    // Diagonal X-bracing on barn doors
+    ctx.beginPath();
+    ctx.moveTo(74, 130);
+    ctx.lineTo(126, 230);
+    ctx.moveTo(126, 130);
+    ctx.lineTo(74, 230);
+    ctx.moveTo(130, 130);
+    ctx.lineTo(182, 230);
+    ctx.moveTo(182, 130);
+    ctx.lineTo(130, 230);
+    ctx.stroke();
+    // Upper hayloft vent hatch
+    ctx.fillStyle = '#25170e';
+    ctx.fillRect(104, 38, 48, 52);
+    ctx.strokeStyle = '#8b5e36';
+    ctx.strokeRect(104, 38, 48, 52);
+  } else {
+    // Warm ochre/cream village Landhaus with Alpine painted window borders & dark timber eaves
+    ctx.fillStyle = '#f4ebd7';
+    ctx.fillRect(0, 0, 256, 226);
+    for (let i = 0; i < 600; i++) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)';
+      ctx.fillRect(Math.random() * 256, Math.random() * 226, 2, 2);
+    }
+    ctx.fillStyle = '#53351d';
+    ctx.fillRect(0, 0, 256, 14); // Dark timber top eaves band
+    ctx.fillStyle = '#857e74';
+    ctx.fillRect(0, 226, 256, 30);
+    for (const wx of [44, 128, 212]) {
+      drawWindow(wx, 56, '#2a5636', true, true);
+      drawWindow(wx, 166, '#2a5636', false, true);
     }
   }
 
@@ -203,6 +307,68 @@ function createBavarianFacadeTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
   return tex;
+}
+
+function createTileRoofTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#b4492d';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 16) {
+    for (let x = 0; x < 256; x += 16) {
+      const shade = ((x * 7 + y * 13) % 24) - 12;
+      ctx.fillStyle = `rgb(${176 + shade}, ${72 + Math.floor(shade * 0.5)}, ${45 + Math.floor(shade * 0.4)})`;
+      ctx.fillRect(x + 1, y + 1, 14, 13);
+    }
+    ctx.fillStyle = 'rgba(30,10,5,0.28)';
+    ctx.fillRect(0, y + 14, 256, 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 2);
+  return tex;
+}
+
+/**
+ * True overhanging Upper Bavarian Satteldach (pitched gable roof with triangular prism geometry, NOT a pyramid cone!).
+ * Unit dimensions: width 1 along X (ridge along X), depth 1 along Z (eaves along ±Z), height 1 from y=0..1.
+ */
+function createBavarianGableRoofGeometry(): THREE.BufferGeometry {
+  const hw = 0.56; // Generous Bavarian gable overhang along X
+  const hd = 0.58; // Broad overhanging eaves along Z
+  const h = 1.0;
+
+  const verts = [
+    // South roof slope (+Z)
+    -hw, 0, hd,  hw, 0, hd,  hw, h, 0,
+    -hw, 0, hd,  hw, h, 0,  -hw, h, 0,
+    // North roof slope (-Z)
+    hw, 0, -hd,  -hw, 0, -hd,  -hw, h, 0,
+    hw, 0, -hd,  -hw, h, 0,   hw, h, 0,
+    // West gable triangle (-X)
+    -hw, 0, -hd,  -hw, 0, hd,  -hw, h, 0,
+    // East gable triangle (+X)
+    hw, 0, hd,   hw, 0, -hd,   hw, h, 0,
+    // Underside eaves soffit
+    -hw, 0, -hd,  hw, 0, -hd,  hw, 0, hd,
+    -hw, 0, -hd,  hw, 0, hd,  -hw, 0, hd
+  ];
+  const uvs = [
+    0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1,
+    0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1,
+    0, 0, 1, 0, 0.5, 1,
+    0, 0, 1, 0, 0.5, 1,
+    0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1
+  ];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+  return geo;
 }
 
 function pointToSegmentDistSq(
@@ -248,7 +414,7 @@ function createMaibaumTexture(): THREE.CanvasTexture {
 }
 
 /**
- * Builds a single merged terrain-conforming ribbon mesh for dozens of real OSM polylines (1 draw call!).
+ * Builds a single merged terrain-conforming ribbon mesh with counter-clockwise upward normals!
  */
 function buildMergedRibbonMesh(
   polylines: { pts: [number, number][]; halfWidth: number }[],
@@ -261,13 +427,12 @@ function buildMergedRibbonMesh(
   let vBase = 0;
 
   for (const line of polylines) {
-    // Subdivide long segments so ribbons hug hills cleanly without slicing underground!
     const dense: [number, number][] = [];
     for (let i = 0; i < line.pts.length - 1; i++) {
       const a = line.pts[i];
       const b = line.pts[i + 1];
       const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      const steps = Math.max(1, Math.ceil(dist / 5));
+      const steps = Math.max(1, Math.ceil(dist / 7));
       for (let s = 0; s < steps; s++) {
         const t = s / steps;
         dense.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
@@ -295,12 +460,11 @@ function buildMergedRibbonMesh(
 
       positions.push(lx, getTerrainHeight(lx, lz) + yOffset, lz);
       positions.push(rx, getTerrainHeight(rx, rz) + yOffset, rz);
-      uvs.push(0, accumLen * 0.14);
-      uvs.push(1, accumLen * 0.14);
+      uvs.push(0, accumLen * 0.1);
+      uvs.push(1, accumLen * 0.1);
 
       if (i < dense.length - 1) {
         const i0 = vBase + i * 2;
-        // Counter-clockwise winding viewed from +Y so road & stream normals point UP!
         indices.push(i0, i0 + 2, i0 + 1);
         indices.push(i0 + 1, i0 + 2, i0 + 3);
       }
@@ -364,10 +528,10 @@ export class RealMuensingWorld {
       emissiveIntensity: 0.45
     });
 
-    this.buildRealOSMRoadsAndStreams(scene);
-    this.buildRealOSMBuildings(scene, world, groundMat);
+    this.buildRealOSMRoadsAndDetails(scene);
+    this.buildRealBavarianBuildings(scene, world, groundMat);
     this.buildHeroLandmarks(scene, world, groundMat);
-    this.buildRealOSMForests(scene);
+    this.buildMultiSpeciesBavarianForests(scene);
     this.buildInteractivePropsAndCars();
     this.buildDestructibleTreesAndLamps();
     this.buildPedestrians();
@@ -377,7 +541,7 @@ export class RealMuensingWorld {
     this.warmWindowMat.emissiveIntensity = 0.22 + nightAmount * 1.5;
     this.lampBulbMat.emissiveIntensity = 0.35 + nightAmount * 2.0;
     for (const pl of this.lampPointLights) {
-      pl.intensity = nightAmount * 16;
+      pl.intensity = nightAmount * 18;
     }
   }
 
@@ -399,97 +563,145 @@ export class RealMuensingWorld {
     world.addBody(body);
   }
 
-  private buildRealOSMRoadsAndStreams(scene: THREE.Scene): void {
-    const paved: { pts: [number, number][]; halfWidth: number }[] = [];
-    const tracks: { pts: [number, number][]; halfWidth: number }[] = [];
+  private buildRealOSMRoadsAndDetails(scene: THREE.Scene): void {
+    const mainPaved: { pts: [number, number][]; halfWidth: number }[] = [];
+    const villagePaved: { pts: [number, number][]; halfWidth: number }[] = [];
 
     for (const r of OSM_DATA.roads) {
-      if (r.hw === 'track' || r.hw === 'service') {
-        tracks.push({ pts: r.pts, halfWidth: 2.3 });
-      } else if (r.hw === 'secondary' || r.hw === 'tertiary') {
-        paved.push({ pts: r.pts, halfWidth: 4.4 });
+      // Let farm tracks & driveways show directly from the crisp 20cm Bavaria aerial orthophoto!
+      if (r.hw === 'track' || r.hw === 'service') continue;
+      if (r.hw === 'secondary' || r.hw === 'tertiary') {
+        mainPaved.push({ pts: r.pts, halfWidth: 4.6 });
       } else {
-        paved.push({ pts: r.pts, halfWidth: 3.3 });
+        villagePaved.push({ pts: r.pts, halfWidth: 3.4 });
       }
     }
 
-    // Add a short farm driveway linking Wimpasing Home Farm (75, 175) straight south onto Münsinger Straße!
-    paved.push({
+    // Crisp farm access driveway linking Wimpasing Home Farm south onto Am Wallgraben / Münsinger Straße & west to Sterzenweg!
+    villagePaved.push({
       pts: [
-        [FARM_CENTER.x, FARM_CENTER.z + 28],
-        [FARM_CENTER.x + 12, FARM_CENTER.z + 46],
-        [110, 224],
-        [160.9, 223.3]
+        [FARM_CENTER.x, FARM_CENTER.z + 29],
+        [FARM_CENTER.x - 10, FARM_CENTER.z + 75],
+        [-124.6, 612.1]
       ],
-      halfWidth: 4.0
+      halfWidth: 3.6
     });
-    // And west farm lane connecting cleanly into Wimpasing hamlet!
-    tracks.push({
+    villagePaved.push({
       pts: [
-        [FARM_CENTER.x - 28, FARM_CENTER.z + 4],
-        [20, 185],
-        [-21.6, 194.3]
+        [FARM_CENTER.x - 30, FARM_CENTER.z + 6],
+        [-155, 514],
+        [-200.2, 533.5]
       ],
       halfWidth: 3.2
     });
 
     const asphaltTex = createAsphaltTexture();
-    asphaltTex.repeat.set(1, 2);
-    const asphaltMat = new THREE.MeshStandardMaterial({
+    const mainAsphaltMat = new THREE.MeshStandardMaterial({
       map: asphaltTex,
       roughness: 0.88,
       metalness: 0.05,
+      transparent: true,
+      opacity: 0.88,
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2
     });
-    const trackMat = new THREE.MeshStandardMaterial({
-      color: 0xa5967e,
-      roughness: 0.96,
+    const villageAsphaltMat = new THREE.MeshStandardMaterial({
+      color: 0x4b4f54,
+      roughness: 0.92,
+      transparent: true,
+      opacity: 0.72,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1
     });
 
-    scene.add(buildMergedRibbonMesh(paved, 0.22, asphaltMat));
-    scene.add(buildMergedRibbonMesh(tracks, 0.15, trackMat));
+    scene.add(buildMergedRibbonMesh(mainPaved, 0.24, mainAsphaltMat));
+    scene.add(buildMergedRibbonMesh(villagePaved, 0.18, villageAsphaltMat));
 
-    // Real Lübbach stream ribbon flowing north-south along the west edge of Münsing!
+    // Lübbach stream ribbon flowing north-south along the west edge of Münsing
     if (OSM_DATA.streams.length > 0) {
-      const streamLines = OSM_DATA.streams.map((s) => ({ pts: s.pts, halfWidth: 1.7 }));
+      const streamLines = OSM_DATA.streams.map((s) => ({ pts: s.pts, halfWidth: 2.2 }));
       const streamMat = new THREE.MeshStandardMaterial({
-        color: 0x2c7ea6,
-        roughness: 0.18,
-        metalness: 0.45,
+        color: 0x26799c,
+        roughness: 0.16,
+        metalness: 0.48,
+        transparent: true,
+        opacity: 0.85,
         polygonOffset: true,
         polygonOffsetFactor: -1,
         polygonOffsetUnits: -1
       });
-      scene.add(buildMergedRibbonMesh(streamLines, 0.12, streamMat));
+      scene.add(buildMergedRibbonMesh(streamLines, 0.14, streamMat));
     }
 
-    // Authentic German Yellow Ortsschilder at Münsing, Wimpasing & Ammerland!
-    this.addTownSign(scene, 'Münsing', 'Lkr. Bad Tölz-Wolfratshausen', 360, 228, -0.3);
-    this.addTownSign(scene, 'Wimpasing', 'Gemeinde Münsing', 44, 198, Math.PI / 2);
-    this.addTownSign(scene, 'Ammerland', 'Starnberger See · 584m', -172, 178, Math.PI / 2);
+    // Authentic German white-and-black roadside reflector posts (Leitpfosten) along main Landstraßen!
+    const postPositions: [number, number][] = [];
+    for (const r of mainPaved) {
+      for (let i = 0; i < r.pts.length - 1; i++) {
+        const a = r.pts[i];
+        const b = r.pts[i + 1];
+        const dist = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (dist < 18) continue;
+        const steps = Math.max(1, Math.floor(dist / 36));
+        const nx = -(b[1] - a[1]) / dist;
+        const nz = (b[0] - a[0]) / dist;
+        for (let s = 1; s <= steps; s++) {
+          const t = s / (steps + 1);
+          const mx = a[0] + (b[0] - a[0]) * t;
+          const mz = a[1] + (b[1] - a[1]) * t;
+          if (Math.hypot(mx - REAL_SPOTS.muensingChurch.x, mz - REAL_SPOTS.muensingChurch.z) < 65) continue;
+          postPositions.push([mx + nx * 5.4, mz + nz * 5.4]);
+          postPositions.push([mx - nx * 5.4, mz - nz * 5.4]);
+        }
+      }
+    }
+    if (postPositions.length > 0) {
+      const lpGeo = new THREE.BoxGeometry(0.14, 0.95, 0.08);
+      const lpMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f4, roughness: 0.55 });
+      const lpCapGeo = new THREE.BoxGeometry(0.15, 0.22, 0.09);
+      const lpCapMat = new THREE.MeshStandardMaterial({ color: 0x1c1e20, roughness: 0.65 });
+      const lpInst = new THREE.InstancedMesh(lpGeo, lpMat, postPositions.length);
+      const capInst = new THREE.InstancedMesh(lpCapGeo, lpCapMat, postPositions.length);
+      const dummy = new THREE.Object3D();
+      postPositions.forEach(([px, pz], idx) => {
+        const gy = getTerrainHeight(px, pz);
+        dummy.position.set(px, gy + 0.46, pz);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        lpInst.setMatrixAt(idx, dummy.matrix);
+        dummy.position.set(px, gy + 0.72, pz);
+        dummy.updateMatrix();
+        capInst.setMatrixAt(idx, dummy.matrix);
+      });
+      lpInst.instanceMatrix.needsUpdate = true;
+      capInst.instanceMatrix.needsUpdate = true;
+      scene.add(lpInst, capInst);
+    }
+
+    // Authentic German Yellow Ortsschilder at Münsing, Wimpasing, Ammerland & Weipertshausen!
+    this.addTownSign(scene, 'Münsing', 'Lkr. Bad Tölz-Wolfratshausen', 748, 668, -Math.PI / 2);
+    this.addTownSign(scene, 'Wimpasing', 'Gemeinde Münsing', -208, 550, Math.PI / 2);
+    this.addTownSign(scene, 'Ammerland', 'Starnberger See · 584m', -665, 456, Math.PI / 2);
+    this.addTownSign(scene, 'Weipertshausen', 'Gemeinde Münsing', 302, -736, 0.1);
   }
 
   private addTownSign(scene: THREE.Scene, title: string, sub: string, x: number, z: number, rotY: number): void {
     const gy = getTerrainHeight(x, z);
     const g = new THREE.Group();
     const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.07, 0.08, 2.8, 8),
+      new THREE.CylinderGeometry(0.07, 0.08, 2.9, 8),
       new THREE.MeshStandardMaterial({ color: 0x62686e, roughness: 0.5, metalness: 0.5 })
     );
-    pole.position.y = 1.4;
+    pole.position.y = 1.45;
     g.add(pole);
 
     const tex = makeSignTexture(320, 140, '#f2c016', '#16181a', title, sub, '#121416');
     const board = new THREE.Mesh(
-      new THREE.BoxGeometry(2.35, 1.05, 0.08),
-      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55 })
+      new THREE.BoxGeometry(2.4, 1.08, 0.08),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.52 })
     );
-    board.position.y = 2.4;
+    board.position.y = 2.45;
     g.add(board);
 
     g.position.set(x, gy, z);
@@ -497,385 +709,349 @@ export class RealMuensingWorld {
     scene.add(g);
   }
 
-  private buildRealOSMBuildings(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // Pre-collect paved road segments so NO generic OSM building ever blocks or encroaches on a drivable road!
+  /**
+   * Renders all ~850 real OSM buildings using 4 rich, authentic Upper Bavarian archetypes (predominantly brown-timber
+   * & red-gable-roof Einfirsthöfe, dark larch Bauernhäuser, weathered timber Stadel barns, and warm ochre Landhäuser)
+   * with true overhanging Satteldach gable roofs and chimneys — zero repetitive white boxes!
+   */
+  private buildRealBavarianBuildings(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
     const pavedSegs: [number, number, number, number, number][] = [];
     for (const r of OSM_DATA.roads) {
       if (r.hw === 'track' || r.hw === 'service') continue;
-      const hw = r.hw === 'secondary' || r.hw === 'tertiary' ? 5.0 : 3.8;
+      const hw = r.hw === 'secondary' || r.hw === 'tertiary' ? 5.6 : 4.2;
       for (let i = 0; i < r.pts.length - 1; i++) {
         pavedSegs.push([r.pts[i][0], r.pts[i][1], r.pts[i + 1][0], r.pts[i + 1][1], hw]);
       }
     }
 
-    // Filter out buildings inside our Wimpasing Home Farmyard, hero landmarks, or overlapping any paved street!
-    const regular = OSM_DATA.buildings.filter((b) => {
-      if (Math.abs(b.x - FARM_CENTER.x) < 42 && Math.abs(b.z - FARM_CENTER.z) < 40) return false;
-      if (b.type === 'church' || b.type === 'castle') return false;
-      if (Math.hypot(b.x - REAL_SPOTS.muensingChurch.x, b.z - REAL_SPOTS.muensingChurch.z) < 22) return false;
-      if (Math.hypot(b.x - REAL_SPOTS.muensingAltwirt.x, b.z - REAL_SPOTS.muensingAltwirt.z) < 20) return false;
-      if (Math.hypot(b.x - REAL_SPOTS.schlossAmmerland.x, b.z - REAL_SPOTS.schlossAmmerland.z) < 22) return false;
-      if (Math.hypot(b.x - REAL_SPOTS.sebaldPier.x, b.z - REAL_SPOTS.sebaldPier.z) < 22) return false;
-      // Keep scenic fast-travel plazas on paved roads 100% unobstructed
-      if (Math.hypot(b.x - 436, b.z - 229) < 15) return false;
-      if (Math.hypot(b.x - 256, b.z - -352) < 16) return false;
+    type BItem = { x: number; z: number; w: number; d: number; h: number; rot: number; arch: 'einfirsthof' | 'timber' | 'barn' | 'landhaus' };
+    const buckets: Record<BItem['arch'], BItem[]> = {
+      einfirsthof: [],
+      timber: [],
+      barn: [],
+      landhaus: []
+    };
 
-      const approxR = THREE.MathUtils.clamp(Math.max(b.w, b.d) * 0.56, 3.6, 11.5) * 0.48;
+    OSM_DATA.buildings.forEach((b, idx) => {
+      if (Math.abs(b.x - FARM_CENTER.x) < 52 && Math.abs(b.z - FARM_CENTER.z) < 48) return;
+      if (b.type === 'church' || b.type === 'castle') return;
+      if (Math.hypot(b.x - REAL_SPOTS.muensingChurch.x, b.z - REAL_SPOTS.muensingChurch.z) < 28) return;
+      if (Math.hypot(b.x - REAL_SPOTS.muensingAltwirt.x, b.z - REAL_SPOTS.muensingAltwirt.z) < 24) return;
+      if (Math.hypot(b.x - REAL_SPOTS.schlossAmmerland.x, b.z - REAL_SPOTS.schlossAmmerland.z) < 32) return;
+      if (Math.hypot(b.x - REAL_SPOTS.sebaldPier.x, b.z - REAL_SPOTS.sebaldPier.z) < 36) return;
+      // Keep scenic paved fast-travel plazas completely open
+      if (Math.hypot(b.x - 804, b.z - 666) < 16) return;
+      if (Math.hypot(b.x - -694, b.z - 426) < 18) return;
+      if (Math.hypot(b.x - 298, b.z - -773) < 16) return;
+
+      // True near-1:1 building footprints matching our 0.65x real OSM streets!
+      const w = THREE.MathUtils.clamp(b.w * 0.9, 5.2, 22);
+      const d = THREE.MathUtils.clamp(b.d * 0.9, 4.6, 17);
+      const approxR = Math.min(w, d) * 0.45;
+
       for (const [ax, az, bx, bz, hw] of pavedSegs) {
         const minClear = hw + approxR;
-        if (pointToSegmentDistSq(b.x, b.z, ax, az, bx, bz) < minClear * minClear) return false;
+        if (pointToSegmentDistSq(b.x, b.z, ax, az, bx, bz) < minClear * minClear) return;
       }
-      return true;
+
+      let arch: BItem['arch'];
+      if (b.type === 'barn') {
+        arch = 'barn';
+      } else {
+        const roll = (idx * 37 + Math.abs(Math.round(b.x))) % 100;
+        if (roll < 42) arch = 'einfirsthof'; // Signature Upper Bavarian brown-timber + cream-base farmhouse!
+        else if (roll < 70) arch = 'timber'; // Full warm dark-brown larch timber home!
+        else if (roll < 82) arch = 'barn'; // Timber outbuilding / Stadel
+        else arch = 'landhaus'; // Warm ochre / apricot village house
+      }
+
+      const h =
+        arch === 'barn'
+          ? 4.6 + (idx % 2) * 1.1
+          : arch === 'einfirsthof'
+            ? 5.6 + (idx % 3) * 0.85
+            : 5.0 + (idx % 3) * 0.95;
+
+      buckets[arch].push({ x: b.x, z: b.z, w, d, h, rot: b.rot, arch });
     });
 
-    const count = regular.length;
     const wallGeo = new THREE.BoxGeometry(1, 1, 1);
-    const roofGeo = new THREE.ConeGeometry(0.78, 1, 4);
-    roofGeo.rotateY(Math.PI / 4);
+    const roofGeo = createBavarianGableRoofGeometry();
+    const chimneyGeo = new THREE.BoxGeometry(0.65, 1.4, 0.65);
+    const tileTex = createTileRoofTexture();
 
-    const facadeTex = createBavarianFacadeTexture();
-    const wallMat = new THREE.MeshStandardMaterial({
-      map: facadeTex,
-      roughness: 0.84,
-      metalness: 0.03
-    });
-    const roofMat = new THREE.MeshStandardMaterial({ roughness: 0.78, metalness: 0.08 });
+    const roofPalette = [0xc25434, 0xb14528, 0xa23c24, 0x8f3a25, 0x623b2c];
+    const tintPalettes: Record<BItem['arch'], number[]> = {
+      einfirsthof: [0xffffff, 0xf8f0e2, 0xf5e8d4, 0xfff8ec],
+      timber: [0xffffff, 0xefd7be, 0xe4c7a8, 0xd9b998],
+      barn: [0xffffff, 0xe8d5c2, 0xdcc5af],
+      landhaus: [0xfff4df, 0xf6e2bc, 0xf2d9b8, 0xeee6d4]
+    };
 
-    const wallInst = new THREE.InstancedMesh(wallGeo, wallMat, count);
-    const roofInst = new THREE.InstancedMesh(roofGeo, roofMat, count);
-    wallInst.castShadow = true;
-    wallInst.receiveShadow = true;
-    roofInst.castShadow = true;
-
-    const wallPalette = [0xffffff, 0xfaf0db, 0xf4eee0, 0xf2e4cc, 0xede0c8];
-    const roofPalette = [0xa8432a, 0x963a24, 0x733a27, 0x4c4a47];
     const dummy = new THREE.Object3D();
     const col = new THREE.Color();
+    const allChimneys: { x: number; y: number; z: number; rot: number }[] = [];
 
-    regular.forEach((b, idx) => {
-      const gy = getTerrainHeight(b.x, b.z);
-      // Proportionately scaled to match our 0.28× real OSM street grid so every village lane stays cleanly drivable!
-      const w = THREE.MathUtils.clamp(b.w * 0.56, 3.8, 11.5);
-      const d = THREE.MathUtils.clamp(b.d * 0.56, 3.4, 10.0);
-      const h = b.type === 'barn' ? 4.2 : 4.4 + (idx % 3) * 0.95;
+    (Object.keys(buckets) as BItem['arch'][]).forEach((arch) => {
+      const list = buckets[arch];
+      if (list.length === 0) return;
 
-      // Embed foundation 1.5m below terrain so sloped Bavarian houses NEVER float!
-      dummy.position.set(b.x, gy + h * 0.5 - 0.65, b.z);
-      dummy.rotation.set(0, b.rot, 0);
-      dummy.scale.set(w, h + 1.3, d);
-      dummy.updateMatrix();
-      wallInst.setMatrixAt(idx, dummy.matrix);
+      const wallMat = new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture(arch),
+        roughness: arch === 'barn' || arch === 'timber' ? 0.9 : 0.84,
+        metalness: 0.02
+      });
+      const roofMat = new THREE.MeshStandardMaterial({
+        map: tileTex,
+        roughness: 0.78,
+        metalness: 0.06
+      });
 
-      col.setHex(b.type === 'barn' ? 0xa9845c : wallPalette[idx % wallPalette.length]);
-      wallInst.setColorAt(idx, col);
+      const wallInst = new THREE.InstancedMesh(wallGeo, wallMat, list.length);
+      const roofInst = new THREE.InstancedMesh(roofGeo, roofMat, list.length);
+      wallInst.castShadow = true;
+      wallInst.receiveShadow = true;
+      roofInst.castShadow = true;
 
-      // Pitched Bavarian hipped roof with overhanging eaves
-      const roofH = Math.min(3.0, Math.min(w, d) * 0.44);
-      dummy.position.set(b.x, gy + h + roofH * 0.5 - 0.08, b.z);
-      dummy.rotation.set(0, b.rot, 0);
-      dummy.scale.set(w * 1.12, roofH, d * 1.12);
-      dummy.updateMatrix();
-      roofInst.setMatrixAt(idx, dummy.matrix);
+      const tints = tintPalettes[arch];
 
-      col.setHex(roofPalette[idx % roofPalette.length]);
-      roofInst.setColorAt(idx, col);
+      list.forEach((b, idx) => {
+        const gy = getTerrainHeight(b.x, b.z);
+        // Embed foundation 1.8m into sloped Bavarian terrain so NO house ever floats!
+        dummy.position.set(b.x, gy + b.h * 0.5 - 0.85, b.z);
+        dummy.rotation.set(0, b.rot, 0);
+        dummy.scale.set(b.w, b.h + 1.7, b.d);
+        dummy.updateMatrix();
+        wallInst.setMatrixAt(idx, dummy.matrix);
 
-      // Add solid physics colliders for key village-core buildings so driving feels real!
-      const nearHub =
-        Math.hypot(b.x - REAL_SPOTS.muensingAltwirt.x, b.z - REAL_SPOTS.muensingAltwirt.z) < 75 ||
-        Math.hypot(b.x - REAL_SPOTS.wimpasing.x, b.z - REAL_SPOTS.wimpasing.z) < 55 ||
-        Math.hypot(b.x - REAL_SPOTS.sebaldPier.x, b.z - REAL_SPOTS.sebaldPier.z) < 55;
-      if (nearHub) {
-        this.addStaticBox(world, groundMat, b.x, gy + h * 0.5, b.z, w, h, d, b.rot);
-      }
+        col.setHex(tints[idx % tints.length]);
+        wallInst.setColorAt(idx, col);
+
+        // True overhanging Bavarian gable roof aligned along the building's longer axis!
+        const roofH = Math.min(3.6, Math.min(b.w, b.d) * 0.34);
+        const ridgeRot = b.w >= b.d ? b.rot : b.rot + Math.PI / 2;
+        const rSpanX = Math.max(b.w, b.d);
+        const rSpanZ = Math.min(b.w, b.d);
+
+        dummy.position.set(b.x, gy + b.h - 0.08, b.z);
+        dummy.rotation.set(0, ridgeRot, 0);
+        dummy.scale.set(rSpanX, roofH, rSpanZ);
+        dummy.updateMatrix();
+        roofInst.setMatrixAt(idx, dummy.matrix);
+
+        col.setHex(roofPalette[(idx * 3 + arch.length) % roofPalette.length]);
+        roofInst.setColorAt(idx, col);
+
+        if (arch !== 'barn' && idx % 2 === 0) {
+          allChimneys.push({
+            x: b.x + Math.cos(ridgeRot) * rSpanX * 0.22,
+            y: gy + b.h + roofH * 0.72,
+            z: b.z - Math.sin(ridgeRot) * rSpanX * 0.22,
+            rot: ridgeRot
+          });
+        }
+
+        // Solid physics colliders for key hubs so driving feels genuinely physical
+        const nearHub =
+          Math.hypot(b.x - REAL_SPOTS.muensingAltwirt.x, b.z - REAL_SPOTS.muensingAltwirt.z) < 160 ||
+          Math.hypot(b.x - REAL_SPOTS.wimpasing.x, b.z - REAL_SPOTS.wimpasing.z) < 120 ||
+          Math.hypot(b.x - REAL_SPOTS.sebaldPier.x, b.z - REAL_SPOTS.sebaldPier.z) < 120 ||
+          Math.hypot(b.x - REAL_SPOTS.weipertshausen.x, b.z - REAL_SPOTS.weipertshausen.z) < 100;
+        if (nearHub) {
+          this.addStaticBox(world, groundMat, b.x, gy + b.h * 0.5, b.z, b.w, b.h, b.d, b.rot);
+        }
+      });
+
+      wallInst.instanceMatrix.needsUpdate = true;
+      roofInst.instanceMatrix.needsUpdate = true;
+      if (wallInst.instanceColor) wallInst.instanceColor.needsUpdate = true;
+      if (roofInst.instanceColor) roofInst.instanceColor.needsUpdate = true;
+      scene.add(wallInst, roofInst);
     });
 
-    wallInst.instanceMatrix.needsUpdate = true;
-    roofInst.instanceMatrix.needsUpdate = true;
-    if (wallInst.instanceColor) wallInst.instanceColor.needsUpdate = true;
-    if (roofInst.instanceColor) roofInst.instanceColor.needsUpdate = true;
-    scene.add(wallInst);
-    scene.add(roofInst);
+    if (allChimneys.length > 0) {
+      const chimMat = new THREE.MeshStandardMaterial({ color: 0x8f4330, roughness: 0.88 });
+      const chimInst = new THREE.InstancedMesh(chimneyGeo, chimMat, allChimneys.length);
+      allChimneys.forEach((ch, idx) => {
+        dummy.position.set(ch.x, ch.y, ch.z);
+        dummy.rotation.set(0, ch.rot, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        chimInst.setMatrixAt(idx, dummy.matrix);
+      });
+      chimInst.instanceMatrix.needsUpdate = true;
+      scene.add(chimInst);
+    }
   }
 
+  /**
+   * Photo-referenced hero landmarks at exact GPS coordinates:
+   * 1. Pfarrkirche St. Mariä Himmelfahrt (modeled directly from real 2023 Am Kirchberg 2 photo!)
+   * 2. Gasthaus & Metzgerei Zum Altwirt + Chestnut-Shaded Biergarten & Münsing Maibaum
+   * 3. Schloss Ammerland (authentic 1685 lakeside baroque palace with TWO copper Zwiebeltürme!)
+   * 4. Fischereihofladen & Bootsverleih Sebald + 58m Wooden Pier, Rowboats & Sailboats
+   */
   private buildHeroLandmarks(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    // === 1. PFARRKIRCHE ST. MARIÄ HIMMELFAHRT AT REAL GPS (456.6, 225.5) ===
+    const tileTex = createTileRoofTexture();
+    const gableGeo = createBavarianGableRoofGeometry();
+
+    // === 1. PFARRKIRCHE ST. MARIÄ HIMMELFAHRT AT REAL GPS (830.8, 657.7) ===
     {
       const cx = REAL_SPOTS.muensingChurch.x;
       const cz = REAL_SPOTS.muensingChurch.z;
       const gy = getTerrainHeight(cx, cz);
 
-      const stucco = new THREE.MeshStandardMaterial({ color: 0xf6f2e8, roughness: 0.84 });
-      const tileRed = new THREE.MeshStandardMaterial({ color: 0xa6422c, roughness: 0.78 });
-      const copper = new THREE.MeshStandardMaterial({ color: 0x468868, roughness: 0.34, metalness: 0.52 });
+      const stucco = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.84 });
+      const tileRed = new THREE.MeshStandardMaterial({ map: tileTex, color: 0xca5a3b, roughness: 0.78 });
+      const verdigrisCopper = new THREE.MeshStandardMaterial({ color: 0x335e50, roughness: 0.38, metalness: 0.48 });
       const gold = new THREE.MeshStandardMaterial({ color: 0xe8bd42, roughness: 0.2, metalness: 0.9 });
+      const oakMat = new THREE.MeshStandardMaterial({ color: 0x4d311c, roughness: 0.86 });
+      const louverMat = new THREE.MeshStandardMaterial({ color: 0x262928, roughness: 0.9 });
 
-      const nave = new THREE.Mesh(new THREE.BoxGeometry(16, 9, 9.2), stucco);
-      nave.position.set(cx, gy + 4.0, cz);
+      // Baroque Hall Nave (Saalbau)
+      const nave = new THREE.Mesh(new THREE.BoxGeometry(20, 9.6, 10.6), stucco);
+      nave.position.set(cx, gy + 4.2, cz);
       nave.castShadow = true;
       nave.receiveShadow = true;
       scene.add(nave);
-      this.addStaticBox(world, groundMat, cx, gy + 4.5, cz, 16, 9, 9.2);
+      this.addStaticBox(world, groundMat, cx, gy + 4.8, cz, 20, 9.6, 10.6);
 
-      // Arched stained-glass nave windows (south & north walls) + oak west portal + rose window!
-      const oakMat = new THREE.MeshStandardMaterial({ color: 0x4d311c, roughness: 0.85 });
-      const archGlass = this.warmWindowMat;
+      // Steep terracotta gable roof over nave
+      const naveRoof = new THREE.Mesh(gableGeo, tileRed);
+      naveRoof.position.set(cx, gy + 8.95, cz);
+      naveRoof.scale.set(20.6, 5.4, 11.2);
+      naveRoof.castShadow = true;
+      scene.add(naveRoof);
+
+      // Indented octagonal late-Gothic East Choir Apse (exact match to 2023 photo!)
+      const apse = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 8.8, 6), stucco);
+      apse.position.set(cx + 11.2, gy + 3.9, cz);
+      apse.castShadow = true;
+      scene.add(apse);
+      const apseRoof = new THREE.Mesh(new THREE.ConeGeometry(4.9, 4.2, 6), tileRed);
+      apseRoof.position.set(cx + 11.2, gy + 10.3, cz);
+      apseRoof.castShadow = true;
+      scene.add(apseRoof);
+
+      // Arched stained-glass nave windows + oak west portal & copper canopy
       for (const side of [-1, 1]) {
-        for (const wx of [-4.8, -1.6, 1.6, 4.8]) {
-          const wMesh = new THREE.Mesh(new THREE.BoxGeometry(1.1, 3.2, 0.16), archGlass);
-          wMesh.position.set(cx + wx, gy + 4.8, cz + side * 4.62);
+        for (const wx of [-6.2, -2.1, 2.1, 6.2]) {
+          const wMesh = new THREE.Mesh(new THREE.BoxGeometry(1.15, 3.3, 0.18), this.warmWindowMat);
+          wMesh.position.set(cx + wx, gy + 5.1, cz + side * 5.34);
           scene.add(wMesh);
-          const arch = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.16, 12), archGlass);
+          const arch = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.18, 12), this.warmWindowMat);
           arch.rotation.x = Math.PI / 2;
-          arch.position.set(cx + wx, gy + 6.4, cz + side * 4.62);
+          arch.position.set(cx + wx, gy + 6.75, cz + side * 5.34);
           scene.add(arch);
         }
       }
-      const portal = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.6, 2.4), oakMat);
-      portal.position.set(cx - 8.05, gy + 1.8, cz);
+      const portal = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.8, 2.5), oakMat);
+      portal.position.set(cx - 10.05, gy + 1.9, cz);
       scene.add(portal);
-      const rose = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.18, 16), archGlass);
-      rose.rotation.z = Math.PI / 2;
-      rose.position.set(cx - 8.05, gy + 6.1, cz);
-      scene.add(rose);
 
-      const roofSlopeLen = Math.hypot(5.4, 4.2);
-      const roofAng = Math.atan2(4.2, 5.4);
-      for (const s of [-1, 1]) {
-        const slope = new THREE.Mesh(new THREE.BoxGeometry(17.2, 0.28, roofSlopeLen), tileRed);
-        slope.position.set(cx, gy + 10.4, cz + s * 2.5);
-        slope.rotation.x = s * roofAng;
-        slope.castShadow = true;
-        scene.add(slope);
-      }
-
-      // Towering Southern Zwiebelturm Bell Tower!
-      const tx = cx + 6.0;
-      const tz = cz + 5.2;
-      const shaft = new THREE.Mesh(new THREE.BoxGeometry(4.6, 17, 4.6), stucco);
-      shaft.position.set(tx, gy + 8.0, tz);
+      // Iconic Tall Southern Bell Tower (square shaft -> octagonal belfry -> plump dark-verdigris fluted Zwiebelturm!)
+      const tx = cx + 5.5;
+      const tz = cz + 6.6;
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(5.2, 16.5, 5.2), stucco);
+      shaft.position.set(tx, gy + 7.8, tz);
       shaft.castShadow = true;
       scene.add(shaft);
-      this.addStaticBox(world, groundMat, tx, gy + 8.5, tz, 4.6, 17, 4.6);
+      this.addStaticBox(world, groundMat, tx, gy + 8.2, tz, 5.2, 16.5, 5.2);
 
-      const belfry = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.4, 4.5, 8), stucco);
-      belfry.position.set(tx, gy + 18.6, tz);
+      // Octagonal white upper belfry with dark louvered arched sound-holes & clock dials!
+      const belfry = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.85, 9.2, 8), stucco);
+      belfry.position.set(tx, gy + 20.5, tz);
       belfry.castShadow = true;
       scene.add(belfry);
 
       const clockMat = new THREE.MeshStandardMaterial({ map: createClockTexture(), roughness: 0.4 });
       for (const [ox, oz, ry] of [
-        [0, 2.34, 0],
-        [0, -2.34, Math.PI],
-        [2.34, 0, Math.PI / 2],
-        [-2.34, 0, -Math.PI / 2]
+        [0, 2.82, 0],
+        [0, -2.82, Math.PI],
+        [2.82, 0, Math.PI / 2],
+        [-2.82, 0, -Math.PI / 2]
       ]) {
         const face = new THREE.Mesh(new THREE.CircleGeometry(0.95, 18), clockMat);
-        face.position.set(tx + ox, gy + 14.8, tz + oz);
+        face.position.set(tx + ox, gy + 18.2, tz + oz);
         face.rotation.y = ry;
         scene.add(face);
+        const louver = new THREE.Mesh(new THREE.BoxGeometry(0.85, 2.2, 0.16), louverMat);
+        louver.position.set(tx + ox * 0.96, gy + 21.8, tz + oz * 0.96);
+        louver.rotation.y = ry;
+        scene.add(louver);
       }
 
+      // Authentic plump fluted dark-verdigris copper onion dome (matching 2023 reference photo!)
       const onionPts = [
-        new THREE.Vector2(0.01, 6.8),
-        new THREE.Vector2(0.32, 5.6),
-        new THREE.Vector2(0.8, 4.6),
-        new THREE.Vector2(0.58, 3.8),
-        new THREE.Vector2(1.55, 2.9),
-        new THREE.Vector2(2.8, 1.95),
-        new THREE.Vector2(2.55, 0.8),
-        new THREE.Vector2(2.3, 0)
+        new THREE.Vector2(0.01, 7.6),
+        new THREE.Vector2(0.28, 6.2),
+        new THREE.Vector2(1.05, 5.2),
+        new THREE.Vector2(2.65, 4.1),
+        new THREE.Vector2(3.55, 2.6),
+        new THREE.Vector2(3.35, 1.15),
+        new THREE.Vector2(2.65, 0)
       ];
-      const onion = new THREE.Mesh(new THREE.LatheGeometry(onionPts, 18), copper);
-      onion.position.set(tx, gy + 20.8, tz);
+      const onion = new THREE.Mesh(new THREE.LatheGeometry(onionPts, 16), verdigrisCopper);
+      onion.position.set(tx, gy + 25.0, tz);
       onion.castShadow = true;
       scene.add(onion);
 
-      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.5, 0.14), gold);
-      crossV.position.set(tx, gy + 28.4, tz);
+      // Shiny gold orb & cross finial
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), gold);
+      orb.position.set(tx, gy + 32.8, tz);
+      scene.add(orb);
+      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.7, 0.14), gold);
+      crossV.position.set(tx, gy + 34.0, tz);
       scene.add(crossV);
-      const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.14, 0.14), gold);
-      crossH.position.set(tx, gy + 28.65, tz);
+      const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.14, 0.14), gold);
+      crossH.position.set(tx, gy + 34.25, tz);
       scene.add(crossH);
+
+      // Cream-plaster Kirchhofmauer (Churchyard Retaining Wall) tucked cleanly along the church edge (clear of Weipertshausener Str.!)
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0xddd4c2, roughness: 0.92 });
+      const wallSeg = new THREE.Mesh(new THREE.BoxGeometry(19, 1.8, 0.58), wallMat);
+      wallSeg.position.set(cx + 1, gy + 0.6, cz + 8.9);
+      wallSeg.castShadow = true;
+      wallSeg.receiveShadow = true;
+      scene.add(wallSeg);
+      const wallCap = new THREE.Mesh(new THREE.BoxGeometry(19.4, 0.2, 0.78), oakMat);
+      wallCap.position.set(cx + 1, gy + 1.56, cz + 8.9);
+      scene.add(wallCap);
     }
 
-    // === 2. SCHLOSS AMMERLAND AT REAL GPS (-222.5, 163.5) ON STARNBERGER SEE! ===
+    // === 2. HERO GASTHAUS "ZUM ALTWIRT" INN, CHESTNUT BIERGARTEN & MÜNSING MAIBAUM ===
     {
-      const sx = REAL_SPOTS.schlossAmmerland.x;
-      const sz = REAL_SPOTS.schlossAmmerland.z;
-      const gy = getTerrainHeight(sx, sz);
-
-      const castlePlaster = new THREE.MeshStandardMaterial({ color: 0xebd9ae, roughness: 0.82 });
-      const tileRed = new THREE.MeshStandardMaterial({ color: 0xa43f29, roughness: 0.78 });
-      const copper = new THREE.MeshStandardMaterial({ color: 0x468868, roughness: 0.36, metalness: 0.48 });
-
-      const keep = new THREE.Mesh(new THREE.BoxGeometry(15, 10.5, 10), castlePlaster);
-      keep.position.set(sx, gy + 4.8, sz);
-      keep.castShadow = true;
-      keep.receiveShadow = true;
-      scene.add(keep);
-      this.addStaticBox(world, groundMat, sx, gy + 5.2, sz, 15, 10.5, 10);
-
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(9.6, 4.4, 4), tileRed);
-      roof.rotation.y = Math.PI / 4;
-      roof.scale.set(1.2, 1, 0.85);
-      roof.position.set(sx, gy + 12.2, sz);
-      roof.castShadow = true;
-      scene.add(roof);
-
-      // Iconic Bavarian corner turrets with copper onion caps!
-      for (const ox of [-7.2, 7.2]) {
-        for (const oz of [-4.8, 4.8]) {
-          const turret = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.65, 12.5, 12), castlePlaster);
-          turret.position.set(sx + ox, gy + 5.8, sz + oz);
-          turret.castShadow = true;
-          scene.add(turret);
-
-          const cap = new THREE.Mesh(new THREE.ConeGeometry(1.75, 3.2, 12), copper);
-          cap.position.set(sx + ox, gy + 13.6, sz + oz);
-          cap.castShadow = true;
-          scene.add(cap);
-        }
-      }
-
-      // Signboard
-      const stex = makeSignTexture(384, 96, '#2e241b', '#e5be49', 'SCHLOSS AMMERLAND', 'STARNBERGER SEE', '#faf4dc');
-      const sboard = new THREE.Mesh(new THREE.BoxGeometry(4.4, 1.05, 0.1), new THREE.MeshStandardMaterial({ map: stex }));
-      sboard.position.set(sx + 8.5, gy + 2.4, sz);
-      sboard.rotation.y = Math.PI / 2;
-      scene.add(sboard);
-    }
-
-    // === 3. FISCHEREIHOFLADEN & BOOTSVERLEIH SEBALD + WOODEN PIER ON STARNBERGER SEE! ===
-    {
-      const px = REAL_SPOTS.sebaldPier.x;
-      const pz = REAL_SPOTS.sebaldPier.z;
-      const gy = getTerrainHeight(px, pz);
-      const deckY = WATER_LEVEL + 0.68;
-      const timber = new THREE.MeshStandardMaterial({ color: 0x7a5735, roughness: 0.9 });
-
-      // Wooden boathouse & fish shop neatly north of the pier entrance (so Nördliche Seestraße stays wide open!)
-      const shopX = px - 1.5;
-      const shopZ = pz - 8.5;
-      const shopY = getTerrainHeight(shopX, shopZ);
-      const shop = new THREE.Mesh(
-        new THREE.BoxGeometry(8.2, 4.4, 6.2),
-        new THREE.MeshStandardMaterial({ color: 0x875f38, roughness: 0.88 })
-      );
-      shop.position.set(shopX, shopY + 2.0, shopZ);
-      shop.castShadow = true;
-      shop.receiveShadow = true;
-      scene.add(shop);
-      this.addStaticBox(world, groundMat, shopX, shopY + 2.0, shopZ, 8.2, 4.4, 6.2);
-
-      const shopRoof = new THREE.Mesh(
-        new THREE.ConeGeometry(6.2, 2.4, 4),
-        new THREE.MeshStandardMaterial({ color: 0x9b3e26, roughness: 0.78 })
-      );
-      shopRoof.rotation.y = Math.PI / 4;
-      shopRoof.scale.set(1.18, 1, 0.92);
-      shopRoof.position.set(shopX, shopY + 5.2, shopZ);
-      shopRoof.castShadow = true;
-      scene.add(shopRoof);
-
-      const sTex = makeSignTexture(
-        420,
-        112,
-        '#194b6b',
-        '#f4d03f',
-        'FISCHEREI SEBALD',
-        'BOOTSVERLEIH · STARNBERGER SEE',
-        '#ffffff',
-        '#ffe580'
-      );
-      const sign = new THREE.Mesh(
-        new THREE.BoxGeometry(5.2, 1.25, 0.1),
-        new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.5 })
-      );
-      sign.position.set(shopX, shopY + 3.4, shopZ + 3.16);
-      scene.add(sign);
-
-      // Smooth wooden approach ramp + drivable Wooden Pier (Steg) jutting out over Lake Starnberg (-204..-246, z=125)!
-      const pier = new THREE.Mesh(new THREE.BoxGeometry(42, 0.28, 6.0), timber);
-      pier.position.set(-225, deckY, pz);
-      pier.castShadow = true;
-      pier.receiveShadow = true;
-      scene.add(pier);
-      this.addStaticBox(world, groundMat, -225, deckY - 0.08, pz, 42, 0.36, 6.0);
-
-      for (let x = -208; x >= -244; x -= 6) {
-        for (const oz of [-2.7, 2.7]) {
-          const pile = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 4.2, 8), timber);
-          pile.position.set(x, deckY - 1.1, pz + oz);
-          scene.add(pile);
-        }
-      }
-
-      // Gently bobbing white sailboats on Starnberger See!
-      const hullMat = new THREE.MeshStandardMaterial({ color: 0xf4f2eb, roughness: 0.35 });
-      const sailMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72, side: THREE.DoubleSide });
-      const boatCoords: [number, number, number][] = [
-        [-265, 110, 0.3],
-        [-290, 145, -0.5],
-        [-275, 75, 0.8],
-        [-315, 175, -0.2],
-        [-260, 195, 0.6],
-        [-305, 45, -0.9]
-      ];
-      boatCoords.forEach(([bx, bz, rot], idx) => {
-        const boat = new THREE.Group();
-        const hull = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.78, 4.8), hullMat);
-        hull.position.y = 0.22;
-        hull.castShadow = true;
-        boat.add(hull);
-        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 6.4, 8), timber);
-        mast.position.y = 3.4;
-        boat.add(mast);
-        const sailGeo = new THREE.BufferGeometry();
-        sailGeo.setAttribute(
-          'position',
-          new THREE.BufferAttribute(new Float32Array([0, 0.8, 0, 0, 6.2, 0, 0, 1.1, 2.7]), 3)
-        );
-        sailGeo.computeVertexNormals();
-        const sail = new THREE.Mesh(sailGeo, sailMat);
-        boat.add(sail);
-        boat.position.set(bx, WATER_LEVEL + 0.06, bz);
-        boat.rotation.y = rot;
-        scene.add(boat);
-        this.sailboats.push({
-          group: boat,
-          basePos: new THREE.Vector3(bx, WATER_LEVEL + 0.06, bz),
-          phase: idx * 1.3,
-          driftAmp: 2.2
-        });
-      });
-    }
-
-    // === 4. HERO GASTHAUS "ZUM ALTWIRT" INN & MÜNSING MAIBAUM AT REAL GPS! ===
-    {
-      const ax = REAL_SPOTS.muensingAltwirt.x + 2.5;
-      const az = REAL_SPOTS.muensingAltwirt.z + 7.5;
+      const ax = REAL_SPOTS.muensingAltwirt.x + 2;
+      const az = REAL_SPOTS.muensingAltwirt.z + 4;
       const gy = getTerrainHeight(ax, az);
 
       const innMat = new THREE.MeshStandardMaterial({
-        map: createBavarianFacadeTexture(),
-        color: 0xfbf0d8,
-        roughness: 0.82
+        map: createBavarianArchetypeTexture('landhaus'),
+        color: 0xfbe8c4,
+        roughness: 0.84
       });
-      const innRoofMat = new THREE.MeshStandardMaterial({ color: 0x9b3a24, roughness: 0.78 });
-      const innBody = new THREE.Mesh(new THREE.BoxGeometry(13.5, 7.2, 9.2), innMat);
-      innBody.position.set(ax, gy + 3.1, az);
+      const innRoofMat = new THREE.MeshStandardMaterial({ map: tileTex, color: 0xaa4428, roughness: 0.78 });
+      const darkWood = new THREE.MeshStandardMaterial({ color: 0x4c2f19, roughness: 0.88 });
+
+      const innBody = new THREE.Mesh(new THREE.BoxGeometry(16.5, 7.6, 11.0), innMat);
+      innBody.position.set(ax, gy + 3.2, az);
       innBody.castShadow = true;
       innBody.receiveShadow = true;
       scene.add(innBody);
-      this.addStaticBox(world, groundMat, ax, gy + 3.5, az, 13.5, 7.2, 9.2);
+      this.addStaticBox(world, groundMat, ax, gy + 3.6, az, 16.5, 7.6, 11.0);
 
-      const innRoof = new THREE.Mesh(new THREE.ConeGeometry(9.6, 3.6, 4), innRoofMat);
-      innRoof.rotation.y = Math.PI / 4;
-      innRoof.scale.set(1.22, 1, 0.88);
-      innRoof.position.set(ax, gy + 8.4, az);
+      // Broad low-pitched Upper Bavarian overhanging gable roof!
+      const innRoof = new THREE.Mesh(gableGeo, innRoofMat);
+      innRoof.position.set(ax, gy + 6.95, az);
+      innRoof.scale.set(17.5, 4.1, 12.2);
       innRoof.castShadow = true;
       scene.add(innRoof);
+
+      // Carved dark-timber Bavarian front balcony
+      const balc = new THREE.Mesh(new THREE.BoxGeometry(7.2, 1.05, 1.45), darkWood);
+      balc.position.set(ax, gy + 4.3, az - 5.9);
+      balc.castShadow = true;
+      scene.add(balc);
 
       const altTex = makeSignTexture(
         512,
@@ -888,39 +1064,57 @@ export class RealMuensingWorld {
         '#a8db3e'
       );
       const signBoard = new THREE.Mesh(
-        new THREE.BoxGeometry(6.8, 1.5, 0.16),
+        new THREE.BoxGeometry(7.2, 1.55, 0.16),
         new THREE.MeshStandardMaterial({ map: altTex, roughness: 0.45 })
       );
-      signBoard.position.set(ax, gy + 5.6, az - 4.72);
+      signBoard.position.set(ax, gy + 6.0, az - 5.64);
       signBoard.rotation.y = Math.PI;
       scene.add(signBoard);
 
-      // Tall Blue-and-White Münsing Maibaum right on the village square between Church & Altwirt!
-      const mx = 466;
-      const mz = 232;
+      // Blue-and-white Bavarian Biergarten Parasols right outside Zum Altwirt!
+      const umbrellaMat = new THREE.MeshStandardMaterial({ color: 0x2679c2, roughness: 0.72 });
+      const whitePole = new THREE.MeshStandardMaterial({ color: 0xeeeae0, roughness: 0.6 });
+      for (const [ux, uz] of [
+        [ax - 9.5, az - 6.5],
+        [ax - 4.0, az - 8.5],
+        [ax + 2.5, az - 8.5]
+      ]) {
+        const uy = getTerrainHeight(ux, uz);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.8, 8), whitePole);
+        pole.position.set(ux, uy + 1.4, uz);
+        scene.add(pole);
+        const canopy = new THREE.Mesh(new THREE.ConeGeometry(2.1, 0.75, 8), umbrellaMat);
+        canopy.position.set(ux, uy + 2.75, uz);
+        canopy.castShadow = true;
+        scene.add(canopy);
+      }
+
+      // Tall Blue-and-White Münsing Maibaum standing proudly on the village square between Church & Altwirt!
+      const mx = 853;
+      const mz = 682;
       const my = getTerrainHeight(mx, mz);
       const g = new THREE.Group();
       const pole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.2, 0.28, 15, 14),
+        new THREE.CylinderGeometry(0.22, 0.3, 17, 14),
         new THREE.MeshStandardMaterial({ map: createMaibaumTexture(), roughness: 0.42 })
       );
-      pole.position.y = 7.5;
+      pole.position.y = 8.5;
       pole.castShadow = true;
       g.add(pole);
 
       const wreath = new THREE.Mesh(
-        new THREE.TorusGeometry(1.25, 0.25, 10, 18),
+        new THREE.TorusGeometry(1.35, 0.28, 10, 18),
         new THREE.MeshStandardMaterial({ color: 0x2d6630, roughness: 0.88 })
       );
       wreath.rotation.x = Math.PI / 2;
-      wreath.position.y = 12.2;
+      wreath.position.y = 13.8;
       g.add(wreath);
 
       const crown = new THREE.Mesh(
-        new THREE.ConeGeometry(0.95, 2.4, 8),
+        new THREE.ConeGeometry(1.05, 2.6, 8),
         new THREE.MeshStandardMaterial({ color: 0x2d6630, roughness: 0.88 })
       );
-      crown.position.y = 15.8;
+      crown.position.y = 17.8;
       g.add(crown);
 
       g.position.set(mx, my, mz);
@@ -932,13 +1126,176 @@ export class RealMuensingWorld {
         standingMesh: g,
         toppled: false,
         radius: 0.9,
-        height: 15
+        height: 17
+      });
+    }
+
+    // === 3. SCHLOSS AMMERLAND AT REAL GPS (-743.6, 520.4) — AUTHENTIC 1685 PALACE WITH TWIN ONION TOWERS! ===
+    {
+      const sx = REAL_SPOTS.schlossAmmerland.x;
+      const sz = REAL_SPOTS.schlossAmmerland.z;
+      const gy = Math.max(WATER_LEVEL + 1.2, getTerrainHeight(sx, sz));
+
+      const castlePlaster = new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('landhaus'),
+        color: 0xf7e7c4,
+        roughness: 0.8
+      });
+      const towerPlaster = new THREE.MeshStandardMaterial({ color: 0xf5e8cb, roughness: 0.82 });
+      const tileRed = new THREE.MeshStandardMaterial({ map: tileTex, color: 0xb4482c, roughness: 0.78 });
+      const verdigrisCopper = new THREE.MeshStandardMaterial({ color: 0x3b7660, roughness: 0.36, metalness: 0.48 });
+
+      const keep = new THREE.Mesh(new THREE.BoxGeometry(15, 11.2, 22), castlePlaster);
+      keep.position.set(sx, gy + 5.0, sz);
+      keep.castShadow = true;
+      keep.receiveShadow = true;
+      scene.add(keep);
+      this.addStaticBox(world, groundMat, sx, gy + 5.4, sz, 15, 11.2, 22);
+
+      const roof = new THREE.Mesh(gableGeo, tileRed);
+      roof.position.set(sx, gy + 10.55, sz);
+      roof.rotation.y = Math.PI / 2;
+      roof.scale.set(22.6, 4.6, 15.6);
+      roof.castShadow = true;
+      scene.add(roof);
+
+      // Authentic TWO prominent copper onion-domed lakeside towers (Zwiebeltürme) of Caspar Feichtmayr's 1685 Schloss Ammerland!
+      const castleOnionPts = [
+        new THREE.Vector2(0.01, 5.2),
+        new THREE.Vector2(0.24, 4.2),
+        new THREE.Vector2(0.95, 3.4),
+        new THREE.Vector2(2.2, 2.3),
+        new THREE.Vector2(2.35, 1.0),
+        new THREE.Vector2(1.85, 0)
+      ];
+      const castleOnionGeo = new THREE.LatheGeometry(castleOnionPts, 16);
+      for (const oz of [-10.2, 10.2]) {
+        const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.85, 2.0, 14.5, 12), towerPlaster);
+        tower.position.set(sx - 6.8, gy + 6.8, sz + oz);
+        tower.castShadow = true;
+        scene.add(tower);
+
+        const cap = new THREE.Mesh(castleOnionGeo, verdigrisCopper);
+        cap.position.set(sx - 6.8, gy + 14.0, sz + oz);
+        cap.castShadow = true;
+        scene.add(cap);
+      }
+
+      const stex = makeSignTexture(384, 96, '#2e241b', '#e5be49', 'SCHLOSS AMMERLAND', 'STARNBERGER SEE · 1685', '#faf4dc');
+      const sboard = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.2, 0.12), new THREE.MeshStandardMaterial({ map: stex }));
+      sboard.position.set(sx + 8.6, gy + 2.6, sz);
+      sboard.rotation.y = Math.PI / 2;
+      scene.add(sboard);
+    }
+
+    // === 4. FISCHEREIHOFLADEN & BOOTSVERLEIH SEBALD + 58M WOODEN PIER ON STARNBERGER SEE! ===
+    {
+      const px = REAL_SPOTS.sebaldPier.x;
+      const pz = REAL_SPOTS.sebaldPier.z;
+      const deckY = WATER_LEVEL + 0.72;
+      const timber = new THREE.MeshStandardMaterial({ color: 0x6f4d2e, roughness: 0.9 });
+
+      // Rustic weathered brown-timber lakeside fishhouse & boat rental shop north of pier!
+      const shopX = px - 2;
+      const shopZ = pz - 11.5;
+      const shopY = Math.max(WATER_LEVEL + 0.8, getTerrainHeight(shopX, shopZ));
+      const shop = new THREE.Mesh(
+        new THREE.BoxGeometry(11.5, 4.8, 7.6),
+        new THREE.MeshStandardMaterial({ map: createBavarianArchetypeTexture('timber'), roughness: 0.9 })
+      );
+      shop.position.set(shopX, shopY + 2.1, shopZ);
+      shop.castShadow = true;
+      shop.receiveShadow = true;
+      scene.add(shop);
+      this.addStaticBox(world, groundMat, shopX, shopY + 2.2, shopZ, 11.5, 4.8, 7.6);
+
+      const shopRoof = new THREE.Mesh(gableGeo, new THREE.MeshStandardMaterial({ map: tileTex, color: 0xa84127, roughness: 0.8 }));
+      shopRoof.position.set(shopX, shopY + 4.45, shopZ);
+      shopRoof.scale.set(12.2, 2.8, 8.4);
+      shopRoof.castShadow = true;
+      scene.add(shopRoof);
+
+      const sTex = makeSignTexture(
+        420,
+        112,
+        '#194b6b',
+        '#f4d03f',
+        'FISCHEREI SEBALD',
+        'BOOTSVERLEIH · BROTZEITGARTEN',
+        '#ffffff',
+        '#ffe580'
+      );
+      const sign = new THREE.Mesh(
+        new THREE.BoxGeometry(5.6, 1.35, 0.1),
+        new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.5 })
+      );
+      sign.position.set(shopX, shopY + 3.5, shopZ + 3.9);
+      scene.add(sign);
+
+      // 58m Long Drivable Wooden Pier (Steg) jutting straight out over emerald Starnberger See!
+      const pierLen = SEBALD_PIER.eastX - SEBALD_PIER.westX;
+      const pierMidX = (SEBALD_PIER.eastX + SEBALD_PIER.westX) * 0.5;
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(pierLen, 0.3, SEBALD_PIER.halfWidth * 2), timber);
+      pier.position.set(pierMidX, deckY, pz);
+      pier.castShadow = true;
+      pier.receiveShadow = true;
+      scene.add(pier);
+      this.addStaticBox(world, groundMat, pierMidX, deckY - 0.08, pz, pierLen, 0.36, SEBALD_PIER.halfWidth * 2);
+
+      for (let x = SEBALD_PIER.eastX - 2; x >= SEBALD_PIER.westX + 2; x -= 7) {
+        for (const oz of [-SEBALD_PIER.halfWidth + 0.35, SEBALD_PIER.halfWidth - 0.35]) {
+          const pile = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 4.4, 8), timber);
+          pile.position.set(x, deckY - 1.0, pz + oz);
+          scene.add(pile);
+        }
+      }
+
+      // Gently bobbing white sailboats & wooden rowboats moored off Fischerei Sebald & Schloss Ammerland!
+      const hullMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.35 });
+      const sailMat = new THREE.MeshStandardMaterial({ color: 0xfffdf6, roughness: 0.65, side: THREE.DoubleSide });
+      const boatCoords: [number, number, number][] = [
+        [SEBALD_PIER.westX - 18, pz - 24, 0.35],
+        [SEBALD_PIER.westX - 36, pz + 28, -0.25],
+        [SEBALD_PIER.westX - 58, pz - 48, 0.7],
+        [SEBALD_PIER.westX - 28, pz + 84, -0.5],
+        [SEBALD_PIER.westX - 42, pz + 135, 0.15],
+        [SEBALD_PIER.westX - 22, pz - 85, -0.6]
+      ];
+      boatCoords.forEach(([bx, bz, rot], idx) => {
+        const boat = new THREE.Group();
+        const hull = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.84, 5.2), hullMat);
+        hull.position.y = 0.24;
+        hull.castShadow = true;
+        boat.add(hull);
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 7.0, 8), timber);
+        mast.position.y = 3.7;
+        boat.add(mast);
+        const sailGeo = new THREE.BufferGeometry();
+        sailGeo.setAttribute(
+          'position',
+          new THREE.BufferAttribute(new Float32Array([0, 0.9, 0, 0, 6.8, 0, 0, 1.2, 3.0]), 3)
+        );
+        sailGeo.computeVertexNormals();
+        boat.add(new THREE.Mesh(sailGeo, sailMat));
+        boat.position.set(bx, WATER_LEVEL + 0.06, bz);
+        boat.rotation.y = rot;
+        scene.add(boat);
+        this.sailboats.push({
+          group: boat,
+          basePos: new THREE.Vector3(bx, WATER_LEVEL + 0.06, bz),
+          phase: idx * 1.25,
+          driftAmp: 2.8
+        });
       });
     }
   }
 
-  private buildRealOSMForests(scene: THREE.Scene): void {
-    // Collect paved road segments so trees never grow in the middle of paved Bavarian streets!
+  /**
+   * Rich multi-species Upper Bavarian vegetation:
+   * - 3-Tiered Dark Alpine Spruces (3 stacked bough cones per spruce — lush real forest silhouettes!)
+   * - Multi-Cluster Broadleaf Oaks, Lindens & Chestnuts along lakeside gardens, village squares & road alleys!
+   */
+  private buildMultiSpeciesBavarianForests(scene: THREE.Scene): void {
     const roadSegs: [number, number, number, number][] = [];
     for (const r of OSM_DATA.roads) {
       if (r.hw === 'track' || r.hw === 'service') continue;
@@ -946,73 +1303,139 @@ export class RealMuensingWorld {
         roadSegs.push([r.pts[i][0], r.pts[i][1], r.pts[i + 1][0], r.pts[i + 1][1]]);
       }
     }
+
     const isClearForTree = (tx: number, tz: number): boolean => {
-      if (Math.abs(tx - FARM_CENTER.x) < 46 && Math.abs(tz - FARM_CENTER.z) < 44) return false;
-      if (getTerrainHeight(tx, tz) < WATER_LEVEL + 0.7) return false;
-      // Keep Sebald Pier, Schloss Ammerland waterfront vista & Münsing village square open!
-      if (tx < -186 && tz > 102 && tz < 182) return false;
-      if (Math.hypot(tx - REAL_SPOTS.muensingAltwirt.x, tz - REAL_SPOTS.muensingAltwirt.z) < 48) return false;
+      if (Math.abs(tx - FARM_CENTER.x) < 54 && Math.abs(tz - FARM_CENTER.z) < 52) return false;
+      if (tx < getShorelineX(tz) + 4) return false;
+      if (getTerrainHeight(tx, tz) < WATER_LEVEL + 0.6) return false;
+      // Keep Sebald Pier corridor & Münsing central intersection cleanly framed
+      if (tx < -682 && tz > SEBALD_PIER.z - 22 && tz < SEBALD_PIER.z + 22) return false;
+      if (Math.hypot(tx - REAL_SPOTS.muensingChurch.x, tz - REAL_SPOTS.muensingChurch.z) < 36) return false;
+      if (Math.hypot(tx - REAL_SPOTS.muensingAltwirt.x, tz - REAL_SPOTS.muensingAltwirt.z) < 32) return false;
       for (const [ax, az, bx, bz] of roadSegs) {
-        if (pointToSegmentDistSq(tx, tz, ax, az, bx, bz) < 9.5 * 9.5) return false;
+        if (pointToSegmentDistSq(tx, tz, ax, az, bx, bz) < 12 * 12) return false;
       }
       return true;
     };
 
-    // Populate REAL OpenStreetMap forest polygons with 900+ instanced Bavarian spruces & oaks (2 draw calls!)
-    const treePositions: { x: number; z: number; s: number }[] = [];
+    const spruces: { x: number; z: number; s: number }[] = [];
+    const oaks: { x: number; z: number; s: number }[] = [];
 
+    // 1. Dense Real OSM Forest Polygons (70% 3-tier Alpine Spruces, 30% Broadleaf Beeches/Oaks)
     for (const f of OSM_DATA.forests) {
       const area = f.w * f.d;
-      const count = Math.min(85, Math.max(10, Math.floor(area / 360)));
+      const count = Math.min(115, Math.max(14, Math.floor(area / 1200)));
       for (let i = 0; i < count; i++) {
-        const tx = f.x + (Math.random() - 0.5) * f.w * 0.88;
-        const tz = f.z + (Math.random() - 0.5) * f.d * 0.88;
+        const tx = f.x + (Math.random() - 0.5) * f.w * 0.9;
+        const tz = f.z + (Math.random() - 0.5) * f.d * 0.9;
         if (!isClearForTree(tx, tz)) continue;
-        treePositions.push({ x: tx, z: tz, s: 0.85 + Math.random() * 0.65 });
+        const s = 0.95 + Math.random() * 0.7;
+        if (i % 10 < 7) spruces.push({ x: tx, z: tz, s });
+        else oaks.push({ x: tx, z: tz, s: s * 0.95 });
       }
     }
 
-    // Scatter scenic roadside woodland around Weipertshausen & eastern hills
-    for (let i = 0; i < 180; i++) {
-      const tx = -180 + Math.random() * 760;
-      const tz = -390 + Math.random() * 620;
-      if (Math.hypot(tx - REAL_SPOTS.muensingAltwirt.x, tz - REAL_SPOTS.muensingAltwirt.z) < 90) continue;
-      if (Math.hypot(tx - REAL_SPOTS.wimpasing.x, tz - REAL_SPOTS.wimpasing.z) < 60) continue;
+    // 2. Scenic Bavarian Hedgerows & Broadleaf Meadow Groves around Wimpasing, Ammerland, Ried & Münsing!
+    for (let i = 0; i < 280; i++) {
+      const tx = -710 + Math.random() * 1950;
+      const tz = -800 + Math.random() * 1550;
       if (!isClearForTree(tx, tz)) continue;
-      treePositions.push({ x: tx, z: tz, s: 0.9 + Math.random() * 0.7 });
+      const s = 0.9 + Math.random() * 0.7;
+      if (i % 2 === 0) oaks.push({ x: tx, z: tz, s });
+      else spruces.push({ x: tx, z: tz, s });
     }
-
-    const trunkGeo = new THREE.CylinderGeometry(0.28, 0.44, 3.2, 6);
-    const crownGeo = new THREE.ConeGeometry(2.3, 6.2, 7);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x593d26, roughness: 0.95 });
-    const crownMat = new THREE.MeshStandardMaterial({ color: 0x345e2d, roughness: 0.9 });
-
-    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treePositions.length);
-    const crowns = new THREE.InstancedMesh(crownGeo, crownMat, treePositions.length);
-    crowns.castShadow = true;
 
     const dummy = new THREE.Object3D();
     const col = new THREE.Color();
-    treePositions.forEach((t, idx) => {
-      const gy = getTerrainHeight(t.x, t.z);
-      dummy.position.set(t.x, gy + 1.5 * t.s, t.z);
-      dummy.rotation.set(0, idx * 1.1, 0);
-      dummy.scale.setScalar(t.s);
-      dummy.updateMatrix();
-      trunks.setMatrixAt(idx, dummy.matrix);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x543822, roughness: 0.95 });
 
-      dummy.position.set(t.x, gy + 5.2 * t.s, t.z);
-      dummy.updateMatrix();
-      crowns.setMatrixAt(idx, dummy.matrix);
+    // Instanced 3-Tiered Alpine Spruces (trunk + 3 stacked evergreen bough tiers!)
+    if (spruces.length > 0) {
+      const sTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.24, 0.42, 3.6, 6), trunkMat, spruces.length);
+      const boughMat = new THREE.MeshStandardMaterial({ color: 0x2f5a2c, roughness: 0.92 });
+      const tier1 = new THREE.InstancedMesh(new THREE.ConeGeometry(2.7, 4.0, 7), boughMat, spruces.length);
+      const tier2 = new THREE.InstancedMesh(new THREE.ConeGeometry(2.1, 3.8, 7), boughMat, spruces.length);
+      const tier3 = new THREE.InstancedMesh(new THREE.ConeGeometry(1.4, 3.4, 7), boughMat, spruces.length);
+      tier1.castShadow = true;
+      tier2.castShadow = true;
 
-      col.setHex(idx % 3 === 0 ? 0x2e5729 : idx % 3 === 1 ? 0x3b6932 : 0x457537);
-      crowns.setColorAt(idx, col);
-    });
-    trunks.instanceMatrix.needsUpdate = true;
-    crowns.instanceMatrix.needsUpdate = true;
-    if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
-    scene.add(trunks);
-    scene.add(crowns);
+      spruces.forEach((t, idx) => {
+        const gy = getTerrainHeight(t.x, t.z);
+        dummy.rotation.set(0, idx * 1.3, 0);
+        dummy.scale.setScalar(t.s);
+
+        dummy.position.set(t.x, gy + 1.6 * t.s, t.z);
+        dummy.updateMatrix();
+        sTrunk.setMatrixAt(idx, dummy.matrix);
+
+        dummy.position.set(t.x, gy + 4.0 * t.s, t.z);
+        dummy.updateMatrix();
+        tier1.setMatrixAt(idx, dummy.matrix);
+
+        dummy.position.set(t.x, gy + 6.4 * t.s, t.z);
+        dummy.updateMatrix();
+        tier2.setMatrixAt(idx, dummy.matrix);
+
+        dummy.position.set(t.x, gy + 8.6 * t.s, t.z);
+        dummy.updateMatrix();
+        tier3.setMatrixAt(idx, dummy.matrix);
+
+        col.setHex(idx % 3 === 0 ? 0x264b24 : idx % 3 === 1 ? 0x305d2c : 0x3a6a33);
+        tier1.setColorAt(idx, col);
+        tier2.setColorAt(idx, col);
+        tier3.setColorAt(idx, col);
+      });
+
+      sTrunk.instanceMatrix.needsUpdate = true;
+      tier1.instanceMatrix.needsUpdate = true;
+      tier2.instanceMatrix.needsUpdate = true;
+      tier3.instanceMatrix.needsUpdate = true;
+      if (tier1.instanceColor) tier1.instanceColor.needsUpdate = true;
+      if (tier2.instanceColor) tier2.instanceColor.needsUpdate = true;
+      if (tier3.instanceColor) tier3.instanceColor.needsUpdate = true;
+      scene.add(sTrunk, tier1, tier2, tier3);
+    }
+
+    // Instanced Broadleaf Bavarian Oaks, Lindens & Chestnuts (trunk + organic twin foliage clusters!)
+    if (oaks.length > 0) {
+      const oTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.48, 3.8, 6), trunkMat, oaks.length);
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0x4f7d36, roughness: 0.88 });
+      const canopyMain = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(2.8, 1), leafMat, oaks.length);
+      const canopySide = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(2.0, 1), leafMat, oaks.length);
+      canopyMain.castShadow = true;
+
+      oaks.forEach((t, idx) => {
+        const gy = getTerrainHeight(t.x, t.z);
+        dummy.rotation.set(0, idx * 2.1, 0);
+        dummy.scale.setScalar(t.s);
+
+        dummy.position.set(t.x, gy + 1.8 * t.s, t.z);
+        dummy.updateMatrix();
+        oTrunk.setMatrixAt(idx, dummy.matrix);
+
+        dummy.position.set(t.x, gy + 5.1 * t.s, t.z);
+        dummy.scale.set(t.s * 1.15, t.s * 0.92, t.s * 1.1);
+        dummy.updateMatrix();
+        canopyMain.setMatrixAt(idx, dummy.matrix);
+
+        const ang = idx * 1.7;
+        dummy.position.set(t.x + Math.cos(ang) * 1.5 * t.s, gy + 4.4 * t.s, t.z + Math.sin(ang) * 1.5 * t.s);
+        dummy.scale.setScalar(t.s * 0.95);
+        dummy.updateMatrix();
+        canopySide.setMatrixAt(idx, dummy.matrix);
+
+        col.setHex(idx % 4 === 0 ? 0x4b7a33 : idx % 4 === 1 ? 0x5c8c3a : idx % 4 === 2 ? 0x3f6e2f : 0x6c963e);
+        canopyMain.setColorAt(idx, col);
+        canopySide.setColorAt(idx, col);
+      });
+
+      oTrunk.instanceMatrix.needsUpdate = true;
+      canopyMain.instanceMatrix.needsUpdate = true;
+      canopySide.instanceMatrix.needsUpdate = true;
+      if (canopyMain.instanceColor) canopyMain.instanceColor.needsUpdate = true;
+      if (canopySide.instanceColor) canopySide.instanceColor.needsUpdate = true;
+      scene.add(oTrunk, canopyMain, canopySide);
+    }
   }
 
   private addDynamicProp(
@@ -1058,16 +1481,20 @@ export class RealMuensingWorld {
   }
 
   private buildInteractivePropsAndCars(): void {
-    // Biergarten tables & benches in Münsing (Zum Altwirt) and at Fischerei Sebald on Starnberger See!
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x875c34, roughness: 0.88 });
     const darkPost = new THREE.MeshStandardMaterial({ color: 0x24282b, roughness: 0.6 });
+    const ax = REAL_SPOTS.muensingAltwirt.x;
+    const az = REAL_SPOTS.muensingAltwirt.z;
+    const sx = REAL_SPOTS.sebaldPier.x;
+    const sz = REAL_SPOTS.sebaldPier.z;
+
     const benchSpots: [number, number, number][] = [
-      [472, 246, 0],
-      [478, 246, 0],
-      [484, 246, 0],
-      [-203, 132, Math.PI / 2],
-      [-203, 118, Math.PI / 2],
-      [-20, 198, 0.3]
+      [ax - 7.5, az - 2.5, 0],
+      [ax - 2.0, az - 4.5, 0],
+      [ax + 4.5, az - 4.5, 0],
+      [sx - 4, sz + 9, Math.PI / 2],
+      [sx - 4, sz - 6, Math.PI / 2],
+      [REAL_SPOTS.wimpasing.x + 8, REAL_SPOTS.wimpasing.z - 6, 0.3]
     ];
     for (const [bx, bz, rot] of benchSpots) {
       const g = new THREE.Group();
@@ -1075,20 +1502,20 @@ export class RealMuensingWorld {
       top.position.y = 0.36;
       top.castShadow = true;
       g.add(top);
-      for (const sz of [-0.68, 0.68]) {
+      for (const szOff of [-0.68, 0.68]) {
         const seat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.09, 0.3), woodMat);
-        seat.position.set(0, 0.04, sz);
+        seat.position.set(0, 0.04, szOff);
         g.add(seat);
       }
-      for (const sx of [-0.82, 0.82]) {
+      for (const sxOff of [-0.82, 0.82]) {
         const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.72, 1.38), darkPost);
+        leg.position.set(sxOff, 0, 0);
         g.add(leg);
-        leg.position.set(sx, 0, 0);
       }
       this.addDynamicProp('bench', 'Biergarten Table', g, new CANNON.Vec3(1.1, 0.42, 0.8), 18, bx, bz, rot);
     }
 
-    // Physical Bavarian Cars parked across Wimpasing, Ammerland, Münsing & Weipertshausen (hefty mass so lifting them tests tipping!)
+    // Physical ~1.4-ton Bavarian Cars parked across Wimpasing, Ammerland, Münsing & Weipertshausen!
     const carConfigs: {
       name: string;
       color: number;
@@ -1098,14 +1525,14 @@ export class RealMuensingWorld {
       isVan?: boolean;
       isPolizei?: boolean;
     }[] = [
-      { name: 'Bayerische Polizei Car', color: 0xf4f6f8, x: 454, z: 248, rotY: 0.2, isPolizei: true },
-      { name: 'Deutsche Post Van', color: 0xf5c414, x: 498, z: 238, rotY: Math.PI / 2, isVan: true },
-      { name: 'Silver Bavarian Touring', color: 0xb6bec4, x: 514, z: 222, rotY: 0 },
-      { name: 'Red Compact', color: 0xc93126, x: -195, z: 132, rotY: 0.1 },
-      { name: 'Forest Green SUV', color: 0x2d5e3a, x: -16, z: 186, rotY: Math.PI / 2 },
-      { name: 'Blue Sedan', color: 0x244878, x: 218, z: -392, rotY: 0.4 },
-      // Parked right outside our Wimpasing Farm gate so you can immediately test lifting a heavy 1.5-ton car & tipping over!
-      { name: 'Old Farm Pickup', color: 0x9c3d28, x: FARM_CENTER.x + 15, z: FARM_CENTER.z + 34, rotY: 1.3 }
+      { name: 'Bayerische Polizei Car', color: 0xf4f6f8, x: 846, z: 688, rotY: 0.25, isPolizei: true },
+      { name: 'Deutsche Post Van', color: 0xf5c414, x: 894, z: 682, rotY: Math.PI / 2, isVan: true },
+      { name: 'Silver Bavarian Touring', color: 0xb6bec4, x: REAL_SPOTS.edeka.x - 10, z: REAL_SPOTS.edeka.z + 12, rotY: 0.1 },
+      { name: 'Red Compact', color: 0xc93126, x: sx + 10, z: sz + 14, rotY: 0.15 },
+      { name: 'Forest Green SUV', color: 0x2d5e3a, x: REAL_SPOTS.wimpasing.x + 18, z: REAL_SPOTS.wimpasing.z - 12, rotY: Math.PI / 2 },
+      { name: 'Blue Sedan', color: 0x244878, x: 294, z: -788, rotY: 0.2 },
+      // Parked right outside Wimpasing Home Farm gate so you can immediately test lifting a 1.4-ton vehicle!
+      { name: 'Old Farm Pickup', color: 0x9c3d28, x: FARM_CENTER.x + 16, z: FARM_CENTER.z + 35, rotY: 1.3 }
     ];
 
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x1d2d36, roughness: 0.1, metalness: 0.55 });
@@ -1167,7 +1594,6 @@ export class RealMuensingWorld {
         }
       }
 
-      // Authentic ~1.4-ton car mass in physics scale so hoisting a car far out on the boom REALLY threatens to tip the Scorpion!
       const obj = this.addDynamicProp(
         'car',
         cfg.name,
@@ -1188,23 +1614,23 @@ export class RealMuensingWorld {
     const ironMat = new THREE.MeshStandardMaterial({ color: 0x262b2e, roughness: 0.5, metalness: 0.65 });
 
     const treeSpots: [number, number][] = [
-      [462, 244],
-      [482, 234],
-      [-196, 140],
-      [-212, 152],
-      [-10, 190],
-      [120, 215],
-      [240, 185]
+      [858, 694],
+      [888, 690],
+      [822, 676],
+      [REAL_SPOTS.sebaldPier.x - 2, REAL_SPOTS.sebaldPier.z + 18],
+      [REAL_SPOTS.schlossAmmerland.x + 18, REAL_SPOTS.schlossAmmerland.z - 16],
+      [REAL_SPOTS.wimpasing.x + 14, REAL_SPOTS.wimpasing.z + 12],
+      [FARM_CENTER.x + 28, FARM_CENTER.z + 42]
     ];
     for (const [tx, tz] of treeSpots) {
       const ty = getTerrainHeight(tx, tz);
       const g = new THREE.Group();
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.4, 2.8, 8), trunkMat);
-      trunk.position.y = 1.4;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 3.0, 8), trunkMat);
+      trunk.position.y = 1.5;
       trunk.castShadow = true;
       g.add(trunk);
-      const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(2.3, 1), leafBright);
-      crown.position.y = 4.0;
+      const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(2.5, 1), leafBright);
+      crown.position.y = 4.3;
       crown.castShadow = true;
       g.add(crown);
       g.position.set(tx, ty - 0.1, tz);
@@ -1216,30 +1642,30 @@ export class RealMuensingWorld {
         standingMesh: g,
         toppled: false,
         radius: 1.1,
-        height: 5.8
+        height: 6.2
       });
     }
 
     const lampSpots: [number, number][] = [
-      [464, 238],
-      [486, 240],
-      [508, 224],
-      [-200, 128],
-      [-20, 192],
+      [842, 678],
+      [868, 686],
+      [892, 674],
+      [REAL_SPOTS.sebaldPier.x + 4, REAL_SPOTS.sebaldPier.z + 8],
+      [REAL_SPOTS.wimpasing.x + 10, REAL_SPOTS.wimpasing.z],
       [FARM_CENTER.x + 10, FARM_CENTER.z + 32]
     ];
     for (const [lx, lz] of lampSpots) {
       const ly = getTerrainHeight(lx, lz);
       const g = new THREE.Group();
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 4.6, 8), ironMat);
-      pole.position.y = 2.3;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 4.8, 8), ironMat);
+      pole.position.y = 2.4;
       g.add(pole);
-      const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.52, 0.4), this.lampBulbMat);
-      lantern.position.y = 4.75;
+      const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.54, 0.42), this.lampBulbMat);
+      lantern.position.y = 4.95;
       g.add(lantern);
 
-      const pl = new THREE.PointLight(0xffcb78, 0, 22, 1.8);
-      pl.position.set(0, 4.6, 0);
+      const pl = new THREE.PointLight(0xffcb78, 0, 26, 1.8);
+      pl.position.set(0, 4.8, 0);
       g.add(pl);
       this.lampPointLights.push(pl);
 
@@ -1252,7 +1678,7 @@ export class RealMuensingWorld {
         standingMesh: g,
         toppled: false,
         radius: 0.72,
-        height: 4.9
+        height: 5.0
       });
     }
   }
@@ -1263,16 +1689,16 @@ export class RealMuensingWorld {
     const skinMat = new THREE.MeshStandardMaterial({ color: 0xf2c59d, roughness: 0.75 });
 
     const spots: [number, number][] = [
-      [468, 236],
-      [476, 243],
-      [494, 245],
-      [512, 218],
-      [-202, 127],
-      [-206, 134],
-      [-216, 165],
-      [-18, 195],
-      [-26, 190],
-      [212, -398]
+      [848, 676],
+      [864, 690],
+      [884, 686],
+      [REAL_SPOTS.edeka.x - 6, REAL_SPOTS.edeka.z + 6],
+      [REAL_SPOTS.sebaldPier.x - 4, REAL_SPOTS.sebaldPier.z + 6],
+      [REAL_SPOTS.sebaldPier.x + 2, REAL_SPOTS.sebaldPier.z - 5],
+      [REAL_SPOTS.schlossAmmerland.x + 14, REAL_SPOTS.schlossAmmerland.z + 4],
+      [REAL_SPOTS.wimpasing.x + 6, REAL_SPOTS.wimpasing.z + 4],
+      [REAL_SPOTS.wimpasing.x - 8, REAL_SPOTS.wimpasing.z - 6],
+      [292, -782]
     ];
 
     spots.forEach(([px, pz], idx) => {
@@ -1399,7 +1825,10 @@ export class RealMuensingWorld {
       if (o.kind === 'car') {
         const upVec = new CANNON.Vec3(0, 1, 0);
         o.body.quaternion.vmult(upVec, upVec);
-        const disturbed = o.heldByTractor || upVec.y < 0.72 || o.body.position.y > getTerrainHeight(o.body.position.x, o.body.position.z) + 2.0;
+        const disturbed =
+          o.heldByTractor ||
+          upVec.y < 0.72 ||
+          o.body.position.y > getTerrainHeight(o.body.position.x, o.body.position.z) + 2.0;
         if (disturbed && !o.alarmActive) {
           o.alarmActive = true;
           this.callbacks.onCarHonk(true);
@@ -1411,7 +1840,7 @@ export class RealMuensingWorld {
         }
       }
 
-      const inWater = o.body.position.y < WATER_LEVEL + 0.25 && o.body.position.x < -210;
+      const inWater = o.body.position.y < WATER_LEVEL + 0.25 && o.body.position.x < getShorelineX(o.body.position.z) - 6;
       if (inWater && !o.inLake) {
         o.inLake = true;
         this.callbacks.onLakeSplash(o.label, new THREE.Vector3(o.body.position.x, WATER_LEVEL + 0.2, o.body.position.z));
@@ -1432,59 +1861,69 @@ export class RealMuensingWorld {
       const toTractor = p.pos.clone().sub(tractorPos);
       toTractor.y = 0;
       const dist = toTractor.length();
-      if (dist > 140) continue; // Lightweight distance culling across the huge 1.2km real map!
+      if (dist > 180) continue;
 
       if (p.tumbleTimer <= 0 && dist < 2.3 && Math.abs(tractorSpeed) > 1.2) {
         p.tumbleTimer = 1.2;
         p.panicTimer = 5.5;
         const pushDir = toTractor.normalize();
-        p.tumbleVel.set(pushDir.x * 7.0, 4.8, pushDir.z * 7.0);
+        p.tumbleVel.set(pushDir.x * 5.2, 4.2, pushDir.z * 5.2);
       }
 
       if (p.tumbleTimer > 0) {
         p.tumbleTimer -= dt;
-        p.tumbleVel.y -= 16 * dt;
+        p.tumbleVel.y -= 13.5 * dt;
         p.pos.addScaledVector(p.tumbleVel, dt);
         const floorY = getTerrainHeight(p.pos.x, p.pos.z);
         if (p.pos.y < floorY) {
           p.pos.y = floorY;
-          p.tumbleVel.y = Math.abs(p.tumbleVel.y) * 0.32;
-          p.tumbleVel.x *= 0.72;
-          p.tumbleVel.z *= 0.72;
+          p.tumbleVel.y *= -0.25;
+          p.tumbleVel.x *= 0.6;
+          p.tumbleVel.z *= 0.6;
         }
         p.group.position.copy(p.pos);
-        p.group.rotation.x += dt * 9;
-        p.group.rotation.z += dt * 7;
+        p.group.rotation.x += dt * 7.5;
+        p.group.rotation.z += dt * 5.5;
+        if (p.tumbleTimer <= 0) {
+          p.group.rotation.set(0, p.wanderAngle, 0);
+        }
         continue;
       }
 
-      p.group.rotation.x = 0;
-      p.group.rotation.z = 0;
-      if (dist < 10 && Math.abs(tractorSpeed) > 1.4) p.panicTimer = Math.max(p.panicTimer, 3.0);
-
-      let moveSpeed = 1.3;
-      if (p.panicTimer > 0) {
-        p.panicTimer -= dt;
-        moveSpeed = 5.4;
-        const flee = toTractor.lengthSq() > 0.01 ? toTractor.normalize() : new THREE.Vector3(1, 0, 0);
-        p.vel.lerp(flee.multiplyScalar(moveSpeed), Math.min(1, dt * 6));
-      } else {
-        p.wanderAngle += Math.sin(elapsed * 0.7 + p.phase) * 0.8 * dt;
-        const backHome = p.homePos.clone().sub(p.pos);
-        if (backHome.length() > 8) p.wanderAngle = Math.atan2(backHome.x, backHome.z);
-        p.vel.set(Math.sin(p.wanderAngle) * moveSpeed, 0, Math.cos(p.wanderAngle) * moveSpeed);
+      if (dist < 10.5 && Math.abs(tractorSpeed) > 2.2) {
+        p.panicTimer = Math.max(p.panicTimer, 3.4);
       }
 
-      p.pos.addScaledVector(p.vel, dt);
+      if (p.panicTimer > 0) {
+        p.panicTimer -= dt;
+        const away = toTractor.lengthSq() > 0.01 ? toTractor.normalize() : new THREE.Vector3(1, 0, 0);
+        p.vel.x = away.x * 4.5;
+        p.vel.z = away.z * 4.5;
+        p.wanderAngle = Math.atan2(away.x, away.z);
+      } else {
+        p.phase += dt * 0.7;
+        const toHome = p.homePos.clone().sub(p.pos);
+        toHome.y = 0;
+        if (toHome.length() > 26) {
+          p.wanderAngle = Math.atan2(toHome.x, toHome.z);
+        } else if (Math.random() < dt * 0.45) {
+          p.wanderAngle += (Math.random() - 0.5) * 1.4;
+        }
+        p.vel.x = Math.sin(p.wanderAngle) * 1.15;
+        p.vel.z = Math.cos(p.wanderAngle) * 1.15;
+      }
+
+      p.pos.x += p.vel.x * dt;
+      p.pos.z += p.vel.z * dt;
       p.pos.y = getTerrainHeight(p.pos.x, p.pos.z);
       p.group.position.copy(p.pos);
-      if (p.vel.lengthSq() > 0.04) p.group.rotation.y = Math.atan2(p.vel.x, p.vel.z);
+      p.group.rotation.y = p.wanderAngle;
 
-      const stride = Math.sin(elapsed * (p.panicTimer > 0 ? 18 : 6.5) + p.phase);
-      p.leftLeg.rotation.x = stride * 0.65;
-      p.rightLeg.rotation.x = -stride * 0.65;
-      p.leftArm.rotation.x = p.panicTimer > 0 ? -2.6 + stride * 0.45 : -stride * 0.4;
-      p.rightArm.rotation.x = p.panicTimer > 0 ? -2.6 - stride * 0.45 : stride * 0.4;
+      const stride = Math.sin(elapsed * (p.panicTimer > 0 ? 15 : 5.5) + p.phase) * (p.panicTimer > 0 ? 0.75 : 0.38);
+      p.leftLeg.rotation.x = stride;
+      p.rightLeg.rotation.x = -stride;
+      p.leftArm.rotation.x = p.panicTimer > 0 ? -2.4 + stride * 0.4 : -stride * 0.7;
+      p.rightArm.rotation.x = p.panicTimer > 0 ? -2.4 - stride * 0.4 : stride * 0.7;
     }
   }
 }

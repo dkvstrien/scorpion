@@ -6,6 +6,7 @@ import {
   FARM_GROUND_Y,
   getDrivableGroundY,
   getShorelineX,
+  SEBALD_PIER,
   WORLD_MAX_X,
   WORLD_MAX_Z,
   WORLD_MIN_X,
@@ -303,7 +304,7 @@ export class ClaasScorpion {
   private wasTipped = false;
   private uprightTimer = 2.0;
   private rolloverCooldown = 0;
-  private readonly comY = 1.05;
+  private readonly comY = 0.78;
   private readonly comZ = 0.28;
   private scene: THREE.Scene;
   private callbacks: TractorCallbacks;
@@ -313,18 +314,18 @@ export class ClaasScorpion {
     this.callbacks = callbacks;
 
     this.buildTractorVisuals();
-    // Shift visual chassis so root (0,0,0) aligns with the true physical Center of Mass (height 1.05m, rear-biased counterweight)!
+    // Shift visual chassis so root (0,0,0) aligns with the true physical Center of Mass (low-slung 0.78m, rear-biased counterweight)!
     this.chassisGroup.position.set(0, -this.comY, -this.comZ);
     this.root.add(this.chassisGroup);
     scene.add(this.root);
 
-    // === TRUE DYNAMIC 6,800 KG RIGID-BODY CHASSIS (CAN GENUINELY TIP FORWARD OR ROLL ONTO ITS SIDE!) ===
+    // === TRUE DYNAMIC 6,800 KG RIGID-BODY CHASSIS (PLANTED FOR NORMAL DRIVING, GENUINELY TIPS WHEN PUSHED!) ===
     this.chassisBody = new CANNON.Body({
       mass: 6800,
       type: CANNON.Body.DYNAMIC,
       material: tractorMat,
-      linearDamping: 0.06,
-      angularDamping: 0.26,
+      linearDamping: 0.08,
+      angularDamping: 0.44,
       collisionFilterGroup: 2,
       collisionFilterMask: 1 // Collides with terrain, buildings, props & cars — NEVER with kinematic headBody!
     });
@@ -1088,35 +1089,58 @@ export class ClaasScorpion {
     const restHubHeight = 0.92;
     const kSpringFront = 132000;
     const kSpringRear = 186000;
-    const cDamp = 24000;
+    const cDamp = 26500;
+    const kAntiRoll = 38000;
 
     let grounded = 0;
+    const absForwardSpd = Math.abs(body.velocity.dot(fwdWorld));
 
-    // 1. Independent 4-Wheel Spring-Damper + Steered Traction + Lateral Grip at Ground Contact!
+    // 1. Independent 4-Wheel Spring-Damper + Anti-Roll Bar + Speed-Tuned Steered Traction & Realistic Tire Slip!
     if (upWorld.y > 0.25) {
+      // Pre-sample wheel compressions so front & rear anti-roll bars work like real agricultural axles
+      const comps: number[] = [];
+      const hubWorlds: CANNON.Vec3[] = [];
+      const groundYs: number[] = [];
       for (const w of this.wheelPivots) {
         const localHub = new CANNON.Vec3(w.localX, 0.74 - this.comY, w.localZ - this.comZ);
         const hubWorld = body.pointToWorldFrame(localHub);
         const groundY = getDrivableGroundY(hubWorld.x, hubWorld.z);
-        const distToGround = hubWorld.y - groundY;
-        const comp = Math.max(0, restHubHeight - distToGround);
+        const comp = Math.max(0, restHubHeight - (hubWorld.y - groundY));
         w.compression = comp;
+        comps.push(comp);
+        hubWorlds.push(hubWorld);
+        groundYs.push(groundY);
+      }
 
+      // Axle left-right roll differentials (wheel order: FL=0, FR=1, RL=2, RR=3)
+      const frontRollDiff = comps[0] - comps[1];
+      const rearRollDiff = comps[2] - comps[3];
+      // Progressive rear-axle steering taper at road speed (real CLAAS Varipower stability!)
+      const rear4WSRatio = THREE.MathUtils.clamp(0.85 - Math.max(0, absForwardSpd - 5.0) * 0.045, 0.28, 0.85);
+
+      for (let i = 0; i < this.wheelPivots.length; i++) {
+        const w = this.wheelPivots[i];
+        const comp = comps[i];
         if (comp > 0) {
           grounded++;
-          // Apply tire forces right at the ground patch (1.0m BELOW CoM) so sharp cornering creates REAL outward roll torque!
-          // NOTE: Cannon-es body.applyForce(worldForce, relativePoint) expects relativePoint = worldPoint - body.position!
+          const hubWorld = hubWorlds[i];
+          const groundY = groundYs[i];
+          // Apply tire forces at ground patch below CoM; Cannon-es applyForce takes relativePoint = worldPoint - body.position
           const contactWorld = new CANNON.Vec3(hubWorld.x, groundY + 0.05, hubWorld.z);
           const contactRel = contactWorld.vsub(body.position);
           const vPt = new CANNON.Vec3();
           body.getVelocityAtWorldPoint(contactWorld, vPt);
 
           const kSpring = w.isFront ? kSpringFront : kSpringRear;
-          const fUp = THREE.MathUtils.clamp(kSpring * comp - cDamp * vPt.y, 0, 92000);
+          const isLeft = w.localX < 0;
+          const axleDiff = w.isFront ? frontRollDiff : rearRollDiff;
+          const antiRollForce = (isLeft ? 1 : -1) * axleDiff * kAntiRoll;
+
+          const fUp = THREE.MathUtils.clamp(kSpring * comp - cDamp * vPt.y + antiRollForce, 0, 96000);
           body.applyForce(new CANNON.Vec3(0, fUp, 0), contactRel);
 
           let wSteer = 0;
-          if (this.steeringMode === '4WS') wSteer = w.isFront ? this.steerAngle : -this.steerAngle * 0.85;
+          if (this.steeringMode === '4WS') wSteer = w.isFront ? this.steerAngle : -this.steerAngle * rear4WSRatio;
           else if (this.steeringMode === '2WS') wSteer = w.isFront ? this.steerAngle : 0;
           else wSteer = this.steerAngle;
 
@@ -1138,13 +1162,14 @@ export class ClaasScorpion {
           const vLong = vPt.dot(wFwd);
           const vLat = vPt.dot(wRight);
 
-          // Varipower hydrostatic drive force (plenty of Bavarian hillside climbing torque + automatic hydrostatic hold!)
+          // Varipower hydrostatic drive force (confident Bavarian hill-climbing + smooth automatic hydrostatic hold!)
           const targetSpeed = input.throttle * maxSpeed;
-          const driveGain = Math.abs(input.throttle) > 0.02 ? 12000 : 7600;
+          const driveGain = Math.abs(input.throttle) > 0.02 ? 11500 : 7400;
           const fDrive = THREE.MathUtils.clamp((targetSpeed - vLong) * driveGain, -46000, 46000);
 
-          // Realistic rubber tire lateral cornering grip at ground contact patch
-          const fLat = THREE.MathUtils.clamp(-vLat * 21000, -42000, 42000);
+          // Realistic agricultural tire lateral grip capped by normal load (prevents snap-flips on ordinary turns!)
+          const maxLatGrip = Math.min(23500, Math.max(4500, fUp * 0.72));
+          const fLat = THREE.MathUtils.clamp(-vLat * 11500, -maxLatGrip, maxLatGrip);
 
           const totalHoriz = new CANNON.Vec3(
             wFwd.x * fDrive + wRight.x * fLat,
@@ -1158,24 +1183,31 @@ export class ClaasScorpion {
     this.wheelsOnGround = grounded;
 
     // 2. Real Boom Steel + Carried Load Gravitational & Centrifugal Forces AT THE 3D BOOM TIP!
-    // Unloaded boom stays calm & level; extending heavy loads or turning fast with boom raised GENUINELY TIPS THE SCORPION!
+    // - Driving empty with boom stowed/low: rock-solid & planted!
+    // - Extending a heavy load far (R) shifts the real load moment past the front axle -> lifts rear tires & tips forward!
+    // - Raising boom high (Q > 0.5) & whipping top-speed turns -> shifts CoM upward & rolls the Scorpion!
     const carriedKg = this.getCarriedMassKg();
-    const extSteelKg = this.boomExt * 165;
+    const extSteelKg = this.boomExt * 135;
     const tipWorldC = new CANNON.Vec3(this.holdWorldPos.x, this.holdWorldPos.y, this.holdWorldPos.z);
     const tipRel = tipWorldC.vsub(body.position);
 
-    if (carriedKg > 0 || extSteelKg > 10) {
-      const fLoadY = -(carriedKg * 1.48 + extSteelKg) * 16.5;
+    if (carriedKg > 0 || extSteelKg > 15) {
+      // Smoothly ramp load moment with reach so retracted loads stay controllable while full extension genuinely tips!
+      const reachLeverage = 1.05 + (this.boomExt / 3.6) * 0.52;
+      const fLoadY = -(carriedKg * reachLeverage + extSteelKg) * 16.5;
       body.applyForce(new CANNON.Vec3(0, fLoadY, 0), tipRel);
     }
 
-    // Real inertial / centrifugal whip force when turning fast with raised boom or heavy load!
-    const effectiveWhipKg = carriedKg * 1.45 + (this.boomPitch > 0.25 ? 480 + this.boomExt * 240 : 0);
-    if (effectiveWhipKg > 0 && grounded >= 1) {
+    // High-CoG centrifugal roll torque ONLY when boom is genuinely raised high (> 0.46 rad) OR carrying a heavy load!
+    // Keeps normal stowed driving rock-solid (~3-6° lean) while top-speed high-boom turns visibly lift inside tires & roll!
+    const highBoomFactor = THREE.MathUtils.clamp((this.boomPitch - 0.45) / 0.58, 0, 1);
+    const highBoomKg = highBoomFactor * (2350 + this.boomExt * 1150);
+    const effectiveWhipKg = carriedKg * (0.75 + highBoomFactor * 1.15) + highBoomKg;
+    if (effectiveWhipKg > 50 && grounded >= 1) {
       const yawOmega = body.angularVelocity.y;
       const forwardSpd = body.velocity.dot(fwdWorld);
       const latAccel = forwardSpd * yawOmega + yawOmega * Math.abs(yawOmega) * (1.8 + this.boomExt * 0.9);
-      const rollPush = THREE.MathUtils.clamp(effectiveWhipKg * latAccel, -56000, 56000);
+      const rollPush = THREE.MathUtils.clamp(effectiveWhipKg * latAccel * 1.45, -96000, 96000);
       body.applyForce(
         new CANNON.Vec3(rightWorld.x * rollPush, 0, rightWorld.z * rollPush),
         tipRel
@@ -1193,8 +1225,11 @@ export class ClaasScorpion {
     // 4. Soft Water Shore Boundary (prevent driving off pier into deep Starnberger See!)
     const px = body.position.x;
     const pz = body.position.z;
-    const onSebaldPier = Math.abs(pz - 125) <= 2.9 && px <= -204 && px >= -245;
-    const minShoreX = onSebaldPier ? -244.5 : getShorelineX(pz) - 6;
+    const onSebaldPier =
+      Math.abs(pz - SEBALD_PIER.z) <= SEBALD_PIER.halfWidth &&
+      px <= SEBALD_PIER.eastX + 4 &&
+      px >= SEBALD_PIER.westX;
+    const minShoreX = onSebaldPier ? SEBALD_PIER.westX + 1.5 : getShorelineX(pz) - 8;
     if (px < minShoreX) {
       body.position.x = minShoreX;
       if (body.velocity.x < 0) body.velocity.x *= -0.2;
@@ -1214,8 +1249,8 @@ export class ClaasScorpion {
 
     // Prevent chassis CoM from ever sinking below terrain even during violent rollovers!
     const groundHere = getDrivableGroundY(body.position.x, body.position.z);
-    if (body.position.y < groundHere + 0.56) {
-      body.position.y = groundHere + 0.56;
+    if (body.position.y < groundHere + 0.48) {
+      body.position.y = groundHere + 0.48;
       if (body.velocity.y < 0) body.velocity.y = 0;
     }
   }
@@ -1227,9 +1262,11 @@ export class ClaasScorpion {
     props: FarmProp[],
     villageObjs: DynamicVillageObj[]
   ): void {
-    // 1. Steer Angle & Telescopic Boom Hydraulics
-    const targetSteer = input.steer * (input.creep ? 0.44 : 0.62);
-    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, dt * 9);
+    // 1. Speed-Sensitive Steer Angle (nimble in yard, planted & stable at road speed!) & Telescopic Boom Hydraulics
+    const absSpd = Math.abs(this.speed);
+    const speedSteerScale = THREE.MathUtils.clamp(1.0 - Math.max(0, absSpd - 3.5) / 19.0, 0.34, 1.0);
+    const targetSteer = input.steer * (input.creep ? 0.44 : 0.58) * speedSteerScale;
+    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, dt * 8.5);
 
     const fine = input.creep ? 0.45 : 1.0;
     this.prevHeadTilt = this.headTilt;

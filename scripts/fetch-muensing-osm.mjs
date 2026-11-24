@@ -1,25 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Exact bounding box matching the user's map screenshot:
-// Lake Starnberg & Schloss Ammerland (west) -> Wimpasing -> Ried -> Münsing -> Wolfratshausener Str. (east)
-// Hartlweg / Pinocchio (south) -> Weipertshausen (north)
-const MIN_LAT = 47.9022;
-const MAX_LAT = 47.9238;
-const MIN_LON = 11.3140;
-const MAX_LON = 11.3742;
+// Exact geographic bounding box covering Starnberger See shore -> Schloss Ammerland -> Fischerei Sebald ->
+// Wimpasing -> Ried -> Münsing (St. Mariä Himmelfahrt, Gasthaus Zum Altwirt) -> Weipertshausen!
+const MIN_LAT = 47.9004;
+const MAX_LAT = 47.9244;
+const MIN_LON = 11.3250;
+const MAX_LON = 11.3745;
 
-// Reference origin placed right in the heart between Wimpasing & Münsing
-const ORIGIN_LAT = 47.9105;
-const ORIGIN_LON = 11.3450;
+// Exact geometric center of the bbox so 2x2 Bavaria DOP20 aerial tiles align with ZERO millimeter offset!
+const ORIGIN_LAT = (MIN_LAT + MAX_LAT) * 0.5; // 47.9124
+const ORIGIN_LON = (MIN_LON + MAX_LON) * 0.5; // 11.34975
 
-// Real-world meters per degree at 47.91°N
+// Real-world meters per degree at 47.9124°N
 const M_PER_DEG_LAT = 111195;
 const M_PER_DEG_LON = 111195 * Math.cos((ORIGIN_LAT * Math.PI) / 180);
 
-// Clean 0.28x spatial scale so the full ~4.5km x 2.4km Starnberger See -> Ammerland -> Wimpasing -> Münsing -> Weipertshausen
-// map is ~1,250m x 670m in-game — authentically proportioned and super fun to drive across in 30-60 seconds!
-const SCALE = 0.28;
+// Near-1:1 spacious scale (0.65x real world -> ~2.40 km x 1.73 km playground!)
+// Streets, driveways, intersections & courtyards now have authentic real-world breathing room for the 5m Scorpion 741!
+const SCALE = 0.65;
 
 function project(lat, lon) {
   const x = (lon - ORIGIN_LON) * M_PER_DEG_LON * SCALE;
@@ -34,7 +33,7 @@ function unproject(x, z) {
 }
 
 async function fetchOverpass() {
-  const cachePath = path.resolve('scripts/.cache_osm.json');
+  const cachePath = path.resolve('scripts/.cache_osm_v2.json');
   if (fs.existsSync(cachePath)) {
     console.log('Loaded cached Overpass OSM data from', cachePath);
     return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
@@ -45,9 +44,8 @@ async function fetchOverpass() {
 (
   way["highway"~"secondary|tertiary|unclassified|residential|living_street|service|track"](${bbox});
   way["building"](${bbox});
-  way["natural"="water"](${bbox});
   way["waterway"~"stream|river"](${bbox});
-  way["landuse"="forest"](${bbox});
+  way["landuse"~"forest|meadow|farmland"](${bbox});
   way["natural"="wood"](${bbox});
   node["name"](${bbox});
 );
@@ -69,7 +67,7 @@ out skel qt;`;
         body: 'data=' + encodeURIComponent(query),
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Scorpion741MuensingSim/1.0'
+          'User-Agent': 'OpenWorldScorpionSim/2.0'
         }
       });
       if (res.ok) {
@@ -87,7 +85,7 @@ out skel qt;`;
 }
 
 async function fetchElevationGrid(minX, maxX, minZ, maxZ, cols, rows) {
-  console.log(`Fetching real ${cols}x${rows} DEM elevation grid (Open-Meteo / Open-Elevation)...`);
+  console.log(`Fetching real ${cols}x${rows} SRTM DEM elevation grid (${cols * rows} points)...`);
   const points = [];
   for (let iz = 0; iz < rows; iz++) {
     const z = minZ + (iz / (rows - 1)) * (maxZ - minZ);
@@ -98,50 +96,97 @@ async function fetchElevationGrid(minX, maxX, minZ, maxZ, cols, rows) {
     }
   }
 
-  // Try Open-Elevation single POST first (handles 400+ points in ONE single fast request!)
-  try {
-    const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ locations: points.map((p) => ({ latitude: p.lat, longitude: p.lon })) })
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (json.results && json.results.length === points.length) {
-        console.log('Got full real DEM grid from Open-Elevation in 1 request!');
-        return json.results.map((r) => Math.round(r.elevation * 10) / 10);
-      }
-    }
-  } catch (e) {
-    console.warn('Open-Elevation fallback triggered:', e.message);
-  }
-
-  // Fallback: Open-Meteo polite batches with retry
-  const elevations = [];
-  const batchSize = 90;
-  for (let i = 0; i < points.length; i += batchSize) {
-    const batch = points.slice(i, i + batchSize);
-    const lats = batch.map((p) => p.lat).join(',');
-    const lons = batch.map((p) => p.lon).join(',');
-    let ok = false;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const res = await fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`);
+  // Send ALL points in ONE single Open-Elevation POST request (avoids 429 on sequential requests!)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locations: points.map((p) => ({ latitude: p.lat, longitude: p.lon })) })
+      });
       if (res.ok) {
         const json = await res.json();
-        elevations.push(...json.elevation.map((e) => Math.round(e * 10) / 10));
-        ok = true;
-        break;
+        if (json.results && json.results.length === points.length) {
+          console.log(`Got full ${cols}x${rows} real SRTM DEM grid in 1 request!`);
+          return json.results.map((r) => Math.round(r.elevation * 10) / 10);
+        }
       }
-      console.warn(`Open-Meteo batch ${i} returned ${res.status}, waiting...`);
-      await new Promise((r) => setTimeout(r, 2500 * (attempt + 1)));
+      console.warn(`Open-Elevation attempt ${attempt + 1} returned ${res.status}, retrying...`);
+    } catch (e) {
+      console.warn(`Open-Elevation attempt ${attempt + 1} error:`, e.message);
     }
-    if (!ok) throw new Error('Open-Meteo elevation failed after retries');
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 2500));
   }
-  return elevations;
+  // Fallback: resample our already-downloaded real SRTM DEM grid from existing muensingData.json via exact lat/lon!
+  const prevPath = path.resolve('src/data/muensingData.json');
+  if (fs.existsSync(prevPath)) {
+    const prev = JSON.parse(fs.readFileSync(prevPath, 'utf8'));
+    if (prev.elevation?.values?.length) {
+      console.log('Resampling already-downloaded real SRTM DEM grid to exact new lat/lon coordinates!');
+      const pCols = prev.elevation.cols;
+      const pRows = prev.elevation.rows;
+      const pOriginLat = 47.9105;
+      const pOriginLon = 11.3450;
+      const pScale = prev.meta.scale || 0.28;
+      const pMLon = 111195 * Math.cos((pOriginLat * Math.PI) / 180);
+      const { minX: pMinX, maxX: pMaxX, minZ: pMinZ, maxZ: pMaxZ, values: pVals } = prev.elevation;
+      return points.map((pt) => {
+        const px = (pt.lon - pOriginLon) * pMLon * pScale;
+        const pz = -(pt.lat - pOriginLat) * 111195 * pScale;
+        const u = Math.max(0, Math.min(pCols - 1.0001, ((px - pMinX) / (pMaxX - pMinX)) * (pCols - 1)));
+        const v = Math.max(0, Math.min(pRows - 1.0001, ((pz - pMinZ) / (pMaxZ - pMinZ)) * (pRows - 1)));
+        const ix = Math.floor(u);
+        const iz = Math.floor(v);
+        const fx = u - ix;
+        const fz = v - iz;
+        const e00 = pVals[iz * pCols + ix];
+        const e10 = pVals[iz * pCols + ix + 1];
+        const e01 = pVals[(iz + 1) * pCols + ix];
+        const e11 = pVals[(iz + 1) * pCols + ix + 1];
+        const val = (e00 * (1 - fx) + e10 * fx) * (1 - fz) + (e01 * (1 - fx) + e11 * fx) * fz;
+        return Math.round(val * 10) / 10;
+      });
+    }
+  }
+  throw new Error('Open-Elevation failed after retries');
 }
 
-function simplifyPolyline(pts, minDist = 3.0) {
+async function fetchBavariaDOP20Tiles() {
+  const outDir = path.resolve('public/map');
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const midLon = ORIGIN_LON;
+  const midLat = ORIGIN_LAT;
+
+  const tiles = [
+    { name: 'dop_nw.jpg', bbox: [MIN_LON, midLat, midLon, MAX_LAT], w: 2048, h: 1480 },
+    { name: 'dop_ne.jpg', bbox: [midLon, midLat, MAX_LON, MAX_LAT], w: 2048, h: 1480 },
+    { name: 'dop_sw.jpg', bbox: [MIN_LON, MIN_LAT, midLon, midLat], w: 2048, h: 1480 },
+    { name: 'dop_se.jpg', bbox: [midLon, MIN_LAT, MAX_LON, midLat], w: 2048, h: 1480 },
+    { name: 'minimap_dop.jpg', bbox: [MIN_LON, MIN_LAT, MAX_LON, MAX_LAT], w: 1024, h: 740 }
+  ];
+
+  for (const t of tiles) {
+    const outPath = path.join(outDir, t.name);
+    if (fs.existsSync(outPath) && fs.statSync(outPath).size > 20000) {
+      console.log(`Using cached Bavaria DOP20 tile ${t.name}`);
+      continue;
+    }
+    const url =
+      `https://geoservices.bayern.de/od/wms/dop/v1/dop20?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap` +
+      `&LAYERS=by_dop20c&STYLES=&SRS=EPSG:4326&BBOX=${t.bbox.join(',')}&WIDTH=${t.w}&HEIGHT=${t.h}&FORMAT=image/jpeg`;
+    console.log(`Downloading Bavaria DOP20 aerial tile ${t.name} (${t.w}x${t.h})...`);
+    const res = await fetch(url, { headers: { 'User-Agent': 'OpenWorldScorpionSim/2.0' } });
+    if (!res.ok) throw new Error(`DOP20 tile ${t.name} failed: ${res.status}`);
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('image')) throw new Error(`DOP20 tile ${t.name} returned non-image: ${ct}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    fs.writeFileSync(outPath, buf);
+    console.log(`  -> Saved ${t.name} (${Math.round(buf.length / 1024)} KB)`);
+  }
+}
+
+function simplifyPolyline(pts, minDist = 4.5) {
   if (pts.length <= 2) return pts;
   const out = [pts[0]];
   for (let i = 1; i < pts.length - 1; i++) {
@@ -158,9 +203,10 @@ function buildingBoxFromNodes(coords) {
   if (coords.length < 3) return null;
   let cx = 0;
   let cz = 0;
-  const n = coords[0][0] === coords[coords.length - 1][0] && coords[0][1] === coords[coords.length - 1][1]
-    ? coords.length - 1
-    : coords.length;
+  const n =
+    coords[0][0] === coords[coords.length - 1][0] && coords[0][1] === coords[coords.length - 1][1]
+      ? coords.length - 1
+      : coords.length;
   if (n < 3) return null;
 
   for (let i = 0; i < n; i++) {
@@ -170,7 +216,6 @@ function buildingBoxFromNodes(coords) {
   cx /= n;
   cz /= n;
 
-  // Principal orientation from longest polygon edge!
   let bestLen = 0;
   let angle = 0;
   for (let i = 0; i < n; i++) {
@@ -204,7 +249,7 @@ function buildingBoxFromNodes(coords) {
 
   const rawW = maxU - minU;
   const rawD = maxV - minV;
-  if (rawW < 0.8 || rawD < 0.8) return null;
+  if (rawW < 2.2 || rawD < 2.2) return null;
 
   return {
     x: Math.round(cx * 10) / 10,
@@ -216,17 +261,17 @@ function buildingBoxFromNodes(coords) {
 }
 
 async function main() {
+  await fetchBavariaDOP20Tiles();
   const osm = await fetchOverpass();
+
   const nodeMap = new Map();
   for (const el of osm.elements) {
-    if (el.type === 'node') {
-      nodeMap.set(el.id, el);
-    }
+    if (el.type === 'node') nodeMap.set(el.id, el);
   }
 
   const [minX, maxZ] = project(MIN_LAT, MIN_LON);
   const [maxX, minZ] = project(MAX_LAT, MAX_LON);
-  console.log('Projected world bounds:', { minX, maxX, minZ, maxZ });
+  console.log('Projected near-1:1 world bounds:', { minX, maxX, minZ, maxZ });
 
   const roads = [];
   const buildings = [];
@@ -237,6 +282,7 @@ async function main() {
   for (const el of osm.elements) {
     if (el.type === 'node' && el.tags?.name) {
       const [x, z] = project(el.lat, el.lon);
+      if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
       const isPoi =
         el.tags.amenity ||
         el.tags.shop ||
@@ -266,22 +312,24 @@ async function main() {
 
     if (el.tags.highway) {
       const hw = el.tags.highway;
-      const simple = simplifyPolyline(pts, hw === 'track' || hw === 'service' ? 6.0 : 3.5);
+      const simple = simplifyPolyline(pts, hw === 'track' || hw === 'service' ? 9.0 : 5.5);
       if (simple.length >= 2) {
-        roads.push({
-          hw,
-          name: el.tags.name || '',
-          pts: simple
-        });
+        roads.push({ hw, name: el.tags.name || '', pts: simple });
       }
     } else if (el.tags.building) {
       const box = buildingBoxFromNodes(pts);
-      if (box) {
+      if (box && box.x >= minX + 10 && box.x <= maxX - 10 && box.z >= minZ + 10 && box.z <= maxZ - 10) {
         const bTag = el.tags.building;
         const name = el.tags.name || '';
         const isChurch = bTag === 'church' || /Kirche|Mariä/i.test(name);
         const isCastle = /Schloss/i.test(name) || el.tags.historic === 'castle';
-        const isBarn = bTag === 'barn' || bTag === 'farm_auxiliary' || bTag === 'shed' || bTag === 'garage';
+        const isBarn =
+          bTag === 'barn' ||
+          bTag === 'farm_auxiliary' ||
+          bTag === 'shed' ||
+          bTag === 'garage' ||
+          bTag === 'agricultural' ||
+          bTag === 'greenhouse';
         buildings.push({
           ...box,
           type: isChurch ? 'church' : isCastle ? 'castle' : isBarn ? 'barn' : 'house',
@@ -289,47 +337,52 @@ async function main() {
         });
       }
     } else if (el.tags.landuse === 'forest' || el.tags.natural === 'wood') {
-      // Sample representative centroid + approximate radius for instanced Bavarian woodland clusters!
       const box = buildingBoxFromNodes(pts);
-      if (box && box.w * box.d > 350) {
+      if (box && box.w * box.d > 900) {
         forests.push({ x: box.x, z: box.z, w: box.w, d: box.d });
       }
     } else if (el.tags.waterway === 'stream' || el.tags.waterway === 'river') {
-      const simple = simplifyPolyline(pts, 6.0);
+      const simple = simplifyPolyline(pts, 9.0);
       if (simple.length >= 2) {
         streams.push({ name: el.tags.name || 'Lübbach', pts: simple });
       }
     }
   }
 
-  // Fetch real DEM elevation grid covering the projected world bounds!
-  const cols = 26;
-  const rows = 16;
+  // Dense 32x22 SRTM DEM elevation grid (704 points in 1 request!)
+  const cols = 32;
+  const rows = 22;
   const elevRaw = await fetchElevationGrid(minX, maxX, minZ, maxZ, cols, rows);
 
-  // Find key real-world GPS coordinates for quick navigation & spawning!
-  const keySpots = {
-    wimpasing: project(47.9082, 11.3312), // Right at the user's blue dot in Wimpasing!
-    ammerlandPier: project(47.9094, 11.3198), // Fischerei Sebald & Schloss Ammerland shore!
-    schlossAmmerland: project(47.9083, 11.3186),
-    muensingCenter: project(47.9073, 11.3586), // Gasthaus Zum Altwirt & Dorfplatz!
-    muensingChurch: project(47.9076, 11.3614), // St. Mariä Himmelfahrt!
-    weipertshausen: project(47.9212, 11.3446),
-    ried: project(47.9122, 11.3320)
+  // Exact verified real GPS coordinates projected into our 0.65x world!
+  const spots = {
+    farm: project(47.9056, 11.3478), // Open meadow right beside Münsinger Straße between Wimpasing & Münsing!
+    wimpasing: project(47.9043, 11.3439),
+    sebaldPier: project(47.9065, 11.3352), // Fischerei Matthias Sebald right on Starnberger See!
+    schlossAmmerland: project(47.9052, 11.3344), // Schloss Ammerland lakeside baroque palace!
+    ried: project(47.9089, 11.3448),
+    muensingChurch: project(47.9033, 11.3669), // Pfarrkirche St. Mariä Himmelfahrt!
+    muensingAltwirt: project(47.90275, 11.36775), // Gasthaus & Metzgerei Zum Altwirt!
+    edeka: project(47.9036, 11.3698),
+    weipertshausen: project(47.9233, 11.3553)
   };
 
   const out = {
     meta: {
-      minX: Math.round(minX),
-      maxX: Math.round(maxX),
-      minZ: Math.round(minZ),
-      maxZ: Math.round(maxZ),
+      minX,
+      maxX,
+      minZ,
+      maxZ,
+      minLat: MIN_LAT,
+      maxLat: MAX_LAT,
+      minLon: MIN_LON,
+      maxLon: MAX_LON,
       scale: SCALE,
       lakeElevationM: 584.5,
-      elevScale: 0.42
+      elevScale: 0.62
     },
+    spots,
     elevation: { cols, rows, minX, maxX, minZ, maxZ, values: elevRaw },
-    keySpots,
     roads,
     buildings,
     forests,
@@ -340,18 +393,15 @@ async function main() {
   const outPath = path.resolve('src/data/muensingData.json');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(out));
-  console.log(
-    `Saved real Münsing OSM + DEM dataset to ${outPath}!`,
-    {
-      roads: roads.length,
-      buildings: buildings.length,
-      forests: forests.length,
-      streams: streams.length,
-      landmarks: landmarks.length,
-      bytes: fs.statSync(outPath).size,
-      keySpots
-    }
-  );
+  console.log('Saved near-1:1 Münsing OSM + DEM + DOP20 dataset!', {
+    bounds: { minX, maxX, minZ, maxZ },
+    spots,
+    roads: roads.length,
+    buildings: buildings.length,
+    forests: forests.length,
+    streams: streams.length,
+    jsonKB: Math.round(fs.statSync(outPath).size / 1024)
+  });
 }
 
 main().catch((e) => {

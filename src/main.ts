@@ -162,7 +162,7 @@ class ScorpionGame {
     this.pmrem.compileEquirectangularShader();
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 1300);
+    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 3200);
     this.camera.position.set(FARM_CENTER.x + 8, 12, FARM_CENTER.z + 28);
 
     this.setupLightingAndSky();
@@ -343,7 +343,7 @@ class ScorpionGame {
         puff.scale.y = 0.52;
         cloud.add(puff);
       }
-      cloud.position.set(-340 + i * 52, 72 + (i % 3) * 12, -320 + (i % 4) * 165);
+      cloud.position.set(-980 + i * 115, 115 + (i % 3) * 18, -720 + (i % 4) * 380);
       this.scene.add(cloud);
       this.clouds.push(cloud);
     }
@@ -410,8 +410,8 @@ class ScorpionGame {
         label: '☀ Afternoon',
         sky: 0x8ebde0,
         fog: 0xb6d3e8,
-        fogNear: 240,
-        fogFar: 980,
+        fogNear: 420,
+        fogFar: 2150,
         sunCol: 0xfff3d4,
         sunInt: 1.85,
         sunOff: [65, 95, 45],
@@ -424,8 +424,8 @@ class ScorpionGame {
         label: '🌅 Golden Sunset',
         sky: 0xd98a5b,
         fog: 0xd99b72,
-        fogNear: 180,
-        fogFar: 860,
+        fogNear: 320,
+        fogFar: 1850,
         sunCol: 0xffa857,
         sunInt: 1.65,
         sunOff: [-110, 32, -25],
@@ -438,8 +438,8 @@ class ScorpionGame {
         label: '🌙 Blue Hour',
         sky: 0x1c2e4a,
         fog: 0x243652,
-        fogNear: 140,
-        fogFar: 680,
+        fogNear: 240,
+        fogFar: 1450,
         sunCol: 0x8bb6e8,
         sunInt: 0.45,
         sunOff: [-65, 45, -45],
@@ -452,8 +452,8 @@ class ScorpionGame {
         label: '🌫 Morning Mist',
         sky: 0xb8d4e3,
         fog: 0xd6e3e8,
-        fogNear: 130,
-        fogFar: 640,
+        fogNear: 220,
+        fogFar: 1350,
         sunCol: 0xfff4e0,
         sunInt: 1.45,
         sunOff: [95, 45, 25],
@@ -627,13 +627,16 @@ class ScorpionGame {
       fastTravel(FARM_CENTER.x - 2, FARM_CENTER.z + 14.5, 0.18, 'Wimpasing Home Farm');
     });
     document.getElementById('btn-tp-lake')!.addEventListener('click', () => {
-      fastTravel(-199.8, 125.0, Math.PI / 2, 'Fischerei Sebald & Schloss Ammerland (Starnberger See)');
+      // Right on Nördliche Seestraße facing west straight down Fischerei Sebald Pier over Starnberger See!
+      fastTravel(-694.0, REAL_SPOTS.sebaldPier.z, Math.PI / 2, 'Fischerei Sebald & Schloss Ammerland (Starnberger See)');
     });
     document.getElementById('btn-tp-village')!.addEventListener('click', () => {
-      fastTravel(424.0, 232.0, -Math.PI / 2 + 0.04, 'Münsing — Gasthaus Zum Altwirt & St. Mariä Himmelfahrt');
+      // Right on paved Weipertshausener Straße facing east into Münsing: St. Mariä Himmelfahrt, Maibaum & Zum Altwirt!
+      fastTravel(804.0, 666.0, -Math.PI / 2 + 0.14, 'Münsing — Gasthaus Zum Altwirt & St. Mariä Himmelfahrt');
     });
     document.getElementById('btn-tp-weipert')!.addEventListener('click', () => {
-      fastTravel(256.2, -352.3, 0.08, 'Weipertshausen — Weipertshausener Straße');
+      // Right on paved Weipertshausener Straße heading north into Weipertshausen!
+      fastTravel(298.0, -773.0, 0.12, 'Weipertshausen — Weipertshausener Straße');
     });
 
     window.addEventListener('keydown', (e) => {
@@ -836,20 +839,21 @@ class ScorpionGame {
 
   private getCurrentLocationName(): string {
     const { x, z } = this.tractor.position;
-    if (x < -194 && Math.abs(z - 125) < 22) return '⛵ Fischerei Sebald · Starnberger See';
-    if (Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 46)
+    if (Math.hypot(x - REAL_SPOTS.sebaldPier.x, z - REAL_SPOTS.sebaldPier.z) < 68)
+      return '⛵ Fischerei Sebald · Starnberger See';
+    if (Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 75)
       return '🏰 Schloss Ammerland · Starnberger See';
-    if (Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 34)
+    if (Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 68)
       return '⛪ Münsing — St. Mariä Himmelfahrt';
-    if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 48)
+    if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 88)
       return '🍺 Münsing — Gasthaus Zum Altwirt';
-    if (Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 35) return '🛒 Münsing — EDEKA Graf';
-    if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 95)
+    if (Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 65) return '🛒 Münsing — EDEKA Graf';
+    if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 155)
       return '🌲 Weipertshausen';
-    if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 45) return '🌾 Ried';
-    if (Math.abs(x - FARM_CENTER.x) < 36 && Math.abs(z - FARM_CENTER.z) < 34) return '🚜 Wimpasing Home Farm';
-    if (Math.hypot(x - REAL_SPOTS.wimpasing.x, z - REAL_SPOTS.wimpasing.z) < 55) return '🏘️ Wimpasing';
-    if (x > 160 && x < 420) return '⛰️ Münsinger Straße Climb';
+    if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 95) return '🌾 Ried';
+    if (Math.abs(x - FARM_CENTER.x) < 48 && Math.abs(z - FARM_CENTER.z) < 46) return '🚜 Wimpasing Home Farm';
+    if (Math.hypot(x - REAL_SPOTS.wimpasing.x, z - REAL_SPOTS.wimpasing.z) < 115) return '🏘️ Wimpasing';
+    if (x > 160 && x < 740) return '⛰️ Münsinger Straße Climb';
     return '🏔️ Starnberger See Valley';
   }
 
