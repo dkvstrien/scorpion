@@ -121,6 +121,18 @@ export class PropManager {
     this.spawnProp('barrel', new THREE.Vector3(ox - 8.6, oy + 0.85, oz + 5.6), 1.1);
     this.spawnProp('tire', new THREE.Vector3(ox - 12.4, oy + 0.45, oz + 7.4), 0.4);
     this.spawnProp('tire', new THREE.Vector3(ox - 6.8, oy + 0.45, oz - 10.2), 0.9);
+
+    // 7. REAL grabbable roadside logs & wrapped silage bales at the Münsinger Straße open-country spot (482, 938)!
+    // (Replaces static non-grabbable logs so players can genuinely pick up & load roadside timber and bales!)
+    const ocX = 482;
+    const ocZ = 938;
+    const ocY = getTerrainHeight(ocX, ocZ);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX - 1.6, ocY + 0.85, ocZ), 0.3);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX + 0.2, ocY + 0.85, ocZ - 0.5), 0.4);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX + 1.9, ocY + 0.85, ocZ - 0.2), 0.2);
+    this.spawnProp('log', new THREE.Vector3(ocX - 4.4, ocY + 0.5, ocZ + 2.4), 0.35);
+    this.spawnProp('log', new THREE.Vector3(ocX - 4.0, ocY + 0.5, ocZ + 3.4), 0.3);
+    this.spawnProp('log', new THREE.Vector3(ocX - 4.2, ocY + 1.15, ocZ + 2.9), 0.33);
   }
 
   public spawnExtraChaosWave(aroundX = FARM_YARD_CENTER.x, aroundZ = FARM_YARD_CENTER.z): void {

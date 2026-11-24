@@ -399,7 +399,6 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
     [-175, 815],
     [REAL_SPOTS.ried.x + 22, REAL_SPOTS.ried.z + 18],
     [474, -1202], // Weipertshausen farmyard right beside the road!
-    [482, 938], // Open country meadow hay bale stack along Münsinger Straße!
     [1220, 975], // Münsing west farmyard edge
     [-955, 765] // Ammerland lakeside farmyard
   ];
@@ -446,8 +445,8 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
       }
     }
 
-    // On real farmyards (not the open-road meadow stack), add a cylindrical green slurry tank & tarped silage clamp!
-    if (fIdx !== 3) {
+    // Add a cylindrical green slurry tank & tarped silage clamp on neighboring farmyards!
+    {
       const tank = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 3.6, 16), tankMat);
       tank.position.set(-7.5, 1.8, -5.5);
       tank.castShadow = true;
@@ -963,7 +962,7 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
   const tractorColors = [0x2a6d33, 0xc23526, 0x26628c, 0x3b7a38, 0xb83824]; // Fendt green, IHC red, Eicher blue
   const parkedTractors: [number, number, number][] = [
     [308, 944, 0.6], // Field gate east of Wimpasing
-    [495, 920, -0.8], // Open-country Münsinger Straße wheat field gate!
+    [486, 914, -0.8], // Open-country Münsinger Straße wheat field gate!
     [640, 998, -1.2], // Mid Münsinger Straße meadow gate!
     [945, 954, 0.4], // East Münsinger Straße approach
     [-192, 472, 1.2], // Ried south field gate

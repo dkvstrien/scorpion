@@ -118,6 +118,7 @@ let dgmCols = OSM_DATA.heightmap.cols;
 let dgmRows = OSM_DATA.heightmap.rows;
 
 export let FARM_GROUND_Y = 25.0;
+export let FARM_EXIT_ROAD_Y = 25.0;
 export let DEMO_GROUND_Y = 56.0;
 
 /**
@@ -146,6 +147,7 @@ export async function initDgm1Heightmap(): Promise<void> {
     console.warn('DGM1 binary fallback to JSON preview grid:', err);
   }
   FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_YARD_CENTER.x, FARM_YARD_CENTER.z) - LAKE_ELEV_M);
+  FARM_EXIT_ROAD_Y = Math.max(1.2, getRealElevationMeters(-277.6, 922.2) - LAKE_ELEV_M);
   DEMO_GROUND_Y = Math.max(1.2, getRealElevationMeters(165, 622) - LAKE_ELEV_M);
 }
 
@@ -213,6 +215,7 @@ export function getRealElevationMeters(x: number, z: number): number {
 
 // Initialize fallback FARM_GROUND_Y / DEMO_GROUND_Y before async binary finishes
 FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_YARD_CENTER.x, FARM_YARD_CENTER.z) - LAKE_ELEV_M);
+FARM_EXIT_ROAD_Y = Math.max(1.2, getRealElevationMeters(-277.6, 922.2) - LAKE_ELEV_M);
 DEMO_GROUND_Y = Math.max(1.2, getRealElevationMeters(165, 622) - LAKE_ELEV_M);
 
 /**
@@ -235,6 +238,16 @@ export function getTerrainHeight(x: number, z: number): number {
   if (fdx < 30 && fdz < 27) {
     const farmFlat = (1 - smoothstep(22, 30, fdx)) * (1 - smoothstep(19, 27, fdz));
     y = y * (1 - farmFlat) + FARM_GROUND_Y * farmFlat;
+  }
+
+  // Smoothly graded East farmyard exit ramp & village-road junction (-322..-268, z ~ 922) so driving out NEVER hits a curb ledge!
+  if (x >= -324 && x <= -266 && Math.abs(z - 922.0) < 14) {
+    const zBlend = 1 - smoothstep(6.5, 14.0, Math.abs(z - 922.0));
+    const xBlend = (1 - smoothstep(-275, -266, x)) * smoothstep(-324, -316, x);
+    const rampT = smoothstep(-320, -278, x);
+    const targetLaneY = FARM_GROUND_Y * (1 - rampT) + FARM_EXIT_ROAD_Y * rampT;
+    const laneWeight = zBlend * xBlend;
+    y = y * (1 - laneWeight) + targetLaneY * laneWeight;
   }
 
   // Level terrace for the Old Gravel Pit Farmstead demolition site (165, 622) so walls & fast-travel landing sit flat

@@ -55,7 +55,16 @@ export interface TractorCallbacks {
   onExhaust: (pos: THREE.Vector3) => void;
   onWheelTrack: (x: number, z: number, heading: number) => void;
   onOverloadAlarm: () => void;
+  onStabilityWarning?: (msg: string) => void;
   onTippedOver: (pos: THREE.Vector3) => void;
+}
+
+export interface GrabbableCandidate {
+  label: string;
+  pos: THREE.Vector3;
+  radius: number;
+  compatible: boolean;
+  massKg: number;
 }
 
 export const TOOL_META: Record<AttachmentType, { name: string; tip: string }> = {
@@ -92,6 +101,7 @@ export class ClaasScorpion {
   public rollDeg = 0;
   public wheelsOnGround = 4;
   public isTipped = false;
+  public boomSpeedLimited = false;
   public workLightsOn = false;
   public distanceMeters = 0;
 
@@ -136,6 +146,7 @@ export class ClaasScorpion {
   private holdTimer = 0;
   private grabLockedOnPress = false;
   private lastWarnAt = 0;
+  private lastTipWarnAt = 0;
   private wasTipped = false;
   private uprightTimer = 2.0;
   private rolloverCooldown = 0;
@@ -491,9 +502,77 @@ export class ClaasScorpion {
     }
   }
 
+  private getGrabReach(): number {
+    return this.activeTool === 'bucket'
+      ? 2.4
+      : this.activeTool === 'forks'
+        ? 2.1
+        : this.activeTool === 'grabber'
+          ? 2.35
+          : this.activeTool === 'grapple'
+            ? 2.65
+            : 2.2;
+  }
+
+  private isPropCompatible(prop: FarmProp): boolean {
+    if (this.freePlayMode) return true;
+    if (this.activeTool === 'none') return false;
+    if (this.activeTool === 'forks') return prop.kind === 'crate';
+    if (this.activeTool === 'spike') return prop.kind === 'hay_round' || prop.kind === 'hay_square';
+    if (this.activeTool === 'grabber') return prop.kind !== 'log' && prop.kind !== 'pumpkin';
+    if (this.activeTool === 'grapple') return prop.kind === 'log' || prop.kind === 'barrel' || prop.kind === 'tire' || prop.kind === 'hay_round' || prop.kind === 'hay_square';
+    if (this.activeTool === 'bucket') return prop.kind === 'pumpkin' || prop.kind === 'crate' || prop.kind === 'barrel' || prop.kind === 'tire' || prop.kind === 'hay_square';
+    return true;
+  }
+
+  public findNearestGrabbable(props: FarmProp[], villageObjs: DynamicVillageObj[]): GrabbableCandidate | null {
+    if (this.heldProps.length > 0 || this.heldVillageObj) return null;
+    const holdPos = this.getHoldWorldPos();
+    const reach = this.getGrabReach();
+
+    let best: { dist: number; cand: GrabbableCandidate } | null = null;
+    for (const p of props) {
+      if (p.heldByTractor) continue;
+      const dp = new THREE.Vector3(p.body.position.x, p.body.position.y, p.body.position.z);
+      const dist = dp.distanceTo(holdPos);
+      if (dist < reach + p.radius * 0.65 && (!best || dist < best.dist)) {
+        const massKg =
+          p.kind === 'silage_wrapped' ? 1350 : p.kind === 'crate' ? 1100 : p.kind === 'log' ? 900 : p.kind === 'hay_round' || p.kind === 'hay_square' ? 950 : 420;
+        best = {
+          dist,
+          cand: {
+            label: p.label,
+            pos: dp,
+            radius: p.radius,
+            compatible: this.isPropCompatible(p),
+            massKg
+          }
+        };
+      }
+    }
+    for (const o of villageObjs) {
+      if (o.heldByTractor || (!this.freePlayMode && o.kind === 'car')) continue;
+      const dp = new THREE.Vector3(o.body.position.x, o.body.position.y, o.body.position.z);
+      const dist = dp.distanceTo(holdPos);
+      if (dist < 2.6 + o.radius * 0.7 && (!best || dist < best.dist)) {
+        best = {
+          dist,
+          cand: {
+            label: o.label,
+            pos: dp,
+            radius: o.radius,
+            compatible: true,
+            massKg: o.kind === 'car' ? 2750 : 750
+          }
+        };
+      }
+    }
+    return best ? best.cand : null;
+  }
+
   private tryGrabNearest(props: FarmProp[], villageObjs: DynamicVillageObj[]): boolean {
     if (this.activeTool === 'none' && !this.freePlayMode) {
-      this.warnOnce('No attachment hitched! Drive to the Tool Shed & press [T]');
+      this.warnOnce('No attachment hitched — drive to the Tool Shed and press [T].');
       return false;
     }
 
@@ -505,7 +584,7 @@ export class ClaasScorpion {
         const dp = new THREE.Vector3(o.body.position.x, o.body.position.y, o.body.position.z);
         return { obj: o, dist: dp.distanceTo(holdPos) };
       })
-      .filter((c) => c.dist < 2.2 + c.obj.radius * 0.65)
+      .filter((c) => c.dist < 2.6 + c.obj.radius * 0.7)
       .sort((a, b) => a.dist - b.dist);
 
     if (vCandidates.length > 0 && (this.freePlayMode || vCandidates[0].obj.kind !== 'car')) {
@@ -520,14 +599,7 @@ export class ClaasScorpion {
     }
 
     const maxCount = this.activeTool === 'bucket' ? 4 : 1;
-    const grabRadius =
-      this.activeTool === 'bucket'
-        ? 1.95
-        : this.activeTool === 'forks'
-          ? 1.48
-          : this.activeTool === 'grabber'
-            ? 1.75
-            : 1.65;
+    const grabRadius = this.getGrabReach();
 
     const candidates = props
       .filter((p) => !p.heldByTractor)
@@ -535,7 +607,7 @@ export class ClaasScorpion {
         const dp = new THREE.Vector3(p.body.position.x, p.body.position.y, p.body.position.z);
         return { prop: p, dist: dp.distanceTo(holdPos), dy: dp.y - holdPos.y };
       })
-      .filter((c) => c.dist < grabRadius + c.prop.radius * 0.3)
+      .filter((c) => c.dist < grabRadius + c.prop.radius * 0.65)
       .sort((a, b) => a.dist - b.dist);
 
     if (candidates.length === 0) return false;
@@ -653,12 +725,20 @@ export class ClaasScorpion {
     body.quaternion.vmult(rightWorld, rightWorld);
 
     const activeGear = this.getActiveGear(input);
-    const maxSpeed = input.creep ? 2.6 : VARIPOWER_GEARS[activeGear].ms;
+    // Real telehandler boom-height speed interlock: raising boom above ~30% (or extending >35%) limits travel speed to safe creep/snail!
+    const liftFrac = THREE.MathUtils.clamp((this.boomPitch + 0.2) / 1.3, 0, 1);
+    const extFrac = THREE.MathUtils.clamp(this.boomExt / 3.6, 0, 1);
+    const boomOver = Math.max((liftFrac - 0.3) / 0.7, (extFrac - 0.35) / 0.65);
+    this.boomSpeedLimited = boomOver > 0;
+    const boomCapMs = boomOver > 0 ? THREE.MathUtils.lerp(4.2, 2.8, Math.min(1, boomOver)) : Infinity; // ~15 km/h down to ~10 km/h!
+    const baseMaxSpeed = input.creep ? 2.6 : VARIPOWER_GEARS[activeGear].ms;
+    const maxSpeed = Math.min(baseMaxSpeed, boomCapMs);
+
     const restHubHeight = 0.92;
-    const kSpringFront = 148000;
-    const kSpringRear = 209000;
-    const cDamp = 32500;
-    const kAntiRoll = 58000;
+    const kSpringFront = 136000;
+    const kSpringRear = 192000;
+    const cDamp = 26500;
+    const kAntiRoll = 34000;
 
     let grounded = 0;
     const absForwardSpd = Math.abs(body.velocity.dot(fwdWorld));
@@ -730,20 +810,31 @@ export class ClaasScorpion {
           const vLong = vPt.dot(wFwd);
           const vLat = vPt.dot(wRight);
 
-          // Progressive 136 hp Varipower hydrostatic drive (weighty 0->30 km/h in ~5.4 s, exact 15/30/40 km/h gears!)
+          // Progressive 136 hp Varipower hydrostatic drive with distinct acceleration, heavy coasting (~4.5 s from 37 km/h) & active brake!
           const targetSpeed = input.throttle * maxSpeed * 1.015;
           const speedErr = targetSpeed - vLong;
-          const isBraking = Math.abs(input.throttle) < 0.02 || input.throttle * vLong < -0.2;
-          // Engine power taper at road speed (realistic 136 hp diesel tractive effort curve)
-          const tractiveLimit = isBraking
-            ? 11000
-            : THREE.MathUtils.lerp(4700, 3400, THREE.MathUtils.clamp(absForwardSpd / 11.1, 0, 1));
-          const driveGain = isBraking ? 8800 : 6200;
+          const isCoasting = Math.abs(input.throttle) < 0.02;
+          const isActiveBrake = !isCoasting && input.throttle * vLong < -0.18;
+          let tractiveLimit: number;
+          let driveGain: number;
+          if (isActiveBrake) {
+            // Firm hydrostatic service brake when pressing S / reversing against travel
+            tractiveLimit = 11500;
+            driveGain = 9200;
+          } else if (isCoasting) {
+            // Heavy 7.6-ton hydrostatic coasting & rolling resistance (~4.4 s smooth glide from 37 -> 0 km/h!)
+            tractiveLimit = 3900;
+            driveGain = 1280;
+          } else {
+            // Engine power taper at road speed (realistic 136 hp diesel tractive effort curve)
+            tractiveLimit = THREE.MathUtils.lerp(4700, 3400, THREE.MathUtils.clamp(absForwardSpd / 11.1, 0, 1));
+            driveGain = 6200;
+          }
           const fDrive = THREE.MathUtils.clamp(speedErr * driveGain, -tractiveLimit, tractiveLimit);
 
-          // Realistic agricultural tire lateral grip capped by normal load (calm 4/4 tires on 25 km/h full-lock turns!)
-          const maxLatGrip = Math.min(18500, Math.max(4200, fUp * 0.5));
-          const fLat = THREE.MathUtils.clamp(-vLat * 10500, -maxLatGrip, maxLatGrip);
+          // Realistic agricultural tire lateral grip: slight loose scrub & lean at 37+ km/h full lock!
+          const maxLatGrip = Math.min(16400, Math.max(4200, fUp * 0.45));
+          const fLat = THREE.MathUtils.clamp(-vLat * 9400, -maxLatGrip, maxLatGrip);
 
           const totalHoriz = new CANNON.Vec3(
             wFwd.x * fDrive + wRight.x * fLat,
@@ -772,26 +863,32 @@ export class ClaasScorpion {
       body.applyForce(new CANNON.Vec3(0, fLoadY, 0), tipRel);
     }
 
-    // High-CoG centrifugal roll torque ONLY when boom is genuinely raised high (> 0.48 rad) OR carrying a heavy load!
-    // Applied purely around the longitudinal roll axis (elevated CoG) so it NEVER fights steering yaw!
-    const highBoomFactor = THREE.MathUtils.clamp((this.boomPitch - 0.48) / 0.52, 0, 1);
-    const highBoomKg = highBoomFactor * (4200 + this.boomExt * 1800);
-    const effectiveWhipKg = carriedKg * (0.85 + highBoomFactor * 1.25) + highBoomKg;
-    if (effectiveWhipKg > 50 && grounded >= 1) {
+    // Natural chassis body-roll lean in high-speed empty turns (~6-10 deg lean at 37 km/h full lock!)
+    // PLUS strong elevated-CoG centrifugal roll torque when boom is raised high or carrying load (genuinely tips!)
+    if (grounded >= 1) {
       const yawOmega = body.angularVelocity.y;
       const forwardSpd = body.velocity.dot(fwdWorld);
       const latAccel = forwardSpd * yawOmega;
-      // Centrifugal roll moment = m_elevated * a_lat * h_elevated (applied purely as roll torque around fwdWorld!)
-      const elevatedH = Math.max(1.2, tipRel.y);
-      const rollMoment = THREE.MathUtils.clamp(
-        effectiveWhipKg * latAccel * elevatedH * 3.8,
-        -380000,
-        380000
-      );
-      body.torque.vadd(
-        new CANNON.Vec3(fwdWorld.x * rollMoment, fwdWorld.y * rollMoment, fwdWorld.z * rollMoment),
-        body.torque
-      );
+
+      // Baseline chassis body roll: noticeable 6-11 deg lean when cornering hard empty at 35+ km/h without flipping on flat ground!
+      const chassisRollTorque = THREE.MathUtils.clamp(7640 * latAccel * 1.48, -84000, 84000);
+
+      const highBoomFactor = THREE.MathUtils.clamp((this.boomPitch - 0.35) / 0.65, 0, 1);
+      const highBoomKg = highBoomFactor * (5200 + this.boomExt * 2400);
+      const effectiveWhipKg = carriedKg * (0.95 + highBoomFactor * 1.35) + highBoomKg;
+      const elevatedH = Math.max(1.25, tipRel.y);
+      const loadRollTorque =
+        effectiveWhipKg > 40
+          ? THREE.MathUtils.clamp(effectiveWhipKg * latAccel * elevatedH * 4.4, -400000, 400000)
+          : 0;
+
+      const totalRollMoment = THREE.MathUtils.clamp(chassisRollTorque + loadRollTorque, -440000, 440000);
+      if (Math.abs(totalRollMoment) > 50) {
+        body.torque.vadd(
+          new CANNON.Vec3(fwdWorld.x * totalRollMoment, fwdWorld.y * totalRollMoment, fwdWorld.z * totalRollMoment),
+          body.torque
+        );
+      }
     }
 
     // 3. Boom-to-Ground Physical Push (lets you push the boom against the ground — even to try self-righting if tipped!)
@@ -894,8 +991,19 @@ export class ClaasScorpion {
       const blinkRed = idx === 5 && this.loadMoment > 0.82 ? (Math.sin(elapsed * 18) > 0 ? 1.8 : 0.1) : 1.3;
       mat.emissiveIntensity = isLit ? blinkRed : 0.06;
     });
-    if (this.loadMoment > 0.8 && !this.isTipped) {
+    if (this.loadMoment > 0.72 && !this.isTipped) {
       this.callbacks.onOverloadAlarm();
+      const now = performance.now();
+      if (now - this.lastTipWarnAt > 2600) {
+        this.lastTipWarnAt = now;
+        const msg =
+          this.boomPitch > 0.35 || this.boomExt > 0.8
+            ? 'Stability warning: lower and retract boom!'
+            : this.wheelsOnGround <= 2
+              ? 'Stability warning: wheel lift — slow down!'
+              : 'Stability warning: approaching tip limit!';
+        this.callbacks.onStabilityWarning?.(msg);
+      }
     }
 
     // GENUINE TIPPED-OVER / ROLLOVER CONSEQUENCE (debounced cleanly so it fires once per real rollover!)

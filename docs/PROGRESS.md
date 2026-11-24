@@ -429,3 +429,31 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 ### Verification & Screenshots (`.scratch/loop/17/`)
 - `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
 - Screenshots inspected: `.scratch/loop/17/01_muensinger_str_463.png`, `.scratch/loop/17/02_muensinger_str_575.png`, `.scratch/loop/17/03_muensinger_str_760.png`, `.scratch/loop/17/04_muensinger_str_325.png`, `.scratch/loop/17/05_weipert_corridor.png`.
+
+---
+
+## Iteration 18 — Round 2: Handling Overhaul (Boom Speed Limit, Corner Lean, Coasting Curve, Smooth Yard Exit & Reliable Grab) (2026-11-24)
+
+**Goal**: Address all 5 Handling points from `.scratch/grades/round-1.md`.
+
+### Changes Made
+- **Boom-up speed interlock & pre-tip warning** ([src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Raising the boom above `30%` lift or extending past `35%` progressively limits travel speed down to `10–15 km/h` (even in Hare gear) and shows a `Boom Limit` HUD badge.
+  - Added debounced pre-tip stability warnings (`loadMoment > 0.72`) with overload alarm before rollover occurs.
+- **Empty cornering body roll & heavy hydrostatic coasting** ([src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts)):
+  - Tuned spring/anti-roll compliance and added baseline chassis centrifugal body roll so high-speed empty full-lock turns visibly lean (`5°–9°` at `33–40 km/h`) without flipping on flat ground, while high-boom and heavy-load turns still tip realistically.
+  - Separated off-throttle coasting from active reverse braking (`S`) so releasing `W` glides heavily down to rest over `~4.5–5.0 s` instead of stopping abruptly in `2 s`.
+- **Smooth yard-to-road transition** ([src/terrain.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/terrain.ts)):
+  - Added a smooth graded driveway ramp (`x ∈ [-324..-266], z ≈ 922`) blending the Home Farm yard terrace directly into the village road elevation.
+- **Reliable grabbing & 3D "can grab" highlight** ([src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts), [src/props.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/props.ts), [src/worldDetails.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/worldDetails.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Replaced the static decorative logs & bales at the open-country spot `(482, 938)` with real dynamic `PropManager` physics logs and wrapped silage bales.
+  - Expanded attachment grab reach (`2.1–2.65 m + 0.65 × radius`) and added a pulsing 3D ground highlight ring (green when tool matches, amber when swap needed) plus `[Space] Grab: <Label> (<kg>)` HUD prompt.
+
+### Verification & Screenshots (`.scratch/loop/18/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Live telemetry verified:
+  - Yard exit across `x = -287, z = 922` at `30.1 km/h`: **`0°` roll (`max 1°`), `4/4` tires** (`.scratch/loop/18/01_yard_exit_smooth.png`).
+  - Full-lift/ext `Hare 40` run: capped at **`10.6 km/h`** with `Boom Limit` badge (`.scratch/loop/18/02_boom_speed_limit.png`).
+  - Empty `33.3 km/h` full-lock turn: **`5°` body lean**, `4/4` tires, upright (`.scratch/loop/18/03_empty_corner_lean.png`).
+  - Off-throttle coasting curve (`km/h` at `0..5 s`): `30.3 → 21.4 → 12.2 → 5.4 → 2.4 → 1.1`.
+  - Roadside open-country log grab: `[Space] Grab: Fallen Pine Log (900 kg)` → lifted **`900 kg`** on first press (`.scratch/loop/18/04_can_grab_highlight.png`, `.scratch/loop/18/05_grabbed_open_country_log.png`).

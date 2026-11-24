@@ -189,6 +189,7 @@ class ScorpionGame {
   private minimap: MuensingMiniMap;
   private waypointBeacon: THREE.Group;
   private guideArrow: THREE.Group;
+  private grabHighlightRing: THREE.Mesh;
   private listeningBindAction: BindAction | null = null;
   private currentGuideTarget: { x: number; z: number; isPickup: boolean } | null = null;
 
@@ -457,6 +458,7 @@ class ScorpionGame {
         }),
       onWheelTrack: (x, z, heading) => this.tracks.stampWheel(x, z, heading),
       onOverloadAlarm: () => this.audio.playOverloadBeep(),
+      onStabilityWarning: (msg) => this.showToast(msg, 'danger'),
       onTippedOver: (pos) => {
         this.audio.playCrush(true);
         this.particles.spawnCrush(pos, [0x9fd32e, 0xd6c7a8, 0x525a60]);
@@ -470,6 +472,14 @@ class ScorpionGame {
 
     this.waypointBeacon = createWaypointBeacon(this.scene);
     this.guideArrow = createGuideArrow(this.scene);
+    // Crisp 3D glowing ground highlight ring around whichever prop/log/bale is currently within grab reach!
+    this.grabHighlightRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.92, 1.18, 28),
+      new THREE.MeshBasicMaterial({ color: 0x9fd32e, side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false })
+    );
+    this.grabHighlightRing.rotation.x = -Math.PI / 2;
+    this.grabHighlightRing.visible = false;
+    this.scene.add(this.grabHighlightRing);
     this.minimap = new MuensingMiniMap(document.getElementById('minimap-canvas') as HTMLCanvasElement);
 
     // Apply 4-wheel suspension, traction & dynamic boom tipping forces on EVERY fixed Cannon substep!
@@ -1317,7 +1327,15 @@ class ScorpionGame {
       this.prevGamepadButtons = gp.buttons.map((b) => b.pressed);
     }
 
-    this.creepBadge.classList.toggle('hidden', !creep);
+    const showCreepOrLimit = creep || this.tractor.boomSpeedLimited;
+    this.creepBadge.classList.toggle('hidden', !showCreepOrLimit);
+    if (this.tractor.boomSpeedLimited && !creep) {
+      this.creepBadge.textContent = 'Boom Limit';
+      this.creepBadge.classList.add('pill-hot');
+    } else {
+      this.creepBadge.textContent = 'Creep';
+      this.creepBadge.classList.remove('pill-hot');
+    }
 
     if (this.syntheticInput) {
       return {
@@ -1583,6 +1601,28 @@ class ScorpionGame {
         }
       }
     }
+    // Highlight nearest grabbable prop/log/bale with a glowing 3D ring & clear [Space] Grab prompt!
+    const grabbable = this.tractor.findNearestGrabbable(this.propMgr.props, this.realWorld.objects);
+    if (grabbable && !this.tractor.isTipped) {
+      const gy = getDrivableGroundY(grabbable.pos.x, grabbable.pos.z);
+      const pulse = 1.0 + Math.sin(this.elapsed * 6.5) * 0.08;
+      const rad = Math.max(0.95, grabbable.radius * 1.25) * pulse;
+      this.grabHighlightRing.position.set(grabbable.pos.x, gy + 0.16, grabbable.pos.z);
+      this.grabHighlightRing.scale.set(rad, rad, 1);
+      (this.grabHighlightRing.material as THREE.MeshBasicMaterial).color.setHex(
+        grabbable.compatible ? 0x9fd32e : 0xf5a623
+      );
+      this.grabHighlightRing.visible = true;
+      if (!promptMsg) {
+        const grabKey = formatKeyCode(this.settings.keybinds.grab);
+        promptMsg = grabbable.compatible
+          ? `[${grabKey}] Grab: ${grabbable.label} (${grabbable.massKg} kg)`
+          : `${grabbable.label} — swap to matching tool at Shed [T]`;
+      }
+    } else {
+      this.grabHighlightRing.visible = false;
+    }
+
     if (promptMsg) {
       this.interactPrompt.textContent = promptMsg;
       this.interactPrompt.classList.remove('hidden');
