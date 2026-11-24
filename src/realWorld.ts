@@ -9,7 +9,7 @@ import {
   SEBALD_PIER,
   WATER_LEVEL
 } from './terrain';
-import { createAsphaltTexture } from './textures';
+import { createAsphaltTexture, createGravelRoadTexture, createVillageAsphaltTexture } from './textures';
 import { buildBavarianWorldDetails } from './worldDetails';
 
 export interface DynamicVillageObj {
@@ -644,58 +644,72 @@ export class RealMuensingWorld {
   private buildRealOSMRoadsAndDetails(scene: THREE.Scene): void {
     const mainPaved: { pts: [number, number][]; halfWidth: number }[] = [];
     const villagePaved: { pts: [number, number][]; halfWidth: number }[] = [];
+    const gravelTracks: { pts: [number, number][]; halfWidth: number }[] = [];
 
     for (const r of OSM_DATA.roads) {
-      // Let farm tracks & driveways show directly from the crisp 20cm Bavaria aerial orthophoto!
-      if (r.hw === 'track' || r.hw === 'service') continue;
+      if (r.hw === 'track' || r.hw === 'service') {
+        gravelTracks.push({ pts: r.pts, halfWidth: r.hw === 'track' ? 1.85 : 2.15 });
+        continue;
+      }
       if (r.hw === 'secondary' || r.hw === 'tertiary') {
-        mainPaved.push({ pts: r.pts, halfWidth: 4.6 });
+        mainPaved.push({ pts: r.pts, halfWidth: 4.5 });
       } else {
-        villagePaved.push({ pts: r.pts, halfWidth: 3.4 });
+        villagePaved.push({ pts: r.pts, halfWidth: 3.3 });
       }
     }
 
     // Home Farm access lanes linking the courtyard east past the farmhouse to the village road, and west to the farm lane
-    villagePaved.push({
+    gravelTracks.push({
       pts: [
-        [FARM_YARD_CENTER.x + 23, FARM_YARD_CENTER.z - 4],
+        [FARM_YARD_CENTER.x + 22, FARM_YARD_CENTER.z - 4],
         [-305, 921.5],
         [-277.6, 922.2]
       ],
-      halfWidth: 2.7
+      halfWidth: 2.6
     });
-    villagePaved.push({
+    gravelTracks.push({
       pts: [
         [FARM_YARD_CENTER.x - 21, FARM_YARD_CENTER.z - 5],
         [-379, 914],
         [-395.1, 904.6]
       ],
-      halfWidth: 2.6
+      halfWidth: 2.5
     });
 
     const asphaltTex = createAsphaltTexture();
+    const villageAsphaltTex = createVillageAsphaltTexture();
+    const gravelTex = createGravelRoadTexture();
+
     const mainAsphaltMat = new THREE.MeshStandardMaterial({
       map: asphaltTex,
-      roughness: 0.88,
-      metalness: 0.05,
-      transparent: true,
-      opacity: 0.88,
+      roughness: 0.9,
+      metalness: 0.04,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3
+    });
+    const villageAsphaltMat = new THREE.MeshStandardMaterial({
+      map: villageAsphaltTex,
+      roughness: 0.92,
+      metalness: 0.03,
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2
     });
-    const villageAsphaltMat = new THREE.MeshStandardMaterial({
-      color: 0x4b4f54,
-      roughness: 0.92,
-      transparent: true,
-      opacity: 0.72,
+    const gravelMat = new THREE.MeshStandardMaterial({
+      map: gravelTex,
+      roughness: 0.95,
+      metalness: 0.01,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1
     });
 
-    scene.add(buildMergedRibbonMesh(mainPaved, 0.36, mainAsphaltMat));
-    scene.add(buildMergedRibbonMesh(villagePaved, 0.28, villageAsphaltMat));
+    scene.add(buildMergedRibbonMesh(mainPaved, 0.30, mainAsphaltMat));
+    scene.add(buildMergedRibbonMesh(villagePaved, 0.24, villageAsphaltMat));
+    if (gravelTracks.length > 0) {
+      scene.add(buildMergedRibbonMesh(gravelTracks, 0.18, gravelMat));
+    }
 
     // Lübbach stream ribbon flowing north-south along the west edge of Münsing
     if (OSM_DATA.streams.length > 0) {

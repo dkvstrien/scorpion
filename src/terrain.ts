@@ -283,7 +283,7 @@ export function buildRealMuensingTerrain(
   world: CANNON.World,
   groundMat: CANNON.Material,
   detailBump: THREE.CanvasTexture,
-  _meadowTex: THREE.CanvasTexture
+  meadowTex: THREE.CanvasTexture
 ): TerrainBuildResult {
   const group = new THREE.Group();
   const texLoader = new THREE.TextureLoader();
@@ -329,11 +329,33 @@ export function buildRealMuensingTerrain(
 
     const mat = new THREE.MeshStandardMaterial({
       map: aerialTex,
-      roughness: 0.92,
-      metalness: 0.02,
+      roughness: 0.94,
+      metalness: 0.01,
       bumpMap: detailBump,
-      bumpScale: 0.22
+      bumpScale: 0.24
     });
+    // Crisp world-space grass/gravel micro-detail shader so terrain reads sharp right down to the tires (zero blurry smears!)
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uDetailTex = { value: meadowTex };
+      shader.vertexShader =
+        'varying vec3 vTerrainWorldPos;\n' +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          '#include <begin_vertex>\nvTerrainWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;'
+        );
+      shader.fragmentShader =
+        'uniform sampler2D uDetailTex;\nvarying vec3 vTerrainWorldPos;\n' +
+        shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+          float dFine = texture2D(uDetailTex, vTerrainWorldPos.xz * 0.14).g - 0.5;
+          float dCoarse = texture2D(uDetailTex, vTerrainWorldPos.xz * 0.032).r - 0.5;
+          float camDist = distance(cameraPosition, vTerrainWorldPos);
+          float detailFade = 1.0 - smoothstep(45.0, 260.0, camDist);
+          diffuseColor.rgb *= (1.0 + (dFine * 0.34 + dCoarse * 0.20) * (0.35 + 0.65 * detailFade));`
+        );
+    };
+    mat.customProgramCacheKey = () => 'bavaria-terrain-detail-v1';
 
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(cx, 0, cz);

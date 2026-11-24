@@ -30,12 +30,14 @@ function sampleDgm1TerrainY(wx, wz) {
   return elev - LAKE_ELEV_M;
 }
 
-// Load our 4 DOP20 aerial tiles into raw RGB buffers so we can sample every building's REAL roof color!
+// Load our 4 RAW DOP20 aerial tiles into raw RGB buffers so we always sample every building's REAL roof color!
 async function loadDopSamplers() {
   const names = ['dop_nw.jpg', 'dop_ne.jpg', 'dop_sw.jpg', 'dop_se.jpg'];
   const quads = {};
   for (const name of names) {
-    const img = sharp(path.resolve('public/map', name));
+    const rawCandidate = path.resolve('data-cache/dop_raw', name);
+    const tilePath = fs.existsSync(rawCandidate) ? rawCandidate : path.resolve('public/map', name);
+    const img = sharp(tilePath);
     const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
     quads[name] = { data, w: info.width, h: info.height, ch: info.channels };
   }

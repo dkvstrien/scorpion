@@ -535,21 +535,21 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
         tufts.push({
           x: tx,
           z: tz,
-          s: 0.75 + ((i * 5 + s * 7) % 5) * 0.16,
-          hex: (i + s) % 5 === 0 ? 0xe8cc3a : (i + s) % 5 === 1 ? 0xf2eee0 : 0x628c36
+          s: 0.45 + ((i * 5 + s * 7) % 5) * 0.1,
+          hex: (i + s) % 5 === 0 ? 0xc8b236 : (i + s) % 3 === 0 ? 0x527d32 : 0x628e39
         });
       }
     }
   }
   if (tufts.length > 0) {
-    const tuftGeo = new THREE.ConeGeometry(0.45, 0.62, 5);
+    const tuftGeo = new THREE.DodecahedronGeometry(0.32, 0);
     const tuftMat = new THREE.MeshStandardMaterial({ roughness: 0.94 });
     const tuftInst = new THREE.InstancedMesh(tuftGeo, tuftMat, tufts.length);
     tufts.forEach((tf, idx) => {
       const gy = getTerrainHeight(tf.x, tf.z);
-      dummy.position.set(tf.x, gy + 0.24 * tf.s, tf.z);
+      dummy.position.set(tf.x, gy + 0.14 * tf.s, tf.z);
       dummy.rotation.set(0, idx * 1.3, 0);
-      dummy.scale.set(tf.s * 1.3, tf.s, tf.s * 1.3);
+      dummy.scale.set(tf.s * 1.4, tf.s * 0.72, tf.s * 1.4);
       dummy.updateMatrix();
       tuftInst.setMatrixAt(idx, dummy.matrix);
       col.setHex(tf.hex);

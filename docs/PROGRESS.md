@@ -209,3 +209,32 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 
 ### Honest Scores Before → After
 `3/2/2/2/1/3/3/3/2/2` → `3/2/2/2/1/3/3/3/2/2` (Recog moving up once ground & building polish land; Fix #1 complete).
+
+---
+
+## Iteration 10 — Fix #2: Clean Stylized Bavarian Ground Textures, Road Edges & Zero Melting-Snow Smears (2026-11-24)
+
+**Goal**: Eliminate the washed-out white/grey "melting snow" aerial smears around Münsing church, Gasthaus Zum Altwirt, Wimpasing, Ammerland, Ried, and Weipertshausen; make meadows read as lush green Bavarian grass, farmlands as distinct mown/stubble/ploughed patchwork, and roads/yards/tracks as crisp asphalt and warm gravel with clean edges.
+
+### Changes Made
+- Created [scripts/build-stylized-ground.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/build-stylized-ground.mjs) and backed up raw DOP20 aerials to git-ignored `data-cache/dop_raw/` (updating [scripts/compile-lod2-bavaria.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/compile-lod2-bavaria.mjs) to keep sampling real building roof colors from raw DOP20).
+- Generated 4 clean `2048×1564` ground quadrants (`public/map/dop_nw.jpg`..`dop_se.jpg`, total `public/map/` = **`6.7 MB`**):
+  - Sanitizes raw DOP20 white roofs, bright concrete glare, and black cast shadows into a coherent Bavarian meadow base while preserving natural organic terrain rhythm.
+  - Composites crisp vector OSM `farmland` (mown, stubble, ploughed furrow patterns), `meadow`, `forest`/`wood`, `residential` village lawns, warm gravel village courtyards/plazas, building drip-edges, grass road verges, asphalt roadbeds, gravel farm tracks, and Starnberger See pebble shoreline.
+- Added a zero-error world-space micro-detail shader (`onBeforeCompile` dual-frequency grass/soil grain) in [src/terrain.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/terrain.ts) + [src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts) so ground stays crisp right down to the tires.
+- Upgraded [src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts) & [src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts) to render opaque Landstraße asphalt, granite-curbed village streets, and 3D gravel farm tracks (`track`/`service`) with clean edges.
+- Replaced oversized white wildflower cones along open roads in [src/worldDetails.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/worldDetails.ts) with subtle low green/gold meadow tufts.
+
+### Verification & Weakest Things Observed (`.scratch/loop/10/`)
+- `npx tsc --noEmit && npm run build`: pass (`0` errors). `agweb console error`: `0` console errors.
+- Inspected all 6 viewpoints + Ried:
+  - `.scratch/loop/10/01_muensing_church.png`: White/grey melting-snow smears in front of St. Mariä Himmelfahrt completely gone; clean green lawns, warm gravel churchyard, crisp dark asphalt road.
+  - `.scratch/loop/10/02_zum_altwirt.png`: Clean meadows, crisp road markings, zero white smears.
+  - `.scratch/loop/10/03_home_farm.png`: Clean gravel exit track and village lawns.
+  - `.scratch/loop/10/04_ammerland_schloss.png`: Clean lakeside lawns, granite-curbed street, warm gravel terrace, clean shoreline.
+  - `.scratch/loop/10/05_open_country.png`: Rolling lush green hills, crisp asphalt Landstraße, no white cones.
+  - `.scratch/loop/10/06_weipertshausen.png` & `.scratch/loop/10/07_ried_village.png`: Crisp curbed village roads, clean gravel farm tracks, lush lawns.
+- **Weakest things still visible**: HUD still covers ~1/3 of screen (Fix #3 next); Sebald fast-travel not fixed yet (Fix #4); LoD2 buildings still look boxy with repetitive painted windows and flat eaves, and hero church/trees look simple (Fix #5).
+
+### Honest Scores Before → After
+`3/2/2/2/1/3/3/3/2/2` → `3/2/2/3/2/3/3/3/2/2` (Density 2→3, Look 1→2; Fix #2 complete).

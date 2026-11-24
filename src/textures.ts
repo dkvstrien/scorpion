@@ -487,31 +487,55 @@ export function createDetailBumpTexture(): THREE.CanvasTexture {
 }
 
 export function createMeadowDetailTexture(): THREE.CanvasTexture {
-  // Subtle grayscale/warm-tinted painterly grass & clover texture that multiplies cleanly with terrain vertexColors!
+  // High-frequency grass-blade, clover & earthy grain detail texture centered around neutral 0.5 (128)
+  // for crisp world-space micro-modulation on terrain down to tire distance!
   const [c, ctx] = makeCanvas(256, 256);
-  ctx.fillStyle = '#e2e6de';
+  ctx.fillStyle = '#808080';
   ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 2400; i++) {
+  for (let i = 0; i < 3600; i++) {
     const x = Math.random() * 256;
     const y = Math.random() * 256;
     ctx.fillStyle =
       i % 3 === 0
-        ? 'rgba(255,255,245,0.28)'
+        ? 'rgba(176,184,162,0.42)'
         : i % 3 === 1
-          ? 'rgba(135,152,120,0.25)'
-          : 'rgba(175,188,155,0.22)';
-    ctx.fillRect(x, y, 2, 7 + Math.random() * 8);
+          ? 'rgba(84,96,76,0.42)'
+          : 'rgba(146,154,132,0.34)';
+    ctx.fillRect(x, y, 2, 5 + Math.random() * 7);
   }
-  // Tiny subtle wildflower flecks
-  for (let i = 0; i < 45; i++) {
-    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,244,180,0.55)' : 'rgba(255,255,255,0.5)';
+  // Fine soil & gravel flecks
+  for (let i = 0; i < 900; i++) {
+    const v = i % 2 === 0 ? 105 : 152;
+    ctx.fillStyle = `rgba(${v},${v},${v - 4},0.34)`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2.5, 2.5);
   }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+export function createGravelRoadTexture(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(256, 256);
+  ctx.fillStyle = '#8d836f';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4800; i++) {
+    const v = 104 + Math.floor(Math.random() * 58);
+    ctx.fillStyle = `rgb(${v},${v - 7},${v - 19})`;
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 3, 2 + Math.random() * 3);
+  }
+  // Subtle grassy wheel-track median down the middle of Bavarian Feldwege
+  ctx.fillStyle = 'rgba(94, 126, 62, 0.34)';
+  ctx.fillRect(102, 0, 52, 256);
+  // Subtle darker tire tracks
+  ctx.fillStyle = 'rgba(86, 76, 60, 0.28)';
+  ctx.fillRect(44, 0, 38, 256);
+  ctx.fillRect(174, 0, 38, 256);
+
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(34, 28);
   return tex;
 }
 
@@ -543,26 +567,55 @@ export function createCobbleTexture(): THREE.CanvasTexture {
 
 export function createAsphaltTexture(): THREE.CanvasTexture {
   const [c, ctx] = makeCanvas(256, 256);
-  ctx.fillStyle = '#3a3e43';
+  ctx.fillStyle = '#3b3f44';
   ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 3600; i++) {
-    const v = 42 + Math.floor(Math.random() * 38);
-    ctx.fillStyle = `rgb(${v},${v + 2},${v + 4})`;
+  for (let i = 0; i < 4200; i++) {
+    const v = 46 + Math.floor(Math.random() * 34);
+    ctx.fillStyle = `rgb(${v},${v + 1},${v + 3})`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
-  // Subtle German Landstraße white edge markings & dashed centerline (u = across width, v = along road)
-  ctx.fillStyle = 'rgba(232, 236, 234, 0.42)';
-  ctx.fillRect(10, 0, 5, 256);
-  ctx.fillRect(241, 0, 5, 256);
-  ctx.fillStyle = 'rgba(240, 242, 238, 0.52)';
-  ctx.fillRect(125, 24, 6, 92);
-  ctx.fillRect(125, 152, 6, 92);
+  // Clean shoulder curb border & crisp German Landstraße white edge & dashed center markings
+  ctx.fillStyle = '#4c514b';
+  ctx.fillRect(0, 0, 7, 256);
+  ctx.fillRect(249, 0, 7, 256);
+  ctx.fillStyle = 'rgba(228, 232, 228, 0.56)';
+  ctx.fillRect(11, 0, 5, 256);
+  ctx.fillRect(240, 0, 5, 256);
+  ctx.fillStyle = 'rgba(235, 238, 232, 0.62)';
+  ctx.fillRect(125, 24, 6, 90);
+  ctx.fillRect(125, 152, 6, 90);
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(1, 2);
+  return tex;
+}
+
+export function createVillageAsphaltTexture(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(256, 256);
+  ctx.fillStyle = '#474b50';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 4200; i++) {
+    const v = 56 + Math.floor(Math.random() * 34);
+    ctx.fillStyle = `rgb(${v},${v + 1},${v + 2})`;
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+  }
+  // Subtle Bavarian cobblestone/granite curb edge strip along village streets
+  ctx.fillStyle = '#6f6c64';
+  ctx.fillRect(0, 0, 10, 256);
+  ctx.fillRect(246, 0, 10, 256);
+  ctx.fillStyle = 'rgba(42, 44, 46, 0.4)';
+  for (let y = 0; y < 256; y += 16) {
+    ctx.fillRect(0, y, 10, 2);
+    ctx.fillRect(246, y, 10, 2);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
 
