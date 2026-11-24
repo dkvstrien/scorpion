@@ -362,3 +362,28 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 
 ### Honest Scores Before → After
 `3/3/3/3/2/3/3/3/3/3` → `3/3/3/3/3/3/3/3/3/3` (Look 2→3; Fixes #1–#5 complete. Next: Iteration 15 full end-to-end scorecard regression audit, FPS/load/handling/demolition/fast-travel proof suite, and final `docs/FINAL_REPORT.md`).
+
+---
+
+## Iteration 15 — Round 2: Finish, First 5 Minutes, Key Rebinding, Mouse Sensitivity & Sebald Landing Framing (2026-11-24)
+
+**Goal**: Address all Finish, First-5-Minutes, and Sebald-landing points from `.scratch/grades/round-1.md`.
+
+### Changes Made
+- **First 5 minutes** ([index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), [src/contracts.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/contracts.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Simplified the title screen to 5 core key bindings (`WASD` Drive, `Q/E / R/F` Boom, `Space` Grab, `J` Jobs/Travel, `Esc` Menu & Controls) and moved full bindings to `Esc → Controls`.
+  - Enabled destination hints (`hints: true`) by default for the first session (persisted in `localStorage`).
+  - Added a `Go to Job` button in the Jobs drawer that moves the Scorpion directly to the active contract's pickup/start area, added a floating 3D overhead directional guide arrow (amber for pickup, green for drop-off), and kept the 3D waypoint beacon active for Job 1 (`yard_shift`) pointing at the next incomplete yard drop zone.
+- **Finish** ([index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css), [src/minimap.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/minimap.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Fixed stale/truncated location and job labels: added `Old Farmstead` detection, concise non-truncating place names (`Schloss Ammerland`, `Old Farmstead`, `Münsinger Straße`) and contract short titles (`4. Sebald Delivery (0/1)`), updated immediately on fast travel and every frame.
+  - Separated overlapping `Ammerland` and `Wimpasing` labels on the minimap (`156×104`).
+  - Updated `#tipped-banner` to report accurate causes when empty vs loaded vs boom-raised.
+  - Reset per-job `Rollovers` and `Damaged` counters cleanly on job change and replay (`jobRollovers` instead of cumulative career rollovers).
+  - Removed marketing copy (`Old Farmstead demolition area`) and emojis from title buttons and world labels.
+  - Added **Mouse Orbit Sensitivity** slider (`30%–200%`) in `Esc → Settings` and interactive click-to-rebind **Key Rebinding** (21 actions + `Reset Defaults`, persisted in `localStorage`) in `Esc → Controls`.
+- **Sebald & Schloss Landing** ([src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Oriented `#btn-tp-lake` landing camera (`(-998, 825)`, `camYaw = -1.22`) so Schloss Ammerland and Starnberger See sit framed behind the Scorpion while staying dead-center on paved Nördliche Seestraße (`0 km/h`, `4/4` tires, `1°` tilt).
+
+### Verification & Screenshots (`.scratch/loop/15/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Screenshots inspected: `.scratch/loop/15/01_title_clean.png`, `.scratch/loop/15/02_career_spawn_hints_guide.png`, `.scratch/loop/15/03_job4_panel_guide.png`, `.scratch/loop/15/04_pause_settings_sens.png`, `.scratch/loop/15/05_pause_controls_rebind.png`, `.scratch/loop/15/06_sebald_schloss_landing.png`, `.scratch/loop/15/07_demo_label_clean.png`.

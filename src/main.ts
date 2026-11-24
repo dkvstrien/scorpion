@@ -34,6 +34,7 @@ import {
   BAVARIAN_CONTRACTS,
   CareerStats,
   ContractId,
+  createGuideArrow,
   createWaypointBeacon,
   loadCareer,
   positionWaypointBeacon,
@@ -45,13 +46,96 @@ type GameMode = 'farm' | 'freeplay';
 type TimeOfDay = 'afternoon' | 'sunset' | 'dusk' | 'morning';
 type GraphicsQuality = 'high' | 'medium' | 'low';
 
+type BindAction =
+  | 'forward'
+  | 'backward'
+  | 'left'
+  | 'right'
+  | 'boomUp'
+  | 'boomDown'
+  | 'boomExtend'
+  | 'boomRetract'
+  | 'tiltUp'
+  | 'tiltDown'
+  | 'grab'
+  | 'couple'
+  | 'gear'
+  | 'steerMode'
+  | 'camera'
+  | 'panel'
+  | 'hideHud'
+  | 'winch'
+  | 'sky'
+  | 'lights'
+  | 'horn';
+
+const BIND_LABELS: { action: BindAction; label: string }[] = [
+  { action: 'forward', label: 'Drive Forward' },
+  { action: 'backward', label: 'Reverse / Brake' },
+  { action: 'left', label: 'Steer Left' },
+  { action: 'right', label: 'Steer Right' },
+  { action: 'boomUp', label: 'Raise Boom' },
+  { action: 'boomDown', label: 'Lower Boom' },
+  { action: 'boomExtend', label: 'Extend Boom' },
+  { action: 'boomRetract', label: 'Retract Boom' },
+  { action: 'tiltUp', label: 'Tilt Carriage Up' },
+  { action: 'tiltDown', label: 'Tilt Carriage Down' },
+  { action: 'grab', label: 'Grab / Release' },
+  { action: 'couple', label: 'Couple / Drop Tool' },
+  { action: 'gear', label: 'Cycle Gear (15/30/40)' },
+  { action: 'steerMode', label: '4WS / 2WS / Crab' },
+  { action: 'camera', label: 'Switch Camera' },
+  { action: 'panel', label: 'Jobs / Travel Panel' },
+  { action: 'hideHud', label: 'Hide / Show HUD' },
+  { action: 'winch', label: 'Recovery Winch' },
+  { action: 'sky', label: 'Cycle Time of Day' },
+  { action: 'lights', label: 'Toggle Worklights' },
+  { action: 'horn', label: 'Horn' }
+];
+
+const DEFAULT_KEYBINDS: Record<BindAction, string> = {
+  forward: 'KeyW',
+  backward: 'KeyS',
+  left: 'KeyA',
+  right: 'KeyD',
+  boomUp: 'KeyQ',
+  boomDown: 'KeyE',
+  boomExtend: 'KeyR',
+  boomRetract: 'KeyF',
+  tiltUp: 'KeyC',
+  tiltDown: 'KeyZ',
+  grab: 'Space',
+  couple: 'KeyT',
+  gear: 'KeyG',
+  steerMode: 'KeyX',
+  camera: 'KeyV',
+  panel: 'KeyJ',
+  hideHud: 'KeyU',
+  winch: 'Backspace',
+  sky: 'KeyN',
+  lights: 'KeyL',
+  horn: 'KeyH'
+};
+
+function formatKeyCode(code: string): string {
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code === 'Space') return 'Space';
+  if (code === 'Backspace') return 'Backspace';
+  if (code === 'ShiftLeft' || code === 'ShiftRight') return 'Shift';
+  return code;
+}
+
 interface GameSettings {
   quality: GraphicsQuality;
   volume: number; // 0..100
+  mouseSens: number; // 30..200 (%)
   ambience: boolean;
+  hints: boolean;
+  keybinds: Record<BindAction, string>;
 }
 
-const SETTINGS_KEY = 'openworld_scorpion_settings_v1';
+const SETTINGS_KEY = 'openworld_scorpion_settings_v2';
 
 function loadSettings(): GameSettings {
   try {
@@ -61,13 +145,16 @@ function loadSettings(): GameSettings {
       return {
         quality: p.quality === 'low' || p.quality === 'medium' || p.quality === 'high' ? p.quality : 'high',
         volume: typeof p.volume === 'number' ? Math.max(0, Math.min(100, p.volume)) : 85,
-        ambience: typeof p.ambience === 'boolean' ? p.ambience : true
+        mouseSens: typeof p.mouseSens === 'number' ? Math.max(30, Math.min(200, p.mouseSens)) : 100,
+        ambience: typeof p.ambience === 'boolean' ? p.ambience : true,
+        hints: typeof p.hints === 'boolean' ? p.hints : true,
+        keybinds: { ...DEFAULT_KEYBINDS, ...(p.keybinds ?? {}) }
       };
     }
   } catch {
     // ignore storage errors
   }
-  return { quality: 'high', volume: 85, ambience: true };
+  return { quality: 'high', volume: 85, mouseSens: 100, ambience: true, hints: true, keybinds: { ...DEFAULT_KEYBINDS } };
 }
 
 function saveSettings(s: GameSettings): void {
@@ -101,6 +188,9 @@ class ScorpionGame {
   private tractor: ClaasScorpion;
   private minimap: MuensingMiniMap;
   private waypointBeacon: THREE.Group;
+  private guideArrow: THREE.Group;
+  private listeningBindAction: BindAction | null = null;
+  private currentGuideTarget: { x: number; z: number; isPickup: boolean } | null = null;
 
   private rackPreviews = new Map<Exclude<AttachmentType, 'none'>, THREE.Group>();
   private clouds: THREE.Group[] = [];
@@ -119,7 +209,7 @@ class ScorpionGame {
   private jobElapsedSec = 0;
   private jobDamagedCount = 0;
   private jobRollovers = 0;
-  private hintsOn = false;
+  private hintsOn = true;
   private contractCompletedThisRun = new Set<string>();
   private churchBellTimer = 16;
   private saveTimer = 0;
@@ -170,6 +260,7 @@ class ScorpionGame {
   private tidyBarEl = document.getElementById('tidy-bar-fill')!;
 
   private tippedBanner = document.getElementById('tipped-banner')!;
+  private tippedReasonEl = document.getElementById('tipped-reason')!;
   private toastContainer = document.getElementById('toast-container')!;
   private interactPrompt = document.getElementById('interact-prompt')!;
   private squeezeMeter = document.getElementById('squeeze-meter')!;
@@ -378,6 +469,7 @@ class ScorpionGame {
     });
 
     this.waypointBeacon = createWaypointBeacon(this.scene);
+    this.guideArrow = createGuideArrow(this.scene);
     this.minimap = new MuensingMiniMap(document.getElementById('minimap-canvas') as HTMLCanvasElement);
 
     // Apply 4-wheel suspension, traction & dynamic boom tipping forces on EVERY fixed Cannon substep!
@@ -385,7 +477,13 @@ class ScorpionGame {
       this.tractor.applyVehiclePhysicsForces(1 / 60, this.latestInput);
     });
 
+    this.hintsOn = this.settings.hints;
+    this.farm.setHintsVisible(this.hintsOn);
+    this.btnHints.textContent = this.hintsOn ? 'Hints: On' : 'Hints: Off';
+    this.btnHints.classList.toggle('active-toggle', this.hintsOn);
+
     this.populateContractsUI();
+    this.renderKeybindGrid();
     this.refreshCareerUI();
     this.applySettings();
     this.applyTimeOfDay('afternoon');
@@ -514,6 +612,9 @@ class ScorpionGame {
       this.jobElapsedSec = 0;
       this.jobDamagedCount = 0;
       this.jobRollovers = 0;
+      this.damagedEl.textContent = '0';
+      this.damagedEl.className = 'ok';
+      this.rolloverEl.textContent = '0';
       this.contractCompletedThisRun.delete(id);
       this.victoryBanner.classList.add('hidden');
       this.ensureContractPickupCargo(id, false);
@@ -522,7 +623,36 @@ class ScorpionGame {
     const isYard = id === 'yard_shift';
     this.yardProgressBlock.classList.toggle('hidden', !isYard);
     this.deliveryStatusBlock.classList.toggle('hidden', isYard);
-    positionWaypointBeacon(this.waypointBeacon, c.targetX, c.targetZ, !isYard && this.mode === 'farm');
+    positionWaypointBeacon(this.waypointBeacon, c.targetX, c.targetZ, this.mode === 'farm');
+  }
+
+  private renderKeybindGrid(): void {
+    const grid = document.getElementById('keybind-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (const item of BIND_LABELS) {
+      const row = document.createElement('div');
+      row.className = 'keybind-row';
+      const lbl = document.createElement('span');
+      lbl.textContent = item.label;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'keybind-btn';
+      btn.dataset.action = item.action;
+      if (this.listeningBindAction === item.action) {
+        btn.classList.add('listening');
+        btn.textContent = 'Press key...';
+      } else {
+        btn.textContent = formatKeyCode(this.settings.keybinds[item.action]);
+      }
+      btn.addEventListener('click', () => {
+        this.listeningBindAction = this.listeningBindAction === item.action ? null : item.action;
+        this.renderKeybindGrid();
+      });
+      row.appendChild(lbl);
+      row.appendChild(btn);
+      grid.appendChild(row);
+    }
   }
 
   private applySettings(): void {
@@ -545,16 +675,21 @@ class ScorpionGame {
     const qSel = document.getElementById('set-quality') as HTMLSelectElement | null;
     const vRange = document.getElementById('set-volume') as HTMLInputElement | null;
     const vVal = document.getElementById('set-volume-val');
+    const mRange = document.getElementById('set-mouse-sens') as HTMLInputElement | null;
+    const mVal = document.getElementById('set-mouse-sens-val');
     const ambChk = document.getElementById('set-ambience') as HTMLInputElement | null;
     if (qSel) qSel.value = q;
     if (vRange) vRange.value = String(this.settings.volume);
     if (vVal) vVal.textContent = `${this.settings.volume}%`;
+    if (mRange) mRange.value = String(this.settings.mouseSens);
+    if (mVal) mVal.textContent = `${this.settings.mouseSens}%`;
     if (ambChk) ambChk.checked = this.settings.ambience;
   }
 
   private setPaused(next: boolean, tab?: 'settings' | 'controls' | 'credits'): void {
     if (!this.started) return;
     this.paused = next;
+    if (!next) this.listeningBindAction = null;
     this.pauseOverlay.classList.toggle('hidden', !next);
     if (next && tab) this.showPauseTab(tab);
   }
@@ -569,7 +704,7 @@ class ScorpionGame {
 
   private refreshCareerUI(): void {
     this.careerBankEl.textContent = `€${this.career.bankEUR.toLocaleString()}`;
-    this.rolloverEl.textContent = String(this.career.rollovers);
+    this.rolloverEl.textContent = String(this.jobRollovers);
     const kmStr = `${this.career.totalKm.toFixed(1)} km`;
     this.odoEl.textContent = kmStr;
     this.freeplayOdoEl.textContent = kmStr;
@@ -601,7 +736,7 @@ class ScorpionGame {
       }
     > = {
       afternoon: {
-        label: '☀ Afternoon',
+        label: 'Afternoon',
         sky: 0x8ebde0,
         fog: 0xb6d3e8,
         fogNear: 420,
@@ -615,7 +750,7 @@ class ScorpionGame {
         autoLights: false
       },
       sunset: {
-        label: '🌅 Golden Sunset',
+        label: 'Golden Sunset',
         sky: 0xd98a5b,
         fog: 0xd99b72,
         fogNear: 320,
@@ -629,7 +764,7 @@ class ScorpionGame {
         autoLights: true
       },
       dusk: {
-        label: '🌙 Blue Hour',
+        label: 'Blue Hour',
         sky: 0x22395c,
         fog: 0x2d466d,
         fogNear: 260,
@@ -643,7 +778,7 @@ class ScorpionGame {
         autoLights: true
       },
       morning: {
-        label: '🌫 Morning Mist',
+        label: 'Morning Mist',
         sky: 0xb8d4e3,
         fog: 0xd6e3e8,
         fogNear: 220,
@@ -707,24 +842,21 @@ class ScorpionGame {
     this.btnMode.classList.toggle('free-active', next === 'freeplay');
 
     const c = BAVARIAN_CONTRACTS.find((x) => x.id === this.activeContractId)!;
-    positionWaypointBeacon(this.waypointBeacon, c.targetX, c.targetZ, next === 'farm' && c.id !== 'yard_shift');
+    positionWaypointBeacon(this.waypointBeacon, c.targetX, c.targetZ, next === 'farm');
+    this.guideArrow.visible = next === 'farm' && this.started;
 
     if (this.started) {
-      this.showToast(
-        next === 'freeplay'
-          ? 'Open-World Free Play — Explore Starnberger See, Wimpasing & Münsing!'
-          : 'Bavarian Contracting Career Active!'
-      );
+      this.showToast(next === 'freeplay' ? 'Open-World Free Play' : 'Bavarian Contracting Career');
     }
   }
 
   private recordDamage(): void {
     this.damagedCount++;
     this.jobDamagedCount++;
-    this.damagedEl.textContent = String(this.damagedCount);
-    this.damagedEl.className = this.damagedCount > 0 ? 'warn' : 'ok';
+    this.damagedEl.textContent = String(this.jobDamagedCount);
+    this.damagedEl.className = this.jobDamagedCount > 0 ? 'warn' : 'ok';
     this.starsEl.textContent =
-      this.damagedCount === 0 ? '★★★' : this.damagedCount <= 2 ? '★★☆' : '★☆☆';
+      this.jobDamagedCount === 0 ? '★★★' : this.jobDamagedCount <= 2 ? '★★☆' : '★☆☆';
   }
 
   private handleSilagePop(prop: FarmProp, reason: string): void {
@@ -818,6 +950,8 @@ class ScorpionGame {
 
   private toggleHints(): void {
     this.hintsOn = !this.hintsOn;
+    this.settings.hints = this.hintsOn;
+    saveSettings(this.settings);
     this.farm.setHintsVisible(this.hintsOn);
     this.btnHints.textContent = this.hintsOn ? 'Hints: On' : 'Hints: Off';
     this.btnHints.classList.toggle('active-toggle', this.hintsOn);
@@ -840,14 +974,25 @@ class ScorpionGame {
       const c = BAVARIAN_CONTRACTS.find((x) => x.id === this.activeContractId)!;
       this.showToast(`Contract: ${c.title} (${c.village})`);
     });
+    document.getElementById('btn-goto-job')!.addEventListener('click', () => {
+      const c = BAVARIAN_CONTRACTS.find((x) => x.id === this.activeContractId)!;
+      this.ensureContractPickupCargo(c.id, false);
+      this.tractor.teleportTo(c.startSpot.x, c.startSpot.z, c.startSpot.heading);
+      this.camYawOffset = 0.2;
+      this.snapCameraToTractor();
+      this.showToast(`Moved to ${c.shortTitle}`);
+    });
     document.getElementById('btn-replay-job')!.addEventListener('click', () => {
       this.contractCompletedThisRun.delete(this.activeContractId);
       this.jobElapsedSec = 0;
       this.jobDamagedCount = 0;
       this.jobRollovers = 0;
+      this.damagedEl.textContent = '0';
+      this.damagedEl.className = 'ok';
+      this.rolloverEl.textContent = '0';
       this.victoryBanner.classList.add('hidden');
       this.ensureContractPickupCargo(this.activeContractId, true);
-      this.showToast('Job timer reset & fresh cargo ready!');
+      this.showToast('Job reset and cargo ready.');
     });
 
     const doWinch = () => {
@@ -878,41 +1023,49 @@ class ScorpionGame {
     });
 
     // Real-World OSM GPS Fast Travel buttons (all placed cleanly on wide paved OSM roads with scenic framing!)
-    const fastTravel = (x: number, z: number, heading: number, toast: string) => {
+    const fastTravel = (x: number, z: number, heading: number, toast: string, camYaw = 0.18) => {
       this.tractor.teleportTo(x, z, heading);
-      this.camYawOffset = 0.18;
+      this.camYawOffset = camYaw;
       this.snapCameraToTractor();
+      const locName = this.getCurrentLocationName();
+      this.locationReadout.textContent = locName;
       this.showToast(toast);
     };
     document.getElementById('btn-tp-farm')!.addEventListener('click', () => {
-      fastTravel(FARM_SPAWN.x, FARM_SPAWN.z, FARM_SPAWN.heading, 'Wimpasing Home Farm');
+      fastTravel(FARM_SPAWN.x, FARM_SPAWN.z, FARM_SPAWN.heading, 'Home Farm (Wimpasing)');
     });
     document.getElementById('btn-tp-lake')!.addEventListener('click', () => {
-      // Dead-center on flat paved Nördliche Seestraße (0.4° slope, 0 colliders, 58m inland) facing south past Schloss Ammerland & lake!
-      fastTravel(-998.0, 825.0, 2.94, 'Ammerland — Sebald & Schloss (Starnberger See)');
+      // Dead-center on flat paved Nördliche Seestraße (0–1° slope, 4/4 tires) with camera framing Schloss Ammerland & Starnberger See!
+      fastTravel(-998.0, 825.0, 2.94, 'Ammerland — Schloss & Sebald Pier', -1.22);
     });
     document.getElementById('btn-tp-village')!.addEventListener('click', () => {
       // Dead-center on main paved Münsing village road facing east past St. Mariä Himmelfahrt, Maibaum & Zum Altwirt!
-      fastTravel(1370.0, 1004.5, -1.79, 'Münsing — St. Mariä Himmelfahrt & Gasthaus Zum Altwirt');
+      fastTravel(1370.0, 1004.5, -1.79, 'Münsing — Church & Altwirt');
     });
     document.getElementById('btn-tp-weipert')!.addEventListener('click', () => {
       // Right on Weipertshausen main street heading north into the hamlet!
-      fastTravel(496.0, -1189.0, 0.12, 'Weipertshausen — Weipertshausener Straße');
+      fastTravel(496.0, -1189.0, 0.12, 'Weipertshausen');
     });
     document.getElementById('btn-tp-demo')!.addEventListener('click', () => {
-      fastTravel(
-        DEMO_SITE_CENTER.x,
-        DEMO_SITE_CENTER.z + 25,
-        0,
-        'Old Gravel Pit Farmstead — Breakable Demolition Site!'
-      );
+      fastTravel(DEMO_SITE_CENTER.x, DEMO_SITE_CENTER.z + 25, 0, 'Old Farmstead demolition area');
     });
     document.getElementById('btn-reset-demo')!.addEventListener('click', () => {
       this.destruction.resetDemolitionSite();
-      this.showToast('Demolition Site rebuilt — ready for another run!');
+      this.showToast('Demolition site reset.');
     });
 
     window.addEventListener('keydown', (e) => {
+      if (this.listeningBindAction) {
+        e.preventDefault();
+        if (e.code !== 'Escape') {
+          this.settings.keybinds[this.listeningBindAction] = e.code;
+          saveSettings(this.settings);
+        }
+        this.listeningBindAction = null;
+        this.renderKeybindGrid();
+        return;
+      }
+
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
         e.preventDefault();
       }
@@ -927,33 +1080,34 @@ class ScorpionGame {
       }
       if (this.paused) return;
 
-      if (e.code === 'Backspace') {
+      const kb = this.settings.keybinds;
+      if (e.code === kb.winch) {
         e.preventDefault();
         doWinch();
-      } else if (e.code === 'KeyT') {
+      } else if (e.code === kb.couple) {
         const acted = this.tractor.tryHitchNearby(this.farm.rackSpots);
-        if (!acted) this.showToast('Drive over to the Tool Shed bays to couple an attachment!');
+        if (!acted) this.showToast('Drive near a Tool Shed bay to couple an attachment.');
       } else if (e.code === 'KeyM') {
         this.toggleHints();
-      } else if (e.code === 'KeyN') {
+      } else if (e.code === kb.sky) {
         this.cycleTimeOfDay();
-      } else if (e.code === 'KeyL') {
+      } else if (e.code === kb.lights) {
         this.setWorkLights(!this.tractor.workLightsOn);
-      } else if (e.code === 'KeyH') {
+      } else if (e.code === kb.horn) {
         this.audio.playHorn();
         const scared = this.realWorld.scarePedestriansNear(this.tractor.position, 24);
-        this.showToast(scared > 0 ? `HONK! Startled ${scared} villager(s)!` : 'HONK HONK!');
-      } else if (e.code === 'KeyG') {
+        this.showToast(scared > 0 ? `Horn startled ${scared} villager(s).` : 'Horn');
+      } else if (e.code === kb.gear) {
         const g = this.tractor.cycleGear();
-        this.showToast(`Varipower Gear: ${VARIPOWER_GEARS[g].label} km/h`);
-      } else if (e.code === 'KeyX') {
+        this.showToast(`Gear: ${VARIPOWER_GEARS[g].label} km/h`);
+      } else if (e.code === kb.steerMode) {
         this.cycleSteerUI();
-      } else if (e.code === 'KeyV') {
+      } else if (e.code === kb.camera) {
         this.cycleCamera();
-      } else if (e.code === 'KeyU' || e.code === 'F1') {
+      } else if (e.code === kb.hideHud || e.code === 'F1') {
         e.preventDefault();
         this.toggleHudVisibility();
-      } else if (e.code === 'KeyJ') {
+      } else if (e.code === kb.panel) {
         this.toggleActiveSidePanel();
       }
     });
@@ -975,8 +1129,9 @@ class ScorpionGame {
       const dy = e.clientY - this.lastMouseY;
       this.lastMouseX = e.clientX;
       this.lastMouseY = e.clientY;
-      this.camYawOffset -= dx * 0.0065;
-      this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * 0.005, 0.14, 1.18);
+      const sens = this.settings.mouseSens / 100;
+      this.camYawOffset -= dx * 0.0065 * sens;
+      this.camPitch = THREE.MathUtils.clamp(this.camPitch + dy * 0.005 * sens, 0.14, 1.18);
     });
     canvas.addEventListener(
       'wheel',
@@ -1019,6 +1174,18 @@ class ScorpionGame {
       this.settings.volume = Number((e.target as HTMLInputElement).value);
       saveSettings(this.settings);
       this.applySettings();
+    });
+    (document.getElementById('set-mouse-sens') as HTMLInputElement).addEventListener('input', (e) => {
+      this.settings.mouseSens = Number((e.target as HTMLInputElement).value);
+      saveSettings(this.settings);
+      this.applySettings();
+    });
+    document.getElementById('btn-reset-binds')!.addEventListener('click', () => {
+      this.settings.keybinds = { ...DEFAULT_KEYBINDS };
+      this.listeningBindAction = null;
+      saveSettings(this.settings);
+      this.renderKeybindGrid();
+      this.showToast('Key bindings reset to defaults.');
     });
     (document.getElementById('set-ambience') as HTMLInputElement).addEventListener('change', (e) => {
       this.settings.ambience = (e.target as HTMLInputElement).checked;
@@ -1104,20 +1271,21 @@ class ScorpionGame {
       };
     }
 
-    let throttle = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
-    let steer = (this.keys.has('KeyA') ? 1 : 0) - (this.keys.has('KeyD') ? 1 : 0);
+    const kb = this.settings.keybinds;
+    let throttle = (this.keys.has(kb.forward) ? 1 : 0) - (this.keys.has(kb.backward) ? 1 : 0);
+    let steer = (this.keys.has(kb.left) ? 1 : 0) - (this.keys.has(kb.right) ? 1 : 0);
     let boost = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
     let creep = this.keys.has('AltLeft') || this.keys.has('AltRight');
     let boomLift =
-      (this.keys.has('KeyQ') || this.keys.has('ArrowUp') ? 1 : 0) -
-      (this.keys.has('KeyE') || this.keys.has('ArrowDown') ? 1 : 0);
+      (this.keys.has(kb.boomUp) || this.keys.has('ArrowUp') ? 1 : 0) -
+      (this.keys.has(kb.boomDown) || this.keys.has('ArrowDown') ? 1 : 0);
     let boomExtend =
-      (this.keys.has('KeyR') || this.keys.has('PageUp') ? 1 : 0) -
-      (this.keys.has('KeyF') || this.keys.has('PageDown') ? 1 : 0);
+      (this.keys.has(kb.boomExtend) || this.keys.has('PageUp') ? 1 : 0) -
+      (this.keys.has(kb.boomRetract) || this.keys.has('PageDown') ? 1 : 0);
     let headTilt =
-      (this.keys.has('KeyC') || this.keys.has('ArrowRight') ? 1 : 0) -
-      (this.keys.has('KeyZ') || this.keys.has('ArrowLeft') ? 1 : 0);
-    let actionHeld = this.keys.has('Space');
+      (this.keys.has(kb.tiltUp) || this.keys.has('ArrowRight') ? 1 : 0) -
+      (this.keys.has(kb.tiltDown) || this.keys.has('ArrowLeft') ? 1 : 0);
+    let actionHeld = this.keys.has(kb.grab);
 
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     const gp = pads[0];
@@ -1178,23 +1346,19 @@ class ScorpionGame {
 
   private getCurrentLocationName(): string {
     const { x, z } = this.tractor.position;
-    if (Math.hypot(x - REAL_SPOTS.sebaldPier.x, z - REAL_SPOTS.sebaldPier.z) < 90)
-      return '⛵ Fischerei Sebald · Starnberger See';
-    if (Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 105)
-      return '🏰 Schloss Ammerland · Starnberger See';
-    if (Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 88)
-      return '⛪ Münsing — St. Mariä Himmelfahrt';
-    if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 115)
-      return '🍺 Münsing — Gasthaus Zum Altwirt';
-    if (Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 85) return '🛒 Münsing — EDEKA Graf';
-    if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 220)
-      return '🌲 Weipertshausen';
-    if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 130) return '🌾 Ried';
+    if (Math.hypot(x - DEMO_SITE_CENTER.x, z - DEMO_SITE_CENTER.z) < 95) return 'Old Farmstead';
+    if (Math.hypot(x - REAL_SPOTS.sebaldPier.x, z - REAL_SPOTS.sebaldPier.z) < 90) return 'Fischerei Sebald';
+    if (Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 115) return 'Schloss Ammerland';
+    if (Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 88) return 'Münsing Church';
+    if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 115) return 'Münsing Altwirt';
+    if (Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 85) return 'Münsing EDEKA';
+    if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 220) return 'Weipertshausen';
+    if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 130) return 'Ried';
     if (Math.hypot(x - FARM_YARD_CENTER.x, z - FARM_YARD_CENTER.z) < 55 || Math.hypot(x - FARM_CENTER.x, z - FARM_CENTER.z) < 42)
-      return '🚜 Home Farm';
-    if (Math.hypot(x - REAL_SPOTS.wimpasing.x, z - REAL_SPOTS.wimpasing.z) < 165) return '🏘️ Wimpasing';
-    if (x > 160 && x < 1200) return '⛰️ Münsinger Straße (Open Country)';
-    return '🏔️ Starnberger See Valley';
+      return 'Home Farm';
+    if (Math.hypot(x - REAL_SPOTS.wimpasing.x, z - REAL_SPOTS.wimpasing.z) < 165) return 'Wimpasing';
+    if (x > 160 && x < 1200) return 'Münsinger Straße';
+    return 'Starnberger See Valley';
   }
 
   private evaluateZonesAndContracts(): void {
@@ -1309,8 +1473,8 @@ class ScorpionGame {
     this.tidyBarEl.style.width = `${pct}%`;
     const nextSummary =
       activeContract.id === 'yard_shift'
-        ? `1. Yard Shift (${pct}%)`
-        : `${activeContract.title.slice(0, 18)} (${
+        ? `${activeContract.shortTitle} (${pct}%)`
+        : `${activeContract.shortTitle} (${
             activeContract.requiredKind === 'yard_silage'
               ? this.propMgr.props.filter((p) => p.kind === 'silage_wrapped' && p.inZone && !p.isPopped && !p.isDamaged)
                   .length
@@ -1320,6 +1484,49 @@ class ScorpionGame {
           }/${activeContract.requiredCount})`;
     if (this.farmSummaryTitle.textContent !== nextSummary) {
       this.farmSummaryTitle.textContent = nextSummary;
+    }
+
+    // Determine live 3D guidance target (beacon + overhead arrow) for BOTH yard shift and cross-map delivery jobs!
+    if (this.mode === 'farm') {
+      if (activeContract.id === 'yard_shift') {
+        const held = this.tractor.heldProps[0];
+        let zTarget = held ? this.farm.zones.find((z) => z.key === held.targetZone) : undefined;
+        if (!zTarget) {
+          const nextZoneKey = (['crates', 'hay', 'silage', 'logs', 'harvest', 'scrap'] as ZoneKey[]).find(
+            (k) => totals[k] > 0 && counts[k] < totals[k]
+          );
+          zTarget = this.farm.zones.find((z) => z.key === nextZoneKey);
+        }
+        if (zTarget) {
+          positionWaypointBeacon(this.waypointBeacon, zTarget.center.x, zTarget.center.z, true);
+          this.currentGuideTarget = { x: zTarget.center.x, z: zTarget.center.z, isPickup: false };
+        } else {
+          positionWaypointBeacon(this.waypointBeacon, activeContract.targetX, activeContract.targetZ, false);
+          this.currentGuideTarget = null;
+        }
+      } else {
+        positionWaypointBeacon(this.waypointBeacon, activeContract.targetX, activeContract.targetZ, true);
+        const carryingRequired = this.tractor.heldProps.some((p) =>
+          activeContract.requiredKind === 'hay'
+            ? p.kind === 'hay_round' || p.kind === 'hay_square'
+            : activeContract.requiredKind === 'yard_silage'
+              ? p.kind === 'silage_wrapped'
+              : activeContract.requiredKind === 'yard_crates'
+                ? p.kind === 'crate'
+                : p.kind === activeContract.requiredKind
+        );
+        if (!carryingRequired && activeContract.pickupSpawn) {
+          this.currentGuideTarget = {
+            x: activeContract.pickupSpawn.x,
+            z: activeContract.pickupSpawn.z,
+            isPickup: true
+          };
+        } else {
+          this.currentGuideTarget = { x: activeContract.targetX, z: activeContract.targetZ, isPickup: false };
+        }
+      }
+    } else {
+      this.currentGuideTarget = null;
     }
 
     const deliveredSilageIntact = this.propMgr.props.filter(
@@ -1411,6 +1618,41 @@ class ScorpionGame {
     this.wheelsBadge.textContent = `${this.tractor.wheelsOnGround}/4`;
     this.wheelsBadge.classList.toggle('pill-hot', this.tractor.wheelsOnGround <= 2);
     this.tippedBanner.classList.toggle('hidden', !this.tractor.isTipped);
+    if (this.tractor.isTipped) {
+      const carriedKg = this.tractor.getCarriedMassKg();
+      const reason =
+        carriedKg > 0
+          ? 'Carried load shifted past the tipping limit. Push with the boom or use the recovery winch.'
+          : this.tractor.boomPitch > 0.32 || this.tractor.boomExt > 0.75
+            ? 'Turned or crossed a slope with the boom raised. Lower the boom or use the recovery winch.'
+            : 'Corner or hillside roll exceeded stability limits. Push with the boom or use the recovery winch.';
+      if (this.tippedReasonEl.textContent !== reason) this.tippedReasonEl.textContent = reason;
+    }
+
+    // Update overhead 3D directional navigation arrow in Career mode
+    if (this.mode === 'farm' && this.started && this.currentGuideTarget) {
+      const dx = this.currentGuideTarget.x - this.tractor.position.x;
+      const dz = this.currentGuideTarget.z - this.tractor.position.z;
+      const dist = Math.hypot(dx, dz);
+      this.guideArrow.visible = dist > 7;
+      if (this.guideArrow.visible) {
+        this.guideArrow.position.set(
+          this.tractor.position.x,
+          this.tractor.position.y + 4.35 + Math.sin(this.elapsed * 3.4) * 0.18,
+          this.tractor.position.z
+        );
+        // Arrow mesh points along -Z, so rotate around Y to point straight at (dx, dz)
+        this.guideArrow.rotation.y = Math.atan2(-dx, -dz);
+        const arrowMat = this.guideArrow.userData.arrowMat as THREE.MeshStandardMaterial | undefined;
+        if (arrowMat) {
+          const hex = this.currentGuideTarget.isPickup ? 0xffc83b : 0x9fd32e;
+          arrowMat.color.setHex(hex);
+          arrowMat.emissive.setHex(this.currentGuideTarget.isPickup ? 0xaa7408 : 0x6ba612);
+        }
+      }
+    } else {
+      this.guideArrow.visible = false;
+    }
 
     const liftPct = ((this.tractor.boomPitch + 0.2) / (1.1 + 0.2)) * 100;
     const extPct = (this.tractor.boomExt / 3.6) * 100;
@@ -1443,11 +1685,9 @@ class ScorpionGame {
       this.refreshCareerUI();
     }
 
-    if (this.mode === 'freeplay') {
-      const locName = this.getCurrentLocationName();
-      if (this.locationReadout.textContent !== locName) {
-        this.locationReadout.textContent = locName;
-      }
+    const locName = this.getCurrentLocationName();
+    if (this.locationReadout.textContent !== locName) {
+      this.locationReadout.textContent = locName;
     }
 
     if (this.tractor.heldVillageObj) {

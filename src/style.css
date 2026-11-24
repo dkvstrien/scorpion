@@ -1234,7 +1234,7 @@ kbd {
   top: 10px;
   left: 10px;
   padding: 6px 10px;
-  width: 268px;
+  width: 288px;
 }
 .top-left.collapsed .panel-body {
   display: none;
@@ -1257,7 +1257,74 @@ kbd {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
+  max-width: 176px;
+}
+.controls-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  color: #e4ede2;
+}
+.contract-action-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+.contract-action-row .hud-btn {
+  flex: 1;
+}
+.rebind-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.rebind-hint {
+  font-size: 0.76rem;
+  color: #bfd0c0;
+}
+.keybind-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  max-height: 290px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.keybind-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 0.76rem;
+}
+.keybind-btn {
+  min-width: 72px;
+  text-align: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(159, 211, 46, 0.45);
+  background: rgba(18, 23, 26, 0.9);
+  color: #eef5ec;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.keybind-btn.listening {
+  background: #9fd32e;
+  color: #161d12;
+  border-color: #d8ff82;
 }
 .collapse-chevron {
   font-size: 0.75rem;

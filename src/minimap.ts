@@ -98,25 +98,33 @@ export class MuensingMiniMap {
     ctx.fillRect(fx - 4, fz - 4, 8, 8);
     ctx.strokeRect(fx - 4, fz - 4, 8, 8);
 
-    // Crisp dark-haloed real Bavarian place labels
-    const drawLabel = (text: string, x: number, z: number, color = '#f6faf0', ox = 0, oy = -4) => {
+    // Crisp dark-haloed real Bavarian place labels (carefully spaced so zero labels overlap at 156x104!)
+    const drawLabel = (
+      text: string,
+      x: number,
+      z: number,
+      color = '#f6faf0',
+      ox = 0,
+      oy = -4,
+      align: CanvasTextAlign = 'center'
+    ) => {
       const px = this.toPX(x) + ox;
       const pz = this.toPZ(z) + oy;
-      ctx.font = 'bold 8.5px Nunito, sans-serif';
-      ctx.textAlign = 'center';
+      ctx.font = 'bold 8px Nunito, sans-serif';
+      ctx.textAlign = align;
       ctx.lineWidth = 2.6;
-      ctx.strokeStyle = 'rgba(10, 14, 12, 0.85)';
+      ctx.strokeStyle = 'rgba(10, 14, 12, 0.88)';
       ctx.strokeText(text, px, pz);
       ctx.fillStyle = color;
       ctx.fillText(text, px, pz);
     };
 
     drawLabel('Weipertshausen', REAL_SPOTS.weipertshausen.x, REAL_SPOTS.weipertshausen.z, '#f6faf0', 0, 11);
-    drawLabel('Ried', REAL_SPOTS.ried.x, REAL_SPOTS.ried.z, '#f6faf0', 0, -4);
-    drawLabel('Wimpasing', REAL_SPOTS.wimpasing.x, REAL_SPOTS.wimpasing.z, '#f6faf0', 0, 11);
+    drawLabel('Ried', REAL_SPOTS.ried.x, REAL_SPOTS.ried.z, '#f6faf0', 4, -5);
+    drawLabel('Ammerland', REAL_SPOTS.schlossAmmerland.x, REAL_SPOTS.schlossAmmerland.z, '#9ee5ff', 2, -9, 'center');
+    drawLabel('Wimpasing', REAL_SPOTS.wimpasing.x, REAL_SPOTS.wimpasing.z, '#f6faf0', 10, 11, 'center');
     drawLabel('Münsing', REAL_SPOTS.muensingAltwirt.x, REAL_SPOTS.muensingAltwirt.z, '#ffe785', -6, -6);
-    drawLabel('Ammerland', REAL_SPOTS.schlossAmmerland.x, REAL_SPOTS.schlossAmmerland.z, '#9ee5ff', 14, 11);
-    drawLabel('SEE', -1550, -60, '#9ee5ff', 0, 0);
+    drawLabel('SEE', -1600, -140, '#9ee5ff', 0, 0);
   }
 
   public render(

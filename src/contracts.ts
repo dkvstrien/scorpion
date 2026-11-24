@@ -18,6 +18,7 @@ export type ContractId =
 export interface BavarianContract {
   id: ContractId;
   title: string;
+  shortTitle: string;
   village: string;
   subtitle: string;
   recommendedTool: Exclude<AttachmentType, 'none'>;
@@ -26,6 +27,7 @@ export interface BavarianContract {
   targetX: number;
   targetZ: number;
   targetRadius: number;
+  startSpot: { x: number; z: number; heading: number };
   requiredKind: 'any_yard' | 'crate' | 'log' | 'silage_wrapped' | 'hay' | 'yard_silage' | 'yard_crates';
   requiredCount: number;
   requireIntact?: boolean;
@@ -47,6 +49,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'yard_shift',
     title: '1. Home Farm Morning Yard Shift',
+    shortTitle: '1. Yard Shift',
     village: 'Home Farm',
     subtitle: 'Organize the home farmyard — stack produce pallets on the trailer, dry hay in the barn, sealed silage in the clamp.',
     recommendedTool: 'forks',
@@ -55,12 +58,14 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: FARM_YARD_CENTER.x,
     targetZ: FARM_YARD_CENTER.z,
     targetRadius: 28,
+    startSpot: { x: FARM_YARD_CENTER.x + 4, z: FARM_YARD_CENTER.z - 4, heading: -Math.PI / 2 },
     requiredKind: 'any_yard',
     requiredCount: 1
   },
   {
     id: 'silage_clamp_6',
     title: '2. Silage Precision: 6 Sealed Bales',
+    shortTitle: '2. Silage Clamp',
     village: 'Home Farm Clamp',
     subtitle: 'Place 6 intact wrapped silage bales inside the concrete silage clamp using the Bale Grabber — zero torn plastic!',
     recommendedTool: 'grabber',
@@ -69,6 +74,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: FARM_YARD_CENTER.x - 6.5,
     targetZ: FARM_YARD_CENTER.z + 16.5,
     targetRadius: 11,
+    startSpot: { x: FARM_YARD_CENTER.x - 2, z: FARM_YARD_CENTER.z - 4, heading: Math.PI },
     requiredKind: 'yard_silage',
     requiredCount: 6,
     requireIntact: true,
@@ -77,6 +83,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'flatbed_stack_4',
     title: '3. Flatbed Weight-Limit Load',
+    shortTitle: '3. Flatbed Load',
     village: 'Home Farm Trailer',
     subtitle: 'Stack 4 intact produce pallets neatly onto the flatbed trailer deck without tipping or damaging cargo.',
     recommendedTool: 'forks',
@@ -85,6 +92,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: FARM_YARD_CENTER.x + 17.5,
     targetZ: FARM_YARD_CENTER.z + 6.5,
     targetRadius: 10,
+    startSpot: { x: FARM_YARD_CENTER.x + 2, z: FARM_YARD_CENTER.z - 3, heading: -1.1 },
     requiredKind: 'yard_crates',
     requiredCount: 4,
     requireIntact: true
@@ -92,6 +100,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'sebald_delivery',
     title: '4. Fischerei Sebald Lakeside Delivery',
+    shortTitle: '4. Sebald Delivery',
     village: 'Ammerland / Lake',
     subtitle: 'Haul 1 intact Produce Pallet west through Wimpasing to Fischerei Sebald pier on Starnberger See.',
     recommendedTool: 'forks',
@@ -100,6 +109,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: REAL_SPOTS.sebaldPier.x + 4,
     targetZ: REAL_SPOTS.sebaldPier.z,
     targetRadius: 15,
+    startSpot: { x: FARM_YARD_CENTER.x + 4, z: FARM_YARD_CENTER.z - 4, heading: -Math.PI / 2 },
     requiredKind: 'crate',
     requiredCount: 1,
     requireIntact: true
@@ -107,6 +117,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'schloss_firewood',
     title: '5. Schloss Ammerland Park Firewood',
+    shortTitle: '5. Schloss Logs',
     village: 'Schloss Ammerland',
     subtitle: 'Carry 2 pine logs down to the lakeside grounds beside Schloss Ammerland using the Grapple Claw.',
     recommendedTool: 'grapple',
@@ -115,6 +126,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: REAL_SPOTS.schlossAmmerland.x + 18,
     targetZ: REAL_SPOTS.schlossAmmerland.z + 6,
     targetRadius: 16,
+    startSpot: { x: -996.0, z: 874.0, heading: 0.42 },
     requiredKind: 'log',
     requiredCount: 2,
     pickupSpawn: { x: REAL_SPOTS.schlossAmmerland.x + 45, z: REAL_SPOTS.schlossAmmerland.z + 45, kind: 'log', count: 2 }
@@ -122,6 +134,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'ried_bale_harvest',
     title: '6. Ried Meadow Hay Harvest',
+    shortTitle: '6. Ried Hay',
     village: 'Ried',
     subtitle: 'Collect 2 dry golden hay bales from the roadside pasture and deliver them to the Ried hamlet barn.',
     recommendedTool: 'spike',
@@ -130,6 +143,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: REAL_SPOTS.ried.x,
     targetZ: REAL_SPOTS.ried.z,
     targetRadius: 16,
+    startSpot: { x: REAL_SPOTS.ried.x + 28, z: REAL_SPOTS.ried.z + 68, heading: 0.15 },
     requiredKind: 'hay',
     requiredCount: 2,
     pickupSpawn: { x: REAL_SPOTS.ried.x + 34, z: REAL_SPOTS.ried.z + 52, kind: 'hay_round', count: 2 }
@@ -137,6 +151,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'altwirt_climb',
     title: '7. Zum Altwirt Mountain Resupply',
+    shortTitle: '7. Altwirt Climb',
     village: 'Münsing Center',
     subtitle: 'Haul 1 intact Produce Pallet up the +68 m Münsinger Straße climb to Gasthaus Zum Altwirt.',
     recommendedTool: 'forks',
@@ -145,6 +160,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: REAL_SPOTS.muensingAltwirt.x,
     targetZ: REAL_SPOTS.muensingAltwirt.z + 6,
     targetRadius: 15,
+    startSpot: { x: FARM_YARD_CENTER.x + 4, z: FARM_YARD_CENTER.z - 4, heading: -Math.PI / 2 },
     requiredKind: 'crate',
     requiredCount: 1,
     requireIntact: true
@@ -152,6 +168,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'kirchberg_timber',
     title: '8. Am Kirchberg Storm Timber Clear',
+    shortTitle: '8. Church Timber',
     village: 'Münsing Church',
     subtitle: 'Clear 2 storm-fallen pine logs and deliver them to the churchyard square at St. Mariä Himmelfahrt.',
     recommendedTool: 'grapple',
@@ -160,6 +177,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: REAL_SPOTS.muensingChurch.x,
     targetZ: REAL_SPOTS.muensingChurch.z + 10,
     targetRadius: 16,
+    startSpot: { x: 1280, z: 998, heading: -1.6 },
     requiredKind: 'log',
     requiredCount: 2,
     pickupSpawn: { x: 1295, z: 992, kind: 'log', count: 2 }
@@ -167,6 +185,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'edeka_dock',
     title: '9. EDEKA Graf Loading Dock',
+    shortTitle: '9. EDEKA Dock',
     village: 'East Münsing',
     subtitle: 'Deliver 2 intact Produce Pallets cleanly to the EDEKA Graf grocery loading yard in east Münsing.',
     recommendedTool: 'forks',
@@ -175,6 +194,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: REAL_SPOTS.edeka.x,
     targetZ: REAL_SPOTS.edeka.z + 6,
     targetRadius: 16,
+    startSpot: { x: REAL_SPOTS.edeka.x - 54, z: REAL_SPOTS.edeka.z + 28, heading: -1.35 },
     requiredKind: 'crate',
     requiredCount: 2,
     requireIntact: true,
@@ -183,6 +203,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'weipert_silage',
     title: '10. Weipertshausen Northern Farm Run',
+    shortTitle: '10. Weipertshausen',
     village: 'Weipertshausen',
     subtitle: 'Deliver 2 sealed wrapped silage bales north along Weipertshausener Straße to the Weipertshausen farmyard.',
     recommendedTool: 'grabber',
@@ -191,6 +212,7 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     targetX: 492,
     targetZ: -1198,
     targetRadius: 17,
+    startSpot: { x: 494, z: -1112, heading: 0.08 },
     requiredKind: 'silage_wrapped',
     requiredCount: 2,
     requireIntact: true,
@@ -258,4 +280,27 @@ export function positionWaypointBeacon(beacon: THREE.Group, x: number, z: number
   if (visible) {
     beacon.position.set(x, getTerrainHeight(x, z), z);
   }
+}
+
+export function createGuideArrow(scene: THREE.Scene): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x9fd32e,
+    emissive: 0x6ba612,
+    emissiveIntensity: 0.7,
+    roughness: 0.3
+  });
+  // Arrow shaft + pointed arrowhead oriented along -Z (forward)
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.14, 0.95), mat);
+  shaft.position.set(0, 0, 0.35);
+  g.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.46, 0.85, 4), mat);
+  head.rotation.x = -Math.PI / 2;
+  head.rotation.y = Math.PI / 4;
+  head.position.set(0, 0, -0.45);
+  g.add(head);
+  g.userData.arrowMat = mat;
+  g.visible = false;
+  scene.add(g);
+  return g;
 }

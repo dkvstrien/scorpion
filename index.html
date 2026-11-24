@@ -31,35 +31,25 @@
 
           <div class="mode-picker">
             <button id="pick-farm" class="mode-card selected" type="button">
-              <div class="mode-title">🚜 Bavarian Contracting Career</div>
+              <div class="mode-title">Bavarian Contracting Career</div>
               <div class="mode-desc">
                 Stack pallets and bales in the Wimpasing yard, or haul deliveries down to Fischerei Sebald and up into Münsing.
               </div>
             </button>
             <button id="pick-freeplay" class="mode-card freeplay" type="button">
-              <div class="mode-title">🏔️ Open-World Free Play</div>
+              <div class="mode-title">Open-World Free Play</div>
               <div class="mode-desc">
                 Explore the full map at your own pace with fast travel between Wimpasing, Ammerland, Münsing, and Weipertshausen.
               </div>
             </button>
           </div>
 
-          <div class="controls-grid">
-            <div class="ctrl-group">
-              <h3>Drive, Gears &amp; World</h3>
-              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive · <kbd>G</kbd> Gears (15/30/40) · <kbd>Shift</kbd> Hare</div>
-              <div><kbd>Alt</kbd> Creep + Fork Laser · <kbd>X</kbd> 4WS / 2WS / Crab · <kbd>⌫</kbd> Winch</div>
-              <div><kbd>V</kbd> Camera · <kbd>J</kbd> Jobs/Travel · <kbd>U</kbd> Hide HUD · <kbd>Esc</kbd> Menu</div>
-              <div>🎮 Xbox / PlayStation Gamepad supported automatically</div>
-            </div>
-            <div class="ctrl-group">
-              <h3>Telescopic Boom &amp; Tools</h3>
-              <div><kbd>↑</kbd><kbd>↓</kbd> or <kbd>Q</kbd><kbd>E</kbd> Raise / Lower Boom</div>
-              <div><kbd>R</kbd><kbd>F</kbd> Extend / Retract Telescopic Arm</div>
-              <div><kbd>←</kbd><kbd>→</kbd> or <kbd>Z</kbd><kbd>C</kbd> Level / Tilt Carriage</div>
-              <div><kbd>Space</kbd> Grab / Set Down (Spin + Release = Throw!)</div>
-              <div><kbd>T</kbd> Couple / Drop Tool · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights · <kbd>H</kbd> Horn</div>
-            </div>
+          <div class="controls-strip">
+            <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive</span>
+            <span><kbd>Q</kbd><kbd>E</kbd> / <kbd>R</kbd><kbd>F</kbd> Boom</span>
+            <span><kbd>Space</kbd> Grab</span>
+            <span><kbd>J</kbd> Jobs / Travel</span>
+            <span><kbd>Esc</kbd> Menu &amp; Controls</span>
           </div>
 
           <button id="start-btn" class="primary-btn">Start Driving</button>
@@ -96,6 +86,9 @@
             <div class="contract-meta-row">
               <span id="contract-tool-hint" class="pill pill-green">Tool: Pallet Forks</span>
               <span id="contract-timer" class="pill">0:00</span>
+            </div>
+            <div class="contract-action-row">
+              <button id="btn-goto-job" class="hud-btn small-btn active-toggle" title="Drive straight to this contract start area">Go to Job</button>
               <button id="btn-replay-job" class="hud-btn small-btn" title="Respawn job cargo & restart timer">↻ Replay</button>
             </div>
 
@@ -163,7 +156,7 @@
           <div class="tidy-header panel-toggle-bar" id="btn-toggle-freeplay-panel" title="Expand / Collapse Fast Travel [J]">
             <div class="title-row">
               <span class="mini-claas free-tag">TRAVEL</span>
-              <span class="mini-summary" id="location-readout">📍 Home Farm</span>
+              <span class="mini-summary" id="location-readout">Home Farm</span>
             </div>
             <div class="score-pill">
               <span id="freeplay-odo" class="bank-val">0.0 km</span>
@@ -176,7 +169,7 @@
               <button id="btn-tp-lake" class="hud-btn">Sebald &amp; Schloss</button>
               <button id="btn-tp-village" class="hud-btn">Münsing Altwirt</button>
               <button id="btn-tp-weipert" class="hud-btn">Weipertshausen</button>
-              <button id="btn-tp-demo" class="hud-btn accent">Old Farmstead (Demo)</button>
+              <button id="btn-tp-demo" class="hud-btn accent">Old Farmstead</button>
               <button id="btn-reset-demo" class="hud-btn">↻ Reset Demo Site</button>
             </div>
           </div>
@@ -193,8 +186,8 @@
 
         <!-- Tipped Over Recovery Banner -->
         <div id="tipped-banner" class="tipped-banner hidden">
-          <strong>⚠️ SCORPION TIPPED OVER!</strong>
-          <span>Your load shifted past the tipping point — try pushing with the boom or winch upright!</span>
+          <strong>SCORPION TIPPED OVER</strong>
+          <span id="tipped-reason">Stability limit exceeded — push with the boom or use the recovery winch.</span>
           <button id="btn-banner-winch" class="primary-btn small">Recovery Winch [Backspace]</button>
         </div>
 
@@ -302,15 +295,19 @@
               <input id="set-volume" type="range" min="0" max="100" value="85" />
             </div>
             <div class="setting-row">
+              <label for="set-mouse-sens">Mouse Orbit Sensitivity (<span id="set-mouse-sens-val">100%</span>)</label>
+              <input id="set-mouse-sens" type="range" min="30" max="200" value="100" />
+            </div>
+            <div class="setting-row">
               <label for="set-ambience">Area Ambience (Birds, Cowbells, Lake Waves)</label>
               <input id="set-ambience" type="checkbox" checked />
             </div>
             <div class="setting-row">
               <label>World &amp; HUD Toggles</label>
               <div class="pause-toggles">
-                <button id="btn-time" class="hud-btn" title="Cycle Time of Day [N]">☀ Afternoon</button>
+                <button id="btn-time" class="hud-btn" title="Cycle Time of Day [N]">Afternoon</button>
                 <button id="btn-lights" class="hud-btn" title="Toggle LED Worklights [L]">Lights: Off</button>
-                <button id="btn-hints" class="hud-btn" title="Destination Hints [M]">Hints: Off</button>
+                <button id="btn-hints" class="hud-btn active-toggle" title="Destination Hints [M]">Hints: On</button>
                 <button id="btn-sound" class="hud-btn" title="Toggle Audio">SFX: On</button>
                 <button id="btn-toggle-hud" class="hud-btn" title="Hide/Show Entire HUD [U]">HUD: Shown [U]</button>
                 <button id="btn-mess" class="hud-btn accent" title="Spawn Extra Clutter Nearby">+ Clutter</button>
@@ -324,24 +321,11 @@
           </div>
 
           <div id="pause-pane-controls" class="pause-pane hidden">
-            <div class="controls-grid" style="margin: 0">
-              <div class="ctrl-group">
-                <h3>Driving &amp; Camera</h3>
-                <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive &amp; Steer</div>
-                <div><kbd>G</kbd> Varipower Gears (15 / 30 / 40 km/h) · <kbd>Shift</kbd> Hare</div>
-                <div><kbd>Alt</kbd> Precision Creep + Fork Laser</div>
-                <div><kbd>X</kbd> 4WS / 2WS / Crab · <kbd>Backspace</kbd> Recovery Winch</div>
-                <div><kbd>V</kbd> Chase / Cab / Boom · <kbd>J</kbd> Toggle Panel · <kbd>U</kbd> / <kbd>F1</kbd> Hide HUD</div>
-              </div>
-              <div class="ctrl-group">
-                <h3>Telescopic Boom &amp; Tools</h3>
-                <div><kbd>Q</kbd><kbd>E</kbd> or <kbd>↑</kbd><kbd>↓</kbd> Raise / Lower Boom</div>
-                <div><kbd>R</kbd><kbd>F</kbd> Extend / Retract Telescopic Boom</div>
-                <div><kbd>Z</kbd><kbd>C</kbd> or <kbd>←</kbd><kbd>→</kbd> Level / Tilt Carriage</div>
-                <div><kbd>Space</kbd> Grab / Release (Hold with Grabber = Squeeze)</div>
-                <div><kbd>T</kbd> Couple / Drop Attachment · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights · <kbd>H</kbd> Horn</div>
-              </div>
+            <div class="rebind-header">
+              <span class="rebind-hint">Click any binding, then press a new key to rebind. Gamepad &amp; Arrow keys also work automatically.</span>
+              <button id="btn-reset-binds" class="hud-btn small-btn">Reset Defaults</button>
             </div>
+            <div id="keybind-grid" class="keybind-grid"></div>
           </div>
 
           <div id="pause-pane-credits" class="pause-pane hidden">
