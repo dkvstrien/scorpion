@@ -80,7 +80,7 @@
 
           <div class="panel-body">
             <div class="contract-selector">
-              <select id="contract-select" title="Choose Bavarian Contract (10 Jobs)"></select>
+              <select id="contract-select" title="Choose Bavarian Contract (12 Jobs)"></select>
             </div>
             <p id="contract-desc" class="contract-desc"></p>
             <div class="contract-meta-row">
@@ -89,6 +89,7 @@
             </div>
             <div class="contract-action-row">
               <button id="btn-goto-job" class="hud-btn small-btn active-toggle" title="Drive straight to this contract start area">Go to Job</button>
+              <button id="btn-open-workshop" class="hud-btn small-btn" title="Open Farm Workshop & Upgrades [B]">Workshop [B]</button>
               <button id="btn-replay-job" class="hud-btn small-btn" title="Respawn job cargo & restart timer">↻ Replay</button>
             </div>
 
@@ -167,7 +168,9 @@
             <div class="freeplay-quick-grid">
               <button id="btn-tp-farm" class="hud-btn">Home Farm</button>
               <button id="btn-tp-lake" class="hud-btn">Sebald &amp; Schloss</button>
+              <button id="btn-tp-ried" class="hud-btn">Ried Co-op</button>
               <button id="btn-tp-village" class="hud-btn">Münsing Altwirt</button>
+              <button id="btn-tp-edeka" class="hud-btn">EDEKA Market</button>
               <button id="btn-tp-weipert" class="hud-btn">Weipertshausen</button>
               <button id="btn-tp-demo" class="hud-btn accent">Old Farmstead</button>
               <button id="btn-reset-demo" class="hud-btn">↻ Reset Demo Site</button>
@@ -277,6 +280,7 @@
 
           <div class="pause-tabs">
             <button class="hud-btn pause-tab active-toggle" data-tab="settings">Settings</button>
+            <button class="hud-btn pause-tab" data-tab="workshop">Workshop</button>
             <button class="hud-btn pause-tab" data-tab="controls">Controls</button>
             <button class="hud-btn pause-tab" data-tab="credits">Credits &amp; Data</button>
           </div>
@@ -317,6 +321,24 @@
               <button id="btn-pause-replay" class="hud-btn">↻ Restart Current Job</button>
               <button id="btn-winch" class="hud-btn" title="Right Tipped Tractor [Backspace]">Recovery Winch [⌫]</button>
               <button id="btn-pause-reset-save" class="hud-btn accent">Reset Career Save</button>
+            </div>
+          </div>
+
+          <div id="pause-pane-workshop" class="pause-pane hidden">
+            <div class="workshop-header">
+              <span class="rebind-hint">Spend contracting earnings on attachments, machine upgrades, and regional depot access.</span>
+              <span class="workshop-bank">Balance: <strong id="workshop-balance">€500</strong></span>
+            </div>
+            <div class="workshop-section-title">Attachments (Home Farm Shed &amp; Ried Service Bay)</div>
+            <div id="workshop-tools-grid" class="workshop-grid"></div>
+            <div class="workshop-section-title">Scorpion 741 Upgrades &amp; Regional Depots</div>
+            <div id="workshop-upgrades-grid" class="workshop-grid"></div>
+            <div id="workshop-depot-bar" class="workshop-depot-bar hidden">
+              <span class="rebind-hint">Depot Fast Travel (unlocked):</span>
+              <div class="btn-row">
+                <button id="btn-career-tp-ried" class="hud-btn small-btn">Ried Co-op</button>
+                <button id="btn-career-tp-edeka" class="hud-btn small-btn">EDEKA Market</button>
+              </div>
             </div>
           </div>
 

@@ -483,3 +483,27 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
   - Heavy load (`2,200 kg`) hydraulic shift: `engineLoad: 0.588`, `hydroRate: 0.85 → 1.11` (`.scratch/loop/19/02_heavy_load_hydraulics.png`).
   - Münsinger Straße drive: `surface: 'asphalt'`, `surfaceGains: { tarmac: 0.154, gravel: 0, grass: 0 }` (`.scratch/loop/19/03_tarmac_road.png`).
   - Open meadow drive: `surface: 'grass'`, `surfaceGains: { tarmac: 0, gravel: 0, grass: 0.143 }` (`.scratch/loop/19/04_meadow_grass.png`).
+
+---
+
+## Iteration 20 — Round 2: Career Workshop Progression, Machine Upgrades & Ried / EDEKA Regional Depots (2026-11-24)
+
+**Goal**: Address the Content item from `.scratch/grades/round-1.md` by adding meaningful Career progression (unlockable tools, machine upgrades, and depot access purchasable with earnings) plus ongoing reasons to visit Ried and EDEKA Münsing beyond one contract each.
+
+### Changes Made
+- **Farm Workshop & Persistent Unlocks** ([src/contracts.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/contracts.ts), [src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts), [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Added `Workshop [B]` tab in the Pause Menu and Jobs panel without expanding the default compact HUD.
+  - **Unlockable Attachments in Career** (all 5 remain unlocked in Free Play): `Pallet Forks` & `Bale Spike` included at start; `Bale Grabber` (`€350`), `Grapple Claw` (`€500`), and `Scoop Bucket` (`€600`) unlocked with Career earnings and persisted in `localStorage`.
+  - **Unlockable Scorpion 741 & Regional Upgrades**: `Varipower Hydraulic Boost` (`€900`, `+25%` boom/tilt speed), `Rear Counterweight (+750 kg)` (`€1,250`, `+750 kg` chassis ballast & `-22%` forward tip load moment), `All-Terrain Lug Tires & 160 hp Tune` (`€1,550`, `+18%` traction/torque & `45 km/h` Hare gear), and `Ried & EDEKA Depot Pass` (`€800`, Career fast travel to Ried Co-op & EDEKA Market + `+25%` direct-sale payouts).
+- **Ried & EDEKA Landmarks, Live Commodity Buy-In & 2 New Contracts** ([src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts), [src/terrain.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/terrain.ts), [src/props.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/props.ts), [src/contracts.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/contracts.ts)):
+  - Built **Lagerhaus Ried Agricultural Co-op & Service Bay** (`-262, 394`) with a leveled gravel courtyard, timber canopy, unobstructed signage, glowing emerald buy-in & tool-service pad (swap owned attachments on site via `[T]` and sell hay bales, silage, or logs anytime for `€240–€300`), plus Contract **11 (`11. Ried Co-op Timber & Feed Depot`)** and `Ried Co-op` fast travel.
+  - Built **EDEKA Graf Bauernmarkt Stall** (`1587, 906.5`) on a leveled sunlit forecourt beside `Höhenrainer Straße` with striped awning, produce display crates, glowing yellow Farmers' Market buy-in pad (sell produce pallets for `€260` or pumpkins for `€140`, `+25%` with Depot Pass), nearby roadside harvest pumpkins, plus Contract **12 (`12. EDEKA Autumn Pumpkin Market`)** and `EDEKA Market` fast travel.
+  - Tagged regional props with `isRegional` so roadside/regional goods never inflate Home Farm `Yard Shift` totals, and guarded initial settling so fresh games always start at `Damaged: 0`.
+
+### Verification & Screenshots (`.scratch/loop/20/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Live verification:
+  - Fresh Career start (`€500`, `2` starter tools, `12` contracts, `Damaged: 0`, `Rollovers: 0`) → `.scratch/loop/20/01_jobs_12_and_workshop_btn.png`.
+  - Workshop UI purchase (`Bale Grabber` `-€350` → `€150`, immediately fitted) → `.scratch/loop/20/02_workshop_progression.png`.
+  - Lagerhaus Ried Co-op & Service Pad (`0°` tilt, `4/4` tires, live service/buy-in prompt) → `.scratch/loop/20/03_ried_coop_depot.png`, `.scratch/loop/20/04_ried_service_pad.png`.
+  - EDEKA Bauernmarkt fast travel (`0 km/h`, `0°` tilt, `4/4` tires) & forecourt close-up (`0°` tilt, `4/4` tires) → `.scratch/loop/20/05_edeka_farmers_market.png`, `.scratch/loop/20/06_edeka_market_closeup.png`.

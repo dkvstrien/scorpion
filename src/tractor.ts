@@ -107,6 +107,10 @@ export class ClaasScorpion {
 
   public activeTool: AttachmentType = 'forks';
   public freePlayMode = false;
+  public upgradeHydroScale = 1.0;
+  public upgradeCounterweightScale = 1.0;
+  public upgradeTractionScale = 1.0;
+  public upgradeTopSpeedBonusMs = 0.0;
   public heldProps: FarmProp[] = [];
   public heldVillageObj: DynamicVillageObj | null = null;
   public clampClosed = false;
@@ -328,7 +332,27 @@ export class ClaasScorpion {
     return true;
   }
 
-  public tryHitchNearby(rackSpots: { tool: Exclude<AttachmentType, 'none'>; pos: THREE.Vector3 }[]): boolean {
+  public applyMachineUpgrades(opts: {
+    hydroBoost: boolean;
+    counterweight: boolean;
+    allTerrain: boolean;
+  }): void {
+    this.upgradeHydroScale = opts.hydroBoost ? 1.25 : 1.0;
+    this.upgradeCounterweightScale = opts.counterweight ? 0.78 : 1.0;
+    this.upgradeTractionScale = opts.allTerrain ? 1.18 : 1.0;
+    this.upgradeTopSpeedBonusMs = opts.allTerrain ? 5 / 3.6 : 0.0;
+    const nextMass = opts.counterweight ? 8390 : 7640;
+    if (this.chassisBody.mass !== nextMass) {
+      this.chassisBody.mass = nextMass;
+      this.chassisBody.updateMassProperties();
+    }
+  }
+
+  public tryHitchNearby(
+    rackSpots: { tool: Exclude<AttachmentType, 'none'>; pos: THREE.Vector3 }[],
+    isToolUnlocked?: (tool: Exclude<AttachmentType, 'none'>) => boolean,
+    onLockedTool?: (tool: Exclude<AttachmentType, 'none'>) => void
+  ): boolean {
     const tipPos = this.getHoldWorldPos();
 
     for (let i = 0; i < this.droppedAttachments.length; i++) {
@@ -345,6 +369,10 @@ export class ClaasScorpion {
 
     for (const spot of rackSpots) {
       if (spot.tool !== this.activeTool && (spot.pos.distanceTo(tipPos) < 3.6 || spot.pos.distanceTo(this.position) < 4.8)) {
+        if (!this.freePlayMode && isToolUnlocked && !isToolUnlocked(spot.tool)) {
+          onLockedTool?.(spot.tool);
+          return true;
+        }
         this.equipTool(spot.tool, true);
         return true;
       }
@@ -731,7 +759,9 @@ export class ClaasScorpion {
     const boomOver = Math.max((liftFrac - 0.3) / 0.7, (extFrac - 0.35) / 0.65);
     this.boomSpeedLimited = boomOver > 0;
     const boomCapMs = boomOver > 0 ? THREE.MathUtils.lerp(4.2, 2.8, Math.min(1, boomOver)) : Infinity; // ~15 km/h down to ~10 km/h!
-    const baseMaxSpeed = input.creep ? 2.6 : VARIPOWER_GEARS[activeGear].ms;
+    const gearSpeed =
+      activeGear === 'hare' ? VARIPOWER_GEARS[activeGear].ms + this.upgradeTopSpeedBonusMs : VARIPOWER_GEARS[activeGear].ms;
+    const baseMaxSpeed = input.creep ? 2.6 : gearSpeed;
     const maxSpeed = Math.min(baseMaxSpeed, boomCapMs);
 
     const restHubHeight = 0.92;
@@ -826,14 +856,19 @@ export class ClaasScorpion {
             tractiveLimit = 3900;
             driveGain = 1280;
           } else {
-            // Engine power taper at road speed (realistic 136 hp diesel tractive effort curve)
-            tractiveLimit = THREE.MathUtils.lerp(4700, 3400, THREE.MathUtils.clamp(absForwardSpd / 11.1, 0, 1));
-            driveGain = 6200;
+            // Engine power taper at road speed (realistic 136 hp diesel tractive effort curve; boosted with All-Terrain upgrade)
+            tractiveLimit =
+              THREE.MathUtils.lerp(4700, 3400, THREE.MathUtils.clamp(absForwardSpd / 11.1, 0, 1)) *
+              this.upgradeTractionScale;
+            driveGain = 6200 * this.upgradeTractionScale;
           }
           const fDrive = THREE.MathUtils.clamp(speedErr * driveGain, -tractiveLimit, tractiveLimit);
 
           // Realistic agricultural tire lateral grip: slight loose scrub & lean at 37+ km/h full lock!
-          const maxLatGrip = Math.min(16400, Math.max(4200, fUp * 0.45));
+          const maxLatGrip = Math.min(
+            16400 * this.upgradeTractionScale,
+            Math.max(4200, fUp * 0.45 * this.upgradeTractionScale)
+          );
           const fLat = THREE.MathUtils.clamp(-vLat * 9400, -maxLatGrip, maxLatGrip);
 
           const totalHoriz = new CANNON.Vec3(
@@ -859,7 +894,7 @@ export class ClaasScorpion {
     if (carriedKg > 0 || extSteelKg > 15) {
       // Smoothly ramp load moment with reach so retracted loads stay controllable while full extension genuinely tips!
       const reachLeverage = 1.1 + (this.boomExt / 3.6) * 0.65;
-      const fLoadY = -(carriedKg * reachLeverage + extSteelKg) * 16.5;
+      const fLoadY = -(carriedKg * reachLeverage + extSteelKg) * 16.5 * this.upgradeCounterweightScale;
       body.applyForce(new CANNON.Vec3(0, fLoadY, 0), tipRel);
     }
 
@@ -945,7 +980,7 @@ export class ClaasScorpion {
     const targetSteer = input.steer * (input.creep ? 0.44 : 0.56) * speedSteerScale;
     this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, dt * 7.2);
 
-    const fine = input.creep ? 0.45 : 1.0;
+    const fine = (input.creep ? 0.45 : 1.0) * this.upgradeHydroScale;
     this.prevHeadTilt = this.headTilt;
     this.boomPitch = THREE.MathUtils.clamp(this.boomPitch + input.boomLift * 0.98 * fine * dt, -0.2, 1.1);
     this.boomExt = THREE.MathUtils.clamp(this.boomExt + input.boomExtend * 2.9 * fine * dt, 0, 3.6);

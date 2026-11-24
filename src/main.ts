@@ -37,9 +37,14 @@ import {
   ContractId,
   createGuideArrow,
   createWaypointBeacon,
+  defaultCareerStats,
   loadCareer,
   positionWaypointBeacon,
-  saveCareer
+  saveCareer,
+  UnlockableTool,
+  UpgradeId,
+  WORKSHOP_TOOLS,
+  WORKSHOP_UPGRADES
 } from './contracts';
 
 type CameraMode = 'chase' | 'cab' | 'boom';
@@ -495,6 +500,8 @@ class ScorpionGame {
 
     this.populateContractsUI();
     this.renderKeybindGrid();
+    this.applyCareerUpgrades();
+    this.renderWorkshopUI();
     this.refreshCareerUI();
     this.applySettings();
     this.applyTimeOfDay('afternoon');
@@ -609,7 +616,7 @@ class ScorpionGame {
       const ox = x + (i - (needed - 1) * 0.5) * 2.5;
       const oz = z + (i % 2) * 1.4;
       const oy = getDrivableGroundY(ox, oz) + 1.05;
-      this.propMgr.spawnProp(kind, new THREE.Vector3(ox, oy, oz), i * 0.4);
+      this.propMgr.spawnProp(kind, new THREE.Vector3(ox, oy, oz), i * 0.4, id !== 'yard_shift');
     }
   }
 
@@ -697,20 +704,166 @@ class ScorpionGame {
     if (ambChk) ambChk.checked = this.settings.ambience;
   }
 
-  private setPaused(next: boolean, tab?: 'settings' | 'controls' | 'credits'): void {
+  private isToolUnlocked(tool: UnlockableTool): boolean {
+    if (this.mode === 'freeplay') return true;
+    return this.career.unlockedTools.includes(tool);
+  }
+
+  private applyCareerUpgrades(): void {
+    const ups = this.career.unlockedUpgrades;
+    this.tractor.applyMachineUpgrades({
+      hydroBoost: ups.includes('hydro_boost'),
+      counterweight: ups.includes('counterweight'),
+      allTerrain: ups.includes('all_terrain')
+    });
+    const depotBar = document.getElementById('workshop-depot-bar');
+    if (depotBar) {
+      depotBar.classList.toggle('hidden', !ups.includes('regional_depots'));
+    }
+  }
+
+  private isAtServiceBay(): boolean {
+    const dFarm = Math.hypot(
+      this.tractor.position.x - FARM_YARD_CENTER.x,
+      this.tractor.position.z - FARM_YARD_CENTER.z
+    );
+    const dRied = Math.hypot(
+      this.tractor.position.x - this.realWorld.riedDepotPos.x,
+      this.tractor.position.z - this.realWorld.riedDepotPos.z
+    );
+    return dFarm < 34 || dRied < 18 || this.mode === 'freeplay';
+  }
+
+  private buyWorkshopTool(tool: UnlockableTool): boolean {
+    const item = WORKSHOP_TOOLS.find((t) => t.tool === tool);
+    if (!item) return false;
+    if (this.career.unlockedTools.includes(tool)) return true;
+    if (this.career.bankEUR < item.priceEUR) {
+      this.showToast(`Need €${item.priceEUR} for ${item.name} (you have €${this.career.bankEUR}).`, 'danger');
+      return false;
+    }
+    this.career.bankEUR -= item.priceEUR;
+    this.career.unlockedTools.push(tool);
+    saveCareer(this.career);
+    this.audio.playScoreChime(false);
+    if (this.isAtServiceBay()) {
+      this.tractor.equipTool(tool, true);
+    } else {
+      this.showToast(`Unlocked ${item.name} — fit it at Home Farm Shed or Ried Co-op.`);
+    }
+    this.refreshCareerUI();
+    this.renderWorkshopUI();
+    return true;
+  }
+
+  private buyWorkshopUpgrade(id: UpgradeId): boolean {
+    const item = WORKSHOP_UPGRADES.find((u) => u.id === id);
+    if (!item) return false;
+    if (this.career.unlockedUpgrades.includes(id)) return true;
+    if (this.career.bankEUR < item.priceEUR) {
+      this.showToast(`Need €${item.priceEUR} for ${item.name} (you have €${this.career.bankEUR}).`, 'danger');
+      return false;
+    }
+    this.career.bankEUR -= item.priceEUR;
+    this.career.unlockedUpgrades.push(id);
+    saveCareer(this.career);
+    this.applyCareerUpgrades();
+    this.audio.playScoreChime(true);
+    this.refreshCareerUI();
+    this.renderWorkshopUI();
+    this.showToast(`Installed: ${item.name}`, 'trick');
+    return true;
+  }
+
+  private renderWorkshopUI(): void {
+    const balEl = document.getElementById('workshop-balance');
+    if (balEl) balEl.textContent = `€${this.career.bankEUR.toLocaleString()}`;
+
+    const toolsGrid = document.getElementById('workshop-tools-grid');
+    if (toolsGrid) {
+      toolsGrid.innerHTML = '';
+      for (const item of WORKSHOP_TOOLS) {
+        const owned = this.career.unlockedTools.includes(item.tool);
+        const equipped = this.tractor.activeTool === item.tool;
+        const canAfford = this.career.bankEUR >= item.priceEUR;
+        const card = document.createElement('div');
+        card.className = `workshop-item${owned ? ' owned' : ''}`;
+        const info = document.createElement('div');
+        info.className = 'workshop-info';
+        info.innerHTML = `<strong>${item.name}</strong><span>${item.desc}</span>`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `hud-btn workshop-btn${owned ? ' active-toggle' : canAfford ? '' : ' locked'}`;
+        if (equipped) {
+          btn.textContent = 'Fitted';
+          btn.disabled = true;
+        } else if (owned) {
+          btn.textContent = 'Fit Tool';
+          btn.addEventListener('click', () => {
+            if (this.isAtServiceBay()) {
+              this.tractor.equipTool(item.tool, true);
+              this.renderWorkshopUI();
+            } else {
+              this.showToast('Drive to Home Farm Tool Shed or Lagerhaus Ried Service Bay to fit tools.');
+            }
+          });
+        } else {
+          btn.textContent = `€${item.priceEUR}`;
+          btn.addEventListener('click', () => this.buyWorkshopTool(item.tool));
+        }
+        card.appendChild(info);
+        card.appendChild(btn);
+        toolsGrid.appendChild(card);
+      }
+    }
+
+    const upGrid = document.getElementById('workshop-upgrades-grid');
+    if (upGrid) {
+      upGrid.innerHTML = '';
+      for (const item of WORKSHOP_UPGRADES) {
+        const owned = this.career.unlockedUpgrades.includes(item.id);
+        const canAfford = this.career.bankEUR >= item.priceEUR;
+        const card = document.createElement('div');
+        card.className = `workshop-item${owned ? ' owned' : ''}`;
+        const info = document.createElement('div');
+        info.className = 'workshop-info';
+        info.innerHTML = `<strong>${item.name}</strong><span>${item.desc}</span>`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `hud-btn workshop-btn${owned ? ' active-toggle' : canAfford ? '' : ' locked'}`;
+        if (owned) {
+          btn.textContent = 'Installed';
+          btn.disabled = true;
+        } else {
+          btn.textContent = `€${item.priceEUR}`;
+          btn.addEventListener('click', () => this.buyWorkshopUpgrade(item.id));
+        }
+        card.appendChild(info);
+        card.appendChild(btn);
+        upGrid.appendChild(card);
+      }
+    }
+  }
+
+  private setPaused(next: boolean, tab?: 'settings' | 'workshop' | 'controls' | 'credits'): void {
     if (!this.started) return;
     this.paused = next;
     if (!next) this.listeningBindAction = null;
     this.pauseOverlay.classList.toggle('hidden', !next);
-    if (next && tab) this.showPauseTab(tab);
+    if (next) {
+      this.renderWorkshopUI();
+      if (tab) this.showPauseTab(tab);
+    }
   }
 
-  private showPauseTab(tab: 'settings' | 'controls' | 'credits'): void {
+  private showPauseTab(tab: 'settings' | 'workshop' | 'controls' | 'credits'): void {
     const tabs = document.querySelectorAll<HTMLButtonElement>('.pause-tab');
     tabs.forEach((b) => b.classList.toggle('active-toggle', b.dataset.tab === tab));
     document.getElementById('pause-pane-settings')!.classList.toggle('hidden', tab !== 'settings');
+    document.getElementById('pause-pane-workshop')!.classList.toggle('hidden', tab !== 'workshop');
     document.getElementById('pause-pane-controls')!.classList.toggle('hidden', tab !== 'controls');
     document.getElementById('pause-pane-credits')!.classList.toggle('hidden', tab !== 'credits');
+    if (tab === 'workshop') this.renderWorkshopUI();
   }
 
   private refreshCareerUI(): void {
@@ -862,6 +1015,7 @@ class ScorpionGame {
   }
 
   private recordDamage(): void {
+    if (!this.started) return;
     this.damagedCount++;
     this.jobDamagedCount++;
     this.damagedEl.textContent = String(this.jobDamagedCount);
@@ -991,7 +1145,15 @@ class ScorpionGame {
       this.tractor.teleportTo(c.startSpot.x, c.startSpot.z, c.startSpot.heading);
       this.camYawOffset = 0.2;
       this.snapCameraToTractor();
-      this.showToast(`Moved to ${c.shortTitle}`);
+      if (!this.isToolUnlocked(c.recommendedTool)) {
+        const tItem = WORKSHOP_TOOLS.find((t) => t.tool === c.recommendedTool);
+        this.showToast(`Moved to ${c.shortTitle} — buy ${TOOL_META[c.recommendedTool].name} (€${tItem?.priceEUR ?? 0}) in Workshop [B]`);
+      } else {
+        this.showToast(`Moved to ${c.shortTitle}`);
+      }
+    });
+    document.getElementById('btn-open-workshop')!.addEventListener('click', () => {
+      this.setPaused(true, 'workshop');
     });
     document.getElementById('btn-replay-job')!.addEventListener('click', () => {
       this.contractCompletedThisRun.delete(this.activeContractId);
@@ -1049,13 +1211,29 @@ class ScorpionGame {
       // Dead-center on flat paved Nördliche Seestraße (0–1° slope, 4/4 tires) with camera framing Schloss Ammerland & Starnberger See!
       fastTravel(-998.0, 825.0, 2.94, 'Ammerland — Schloss & Sebald Pier', -1.22);
     });
+    document.getElementById('btn-tp-ried')!.addEventListener('click', () => {
+      // Flat paved Graf-Pocci-Weg looking straight across Lagerhaus Ried Co-op & Service Bay!
+      fastTravel(-245.5, 380.0, 2.55, 'Lagerhaus Ried — Co-op & Service Bay', 0.22);
+    });
     document.getElementById('btn-tp-village')!.addEventListener('click', () => {
       // Dead-center on main paved Münsing village road facing east past St. Mariä Himmelfahrt, Maibaum & Zum Altwirt!
       fastTravel(1370.0, 1004.5, -1.79, 'Münsing — Church & Altwirt');
     });
+    document.getElementById('btn-tp-edeka')!.addEventListener('click', () => {
+      // Flat paved Höhenrainer Straße facing northeast into the sunlit EDEKA Graf Bauernmarkt forecourt!
+      fastTravel(1574.0, 919.5, -0.78, 'EDEKA Münsing — Farmers Market', 0.14);
+    });
     document.getElementById('btn-tp-weipert')!.addEventListener('click', () => {
       // Right on Weipertshausen main street heading north into the hamlet!
       fastTravel(496.0, -1189.0, 0.12, 'Weipertshausen');
+    });
+    document.getElementById('btn-career-tp-ried')!.addEventListener('click', () => {
+      this.setPaused(false);
+      fastTravel(-245.5, 380.0, 2.55, 'Lagerhaus Ried — Co-op & Service Bay', 0.22);
+    });
+    document.getElementById('btn-career-tp-edeka')!.addEventListener('click', () => {
+      this.setPaused(false);
+      fastTravel(1574.0, 919.5, -0.78, 'EDEKA Münsing — Farmers Market', 0.14);
     });
     document.getElementById('btn-tp-demo')!.addEventListener('click', () => {
       fastTravel(DEMO_SITE_CENTER.x, DEMO_SITE_CENTER.z + 25, 0, 'Old Farmstead demolition area');
@@ -1096,8 +1274,9 @@ class ScorpionGame {
         e.preventDefault();
         doWinch();
       } else if (e.code === kb.couple) {
-        const acted = this.tractor.tryHitchNearby(this.farm.rackSpots);
-        if (!acted) this.showToast('Drive near a Tool Shed bay to couple an attachment.');
+        this.handleHitchAction();
+      } else if (e.code === 'KeyB') {
+        this.setPaused(true, 'workshop');
       } else if (e.code === 'KeyM') {
         this.toggleHints();
       } else if (e.code === kb.sky) {
@@ -1173,7 +1352,7 @@ class ScorpionGame {
     document.getElementById('btn-pause-resume')!.addEventListener('click', () => this.setPaused(false));
     document.querySelectorAll<HTMLButtonElement>('.pause-tab').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.showPauseTab((btn.dataset.tab as 'settings' | 'controls' | 'credits') ?? 'settings');
+        this.showPauseTab((btn.dataset.tab as 'settings' | 'workshop' | 'controls' | 'credits') ?? 'settings');
       });
     });
     (document.getElementById('set-quality') as HTMLSelectElement).addEventListener('change', (e) => {
@@ -1208,10 +1387,12 @@ class ScorpionGame {
       document.getElementById('btn-replay-job')!.click();
     });
     document.getElementById('btn-pause-reset-save')!.addEventListener('click', () => {
-      this.career = { bankEUR: 500, completedIds: [], bestStars: {}, totalKm: 0, rollovers: 0 };
+      this.career = defaultCareerStats();
       saveCareer(this.career);
       this.contractCompletedThisRun.clear();
+      this.applyCareerUpgrades();
       this.populateContractsUI();
+      this.renderWorkshopUI();
       this.refreshCareerUI();
       this.showToast('Career save reset to €500');
     });
@@ -1225,9 +1406,7 @@ class ScorpionGame {
     });
 
     document.getElementById('btn-hitch-action')!.addEventListener('click', () => {
-      if (!this.tractor.tryHitchNearby(this.farm.rackSpots)) {
-        this.showToast('Drive near a Tool Shed bay to couple a tool!');
-      }
+      this.handleHitchAction();
     });
 
     document.getElementById('btn-mess')!.addEventListener('click', () => {
@@ -1248,6 +1427,39 @@ class ScorpionGame {
       this.selectContract(next.id, true);
       this.showToast(`Next Job: ${next.title}`);
     });
+  }
+
+  private handleHitchAction(): void {
+    // At Lagerhaus Ried Service Pad, allow cycling any owned attachment on the spot!
+    const distRied = Math.hypot(
+      this.tractor.position.x - this.realWorld.riedDepotPos.x,
+      this.tractor.position.z - this.realWorld.riedDepotPos.z
+    );
+    if (distRied < 14) {
+      const avail: UnlockableTool[] =
+        this.mode === 'freeplay'
+          ? ['forks', 'spike', 'grabber', 'grapple', 'bucket']
+          : this.career.unlockedTools;
+      if (avail.length > 0) {
+        const curIdx = avail.indexOf(this.tractor.activeTool as UnlockableTool);
+        const nextTool = avail[(curIdx + 1) % avail.length];
+        this.tractor.equipTool(nextTool, true);
+        this.showToast(`Ried Service Bay: fitted ${TOOL_META[nextTool].name}`);
+        return;
+      }
+    }
+
+    const acted = this.tractor.tryHitchNearby(
+      this.farm.rackSpots,
+      (t) => this.isToolUnlocked(t),
+      (locked) => {
+        const item = WORKSHOP_TOOLS.find((w) => w.tool === locked);
+        this.showToast(`${TOOL_META[locked].name} locked — buy in Workshop [B] (€${item?.priceEUR ?? 0})`, 'danger');
+      }
+    );
+    if (!acted) {
+      this.showToast('Drive to the Home Farm Tool Shed or Lagerhaus Ried Service Bay to swap tools.');
+    }
   }
 
   private cycleSteerUI(): void {
@@ -1370,8 +1582,10 @@ class ScorpionGame {
     if (Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 115) return 'Schloss Ammerland';
     if (Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 88) return 'Münsing Church';
     if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 115) return 'Münsing Altwirt';
+    if (Math.hypot(x - this.realWorld.edekaMarketPos.x, z - this.realWorld.edekaMarketPos.z) < 42) return 'EDEKA Bauernmarkt';
     if (Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 85) return 'Münsing EDEKA';
     if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 220) return 'Weipertshausen';
+    if (Math.hypot(x - this.realWorld.riedDepotPos.x, z - this.realWorld.riedDepotPos.z) < 55) return 'Lagerhaus Ried';
     if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 130) return 'Ried';
     if (Math.hypot(x - FARM_YARD_CENTER.x, z - FARM_YARD_CENTER.z) < 55 || Math.hypot(x - FARM_CENTER.x, z - FARM_CENTER.z) < 42)
       return 'Home Farm';
@@ -1387,8 +1601,11 @@ class ScorpionGame {
     const activeContract = BAVARIAN_CONTRACTS.find((c) => c.id === this.activeContractId)!;
     let contractDelivered = 0;
 
+    const soldThisFrame: FarmProp[] = [];
+    const depotBonus = this.career.unlockedUpgrades.includes('regional_depots') ? 1.25 : 1.0;
+
     for (const p of this.propMgr.props) {
-      totals[p.targetZone]++;
+      if (!p.isRegional) totals[p.targetZone]++;
 
       const dPond = Math.hypot(
         p.body.position.x - this.farm.pondCenter.x,
@@ -1409,7 +1626,7 @@ class ScorpionGame {
         p.inWater = false;
       }
 
-      // Check all 10 Bavarian delivery & yard-precision contracts!
+      // Check all 12 Bavarian delivery & yard-precision contracts!
       if (
         this.mode === 'farm' &&
         activeContract.requiredKind !== 'any_yard' &&
@@ -1430,6 +1647,67 @@ class ScorpionGame {
         }
       }
 
+      // Live Regional Direct Buy-In Sales at Lagerhaus Ried Co-op & EDEKA Bauernmarkt (only when player is at that depot!)
+      if (!p.heldByTractor && !p.depotSold && !p.isDamaged && !p.isPopped && p.body.velocity.length() < 1.6) {
+        const playerAtRied =
+          Math.hypot(
+            this.tractor.position.x - this.realWorld.riedDepotPos.x,
+            this.tractor.position.z - this.realWorld.riedDepotPos.z
+          ) < 36;
+        const isRiedContract =
+          this.mode === 'farm' &&
+          (this.activeContractId === 'ried_bale_harvest' || this.activeContractId === 'ried_timber_depot') &&
+          !this.contractCompletedThisRun.has(this.activeContractId);
+        const dRiedPad = Math.hypot(
+          p.body.position.x - this.realWorld.riedDepotPos.x,
+          p.body.position.z - this.realWorld.riedDepotPos.z
+        );
+        if (
+          playerAtRied &&
+          !isRiedContract &&
+          dRiedPad < 7.5 &&
+          (p.kind === 'hay_round' || p.kind === 'hay_square' || p.kind === 'silage_wrapped' || p.kind === 'log')
+        ) {
+          p.depotSold = true;
+          const payout = Math.round(240 * depotBonus);
+          this.career.bankEUR += payout;
+          this.career.directSalesCount++;
+          saveCareer(this.career);
+          this.refreshCareerUI();
+          this.audio.playScoreChime(true);
+          this.particles.spawnConfetti(new THREE.Vector3(p.body.position.x, p.body.position.y + 0.8, p.body.position.z));
+          this.showToast(`Lagerhaus Ried bought ${p.label}: +€${payout}`, 'trick');
+          if (p.isRegional) soldThisFrame.push(p);
+        }
+
+        const playerAtEdeka =
+          Math.hypot(
+            this.tractor.position.x - this.realWorld.edekaMarketPos.x,
+            this.tractor.position.z - this.realWorld.edekaMarketPos.z
+          ) < 36;
+        const isEdekaContract =
+          this.mode === 'farm' &&
+          (this.activeContractId === 'edeka_dock' || this.activeContractId === 'edeka_autumn_market') &&
+          !this.contractCompletedThisRun.has(this.activeContractId);
+        const dEdekaPad = Math.hypot(
+          p.body.position.x - this.realWorld.edekaMarketPos.x,
+          p.body.position.z - this.realWorld.edekaMarketPos.z
+        );
+        if (playerAtEdeka && !isEdekaContract && dEdekaPad < 7.2 && (p.kind === 'crate' || p.kind === 'pumpkin')) {
+          p.depotSold = true;
+          const base = p.kind === 'crate' ? 260 : 140;
+          const payout = Math.round(base * depotBonus);
+          this.career.bankEUR += payout;
+          this.career.directSalesCount++;
+          saveCareer(this.career);
+          this.refreshCareerUI();
+          this.audio.playScoreChime(true);
+          this.particles.spawnConfetti(new THREE.Vector3(p.body.position.x, p.body.position.y + 0.8, p.body.position.z));
+          this.showToast(`EDEKA Market bought ${p.label}: +€${payout}`, 'trick');
+          if (p.isRegional) soldThisFrame.push(p);
+        }
+      }
+
       const zone = this.farm.zones.find((z) => z.key === p.targetZone);
       if (!zone) continue;
 
@@ -1441,7 +1719,7 @@ class ScorpionGame {
         p.body.position.y < zone.minY + 6.5;
 
       if (inBounds) {
-        counts[p.targetZone]++;
+        if (!p.isRegional) counts[p.targetZone]++;
         const settled = p.body.velocity.length() < 1.5;
 
         if (!p.scored && settled) {
@@ -1469,6 +1747,10 @@ class ScorpionGame {
         }
       }
       p.inZone = inBounds;
+    }
+
+    for (const sp of soldThisFrame) {
+      this.propMgr.removeProp(sp);
     }
 
     let totalItems = 0;
@@ -1597,9 +1879,30 @@ class ScorpionGame {
           spot.pos.distanceTo(tipPos) < 3.6 || spot.pos.distanceTo(this.tractor.position) < 4.8;
         (spot.ringMesh.material as THREE.MeshBasicMaterial).opacity = near ? 0.9 : 0.32;
         if (spot.tool !== this.tractor.activeTool && near) {
-          promptMsg = `Press [T] to swap to ${spot.label}`;
+          if (!this.isToolUnlocked(spot.tool)) {
+            const w = WORKSHOP_TOOLS.find((item) => item.tool === spot.tool);
+            promptMsg = `${spot.label} locked — buy in Workshop [B] (€${w?.priceEUR ?? 0})`;
+          } else {
+            promptMsg = `Press [T] to swap to ${spot.label}`;
+          }
           break;
         }
+      }
+    }
+    if (!promptMsg) {
+      const dRied = Math.hypot(
+        this.tractor.position.x - this.realWorld.riedDepotPos.x,
+        this.tractor.position.z - this.realWorld.riedDepotPos.z
+      );
+      const dEdeka = Math.hypot(
+        this.tractor.position.x - this.realWorld.edekaMarketPos.x,
+        this.tractor.position.z - this.realWorld.edekaMarketPos.z
+      );
+      const bonusPct = this.career.unlockedUpgrades.includes('regional_depots') ? 1.25 : 1.0;
+      if (dRied < 13) {
+        promptMsg = `Lagerhaus Ried: [T] Cycle Owned Tool · [B] Workshop · Drop hay/logs for €${Math.round(240 * bonusPct)}`;
+      } else if (dEdeka < 12) {
+        promptMsg = `EDEKA Bauernmarkt: Drop pallets (€${Math.round(260 * bonusPct)}) or pumpkins (€${Math.round(140 * bonusPct)})`;
       }
     }
     // Highlight nearest grabbable prop/log/bale with a glowing 3D ring & clear [Space] Grab prompt!
@@ -2011,7 +2314,30 @@ class ScorpionGame {
       },
       resetDemoSite: () => this.destruction.resetDemolitionSite(),
       getDestructionStats: () => this.destruction.getBrokenCount(),
-      openPause: (tab?: 'settings' | 'controls' | 'credits') => this.setPaused(true, tab),
+      openPause: (tab?: 'settings' | 'workshop' | 'controls' | 'credits') => this.setPaused(true, tab),
+      openWorkshop: () => this.setPaused(true, 'workshop'),
+      buyTool: (tool: UnlockableTool) => this.buyWorkshopTool(tool),
+      buyUpgrade: (id: UpgradeId) => this.buyWorkshopUpgrade(id),
+      getCareerState: () => ({
+        bankEUR: this.career.bankEUR,
+        unlockedTools: [...this.career.unlockedTools],
+        unlockedUpgrades: [...this.career.unlockedUpgrades],
+        directSalesCount: this.career.directSalesCount,
+        contractsCount: BAVARIAN_CONTRACTS.length,
+        tractorMassKg: this.tractor.chassisBody.mass,
+        hydroScale: this.tractor.upgradeHydroScale,
+        tractionScale: this.tractor.upgradeTractionScale
+      }),
+      fastTravelRied: () => {
+        this.tractor.teleportTo(-245.5, 380.0, 2.55);
+        this.camYawOffset = 0.22;
+        this.snapCameraToTractor();
+      },
+      fastTravelEdeka: () => {
+        this.tractor.teleportTo(1574.0, 919.5, -0.78);
+        this.camYawOffset = 0.14;
+        this.snapCameraToTractor();
+      },
       closePause: () => this.setPaused(false),
       setGear: (g: VaripowerGear) => {
         this.tractor.gear = g;

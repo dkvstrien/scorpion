@@ -1462,6 +1462,84 @@ kbd {
   padding: 4px 8px;
   font-size: 0.73rem;
 }
+.workshop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.workshop-bank {
+  font-size: 0.82rem;
+  color: #cfe0d1;
+  white-space: nowrap;
+}
+.workshop-bank strong {
+  color: #b9f047;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 0.96rem;
+}
+.workshop-section-title {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 0.78rem;
+  color: var(--claas-green);
+  margin: 6px 0 4px;
+  letter-spacing: 0.02em;
+}
+.workshop-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.workshop-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  padding: 6px 9px;
+}
+.workshop-item.owned {
+  border-color: rgba(159, 211, 46, 0.4);
+  background: rgba(159, 211, 46, 0.08);
+}
+.workshop-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.workshop-info strong {
+  font-size: 0.76rem;
+  color: #f3f7f2;
+}
+.workshop-info span {
+  font-size: 0.67rem;
+  color: #b4c6b8;
+  line-height: 1.25;
+}
+.workshop-btn {
+  flex-shrink: 0;
+  min-width: 68px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 0.71rem;
+  font-weight: 800;
+}
+.workshop-btn.locked {
+  opacity: 0.55;
+}
+.workshop-depot-bar {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
 
 @media (max-width: 900px) {
   .mode-picker,

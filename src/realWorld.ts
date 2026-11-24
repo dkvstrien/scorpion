@@ -802,6 +802,8 @@ export class RealMuensingWorld {
   public lampGlowSprites: THREE.Sprite[] = [];
   public lampPoolMats: THREE.MeshBasicMaterial[] = [];
   public churchPos: THREE.Vector3;
+  public riedDepotPos = new THREE.Vector3(-262, 0, 403.5);
+  public edekaMarketPos = new THREE.Vector3(1582.5, 0, 906.0);
 
   private sailboats: { group: THREE.Group; basePos: THREE.Vector3; phase: number; driftAmp: number }[] = [];
   private pedestrians: Pedestrian[] = [];
@@ -1017,10 +1019,11 @@ export class RealMuensingWorld {
       scene.add(lpInst, capInst);
     }
 
-    // Authentic German Yellow Ortsschilder at Münsing, Wimpasing, Ammerland & Weipertshausen!
+    // Authentic German Yellow Ortsschilder at Münsing, Wimpasing, Ammerland, Ried & Weipertshausen!
     this.addTownSign(scene, 'Münsing', 'Lkr. Bad Tölz-Wolfratshausen', 1245, 998, -Math.PI / 2);
     this.addTownSign(scene, 'Wimpasing', 'Gemeinde Münsing', -222, 854, Math.PI / 2);
     this.addTownSign(scene, 'Ammerland', 'Starnberger See · 584m', -940, 745, Math.PI / 2);
+    this.addTownSign(scene, 'Ried', 'Lagerhaus · Gemeinde Münsing', -241, 368, 0.25);
     this.addTownSign(scene, 'Weipertshausen', 'Gemeinde Münsing', 504, -1140, 0.1);
   }
 
@@ -1985,6 +1988,174 @@ export class RealMuensingWorld {
         });
       });
     }
+
+    // === 5. LAGERHAUS RIED — AGRICULTURAL CO-OP BUY-IN & SERVICE DEPOT ===
+    {
+      const rx = -262;
+      const rz = 394;
+      const gy = getTerrainHeight(rx, rz);
+      this.riedDepotPos.set(rx, getTerrainHeight(rx, rz + 9.5), rz + 9.5);
+      this.addCrispCourtyardPad(scene, rx, rz + 5, 22, 22, 0.09);
+
+      const wallMat = new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('einfirsthof_b'),
+        roughness: 0.86
+      });
+      const roofMat = new THREE.MeshStandardMaterial({ map: tileTex, color: 0x9f3f28, roughness: 0.8 });
+      const beamMat = new THREE.MeshStandardMaterial({ color: 0x563922, roughness: 0.9 });
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0xb7afa1, roughness: 0.92 });
+      const doorMat = new THREE.MeshStandardMaterial({ color: 0x265c3a, roughness: 0.72 });
+
+      const hall = new THREE.Mesh(new THREE.BoxGeometry(10.5, 4.8, 6.4), wallMat);
+      hall.position.set(rx, gy + 2.4, rz);
+      hall.castShadow = true;
+      hall.receiveShadow = true;
+      scene.add(hall);
+      this.addStaticBox(world, groundMat, rx, gy + 2.4, rz, 10.5, 4.8, 6.4);
+
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.7, 6.7), stoneMat);
+      plinth.position.set(rx, gy + 0.35, rz);
+      scene.add(plinth);
+
+      const hallRoof = new THREE.Mesh(gableGeo, roofMat);
+      hallRoof.position.set(rx, gy + 4.8, rz);
+      hallRoof.scale.set(11.6, 2.8, 7.6);
+      hallRoof.castShadow = true;
+      scene.add(hallRoof);
+
+      const rollerDoor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.2, 0.14), doorMat);
+      rollerDoor.position.set(rx - 1.4, gy + 1.65, rz + 3.22);
+      scene.add(rollerDoor);
+
+      // Front timber service canopy overhanging the co-op loading bay
+      const canopy = new THREE.Mesh(new THREE.BoxGeometry(9.8, 0.16, 3.2), roofMat);
+      canopy.position.set(rx, gy + 3.55, rz + 4.65);
+      canopy.rotation.x = 0.16;
+      canopy.castShadow = true;
+      scene.add(canopy);
+      for (const pxOff of [-4.4, 0, 4.4]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.4, 0.24), beamMat);
+        post.position.set(rx + pxOff, gy + 1.7, rz + 6.0);
+        post.castShadow = true;
+        scene.add(post);
+      }
+
+      const coopTex = makeSignTexture(
+        480,
+        112,
+        '#1d5432',
+        '#e8c448',
+        'LAGERHAUS RIED',
+        'CO-OP BUY-IN · SERVICE & TOOL BAY',
+        '#ffffff',
+        '#c4f06b'
+      );
+      const coopSign = new THREE.Mesh(
+        new THREE.BoxGeometry(7.2, 1.35, 0.16),
+        new THREE.MeshStandardMaterial({ map: coopTex, roughness: 0.48 })
+      );
+      // Mounted proudly on the front canopy fascia so the overhanging main roof never clips the top letters!
+      coopSign.position.set(rx, gy + 4.18, rz + 6.18);
+      scene.add(coopSign);
+
+      // Glowing emerald ground pad marking the Co-op Direct Buy-In & Tool Service Zone
+      const padY = getTerrainHeight(rx, rz + 9.5);
+      const padRing = new THREE.Mesh(
+        new THREE.RingGeometry(4.2, 5.1, 32),
+        new THREE.MeshBasicMaterial({ color: 0x7fd43b, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
+      );
+      padRing.rotation.x = -Math.PI / 2;
+      padRing.position.set(rx, padY + 0.16, rz + 9.5);
+      scene.add(padRing);
+    }
+
+    // === 6. EDEKA MÜNSING — FARMERS' MARKET STALL (BAUERNMARKT) & DIRECT PRODUCE BUY-IN ===
+    // Placed on the level sunlit forecourt along Höhenrainer Straße facing west beside the real LoD2 EDEKA store!
+    {
+      const ex = 1587.0;
+      const ez = 906.5;
+      const gy = getTerrainHeight(ex, ez);
+      this.edekaMarketPos.set(ex - 6.2, getTerrainHeight(ex - 6.2, ez), ez);
+      this.addCrispCourtyardPad(scene, ex - 4.2, ez + 1.0, 17, 17, 0.08);
+
+      const woodMat = new THREE.MeshStandardMaterial({ color: 0x7f5834, roughness: 0.88 });
+      const darkTimber = new THREE.MeshStandardMaterial({ color: 0x4c331c, roughness: 0.9 });
+      const awningMat = new THREE.MeshStandardMaterial({ map: parasolTex, roughness: 0.72, side: THREE.DoubleSide });
+      const crateMat = new THREE.MeshStandardMaterial({ color: 0xa47c4b, roughness: 0.88 });
+      const appleMat = new THREE.MeshStandardMaterial({ color: 0xc9382a, roughness: 0.55 });
+      const pumpkinMat = new THREE.MeshStandardMaterial({ color: 0xd96b1e, roughness: 0.6 });
+
+      const booth = new THREE.Group();
+      const backWall = new THREE.Mesh(new THREE.BoxGeometry(6.8, 2.9, 0.25), woodMat);
+      backWall.position.set(0, 1.45, -1.3);
+      backWall.castShadow = true;
+      booth.add(backWall);
+
+      const counter = new THREE.Mesh(new THREE.BoxGeometry(6.6, 1.05, 1.15), woodMat);
+      counter.position.set(0, 0.52, 0.35);
+      counter.castShadow = true;
+      booth.add(counter);
+
+      for (const cxOff of [-3.2, 3.2]) {
+        for (const czOff of [-1.2, 0.95]) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3.2, 0.2), darkTimber);
+          post.position.set(cxOff, 1.6, czOff);
+          post.castShadow = true;
+          booth.add(post);
+        }
+      }
+
+      const marketAwning = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.14, 3.4), awningMat);
+      marketAwning.position.set(0, 3.12, 0.15);
+      marketAwning.rotation.x = 0.22;
+      marketAwning.castShadow = true;
+      booth.add(marketAwning);
+
+      for (let i = -2; i <= 2; i++) {
+        const bx = i * 1.18;
+        const box = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.36, 0.72), crateMat);
+        box.position.set(bx, 1.22, 0.4);
+        booth.add(box);
+        const item = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 8, 6),
+          i % 2 === 0 ? pumpkinMat : appleMat
+        );
+        item.position.set(bx, 1.45, 0.4);
+        booth.add(item);
+      }
+
+      const edekaTex = makeSignTexture(
+        480,
+        112,
+        '#0f4c91',
+        '#f7cf1d',
+        'EDEKA GRAF · BAUERNMARKT',
+        'FRESH PRODUCE & PUMPKIN BUY-IN',
+        '#ffe548',
+        '#ffffff'
+      );
+      const edekaSign = new THREE.Mesh(
+        new THREE.BoxGeometry(6.8, 1.3, 0.14),
+        new THREE.MeshStandardMaterial({ map: edekaTex, roughness: 0.45 })
+      );
+      edekaSign.position.set(0, 3.92, 1.05);
+      booth.add(edekaSign);
+
+      booth.position.set(ex, gy, ez);
+      booth.rotation.y = -Math.PI / 2;
+      scene.add(booth);
+      this.addStaticBox(world, groundMat, ex, gy + 1.5, ez, 2.6, 3.0, 6.8);
+
+      // Glowing amber-gold Farmers' Market Drop-Off Zone right in front of the stall
+      const mPadY = getTerrainHeight(ex - 6.2, ez);
+      const mRing = new THREE.Mesh(
+        new THREE.RingGeometry(3.6, 4.4, 32),
+        new THREE.MeshBasicMaterial({ color: 0xf5c83b, side: THREE.DoubleSide, transparent: true, opacity: 0.76 })
+      );
+      mRing.rotation.x = -Math.PI / 2;
+      mRing.position.set(ex - 6.2, mPadY + 0.16, ez);
+      scene.add(mRing);
+    }
   }
 
   /**
@@ -2010,6 +2181,8 @@ export class RealMuensingWorld {
       if (tx < REAL_SPOTS.sebaldPier.x + 28 && tz > SEBALD_PIER.z - 28 && tz < SEBALD_PIER.z + 28) return false;
       if (Math.hypot(tx - REAL_SPOTS.muensingChurch.x, tz - REAL_SPOTS.muensingChurch.z) < 42) return false;
       if (Math.hypot(tx - REAL_SPOTS.muensingAltwirt.x, tz - REAL_SPOTS.muensingAltwirt.z) < 38) return false;
+      if (Math.hypot(tx - (-262), tz - 398) < 28) return false;
+      if (Math.hypot(tx - 1584, tz - 907) < 24) return false;
       for (const [ax, az, bx, bz] of roadSegs) {
         if (pointToSegmentDistSq(tx, tz, ax, az, bx, bz) < 14 * 14) return false;
       }

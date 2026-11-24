@@ -13,7 +13,63 @@ export type ContractId =
   | 'altwirt_climb'
   | 'kirchberg_timber'
   | 'edeka_dock'
-  | 'weipert_silage';
+  | 'weipert_silage'
+  | 'ried_timber_depot'
+  | 'edeka_autumn_market';
+
+export type UnlockableTool = Exclude<AttachmentType, 'none'>;
+export type UpgradeId = 'hydro_boost' | 'counterweight' | 'all_terrain' | 'regional_depots';
+
+export interface WorkshopToolItem {
+  tool: UnlockableTool;
+  name: string;
+  priceEUR: number;
+  desc: string;
+}
+
+export interface WorkshopUpgradeItem {
+  id: UpgradeId;
+  name: string;
+  priceEUR: number;
+  desc: string;
+}
+
+export const STARTER_TOOLS: UnlockableTool[] = ['forks', 'spike'];
+
+export const WORKSHOP_TOOLS: WorkshopToolItem[] = [
+  { tool: 'forks', name: 'Pallet Forks', priceEUR: 0, desc: 'Standard forks for produce pallets and timber crates.' },
+  { tool: 'spike', name: 'Bale Spike', priceEUR: 0, desc: 'Twin spears for dry round and square hay bales.' },
+  { tool: 'grabber', name: 'Bale Grabber', priceEUR: 350, desc: 'Cushioned arms for wrapped silage bales without tearing plastic.' },
+  { tool: 'grapple', name: 'Grapple Claw', priceEUR: 500, desc: 'Heavy hydraulic jaws for pine logs, barrels, and storm timber.' },
+  { tool: 'bucket', name: 'Scoop Bucket', priceEUR: 600, desc: 'High-capacity scoop for pumpkins, loose produce, and market runs.' }
+];
+
+export const WORKSHOP_UPGRADES: WorkshopUpgradeItem[] = [
+  {
+    id: 'hydro_boost',
+    name: 'Varipower Hydraulic Boost',
+    priceEUR: 900,
+    desc: '+25% faster boom lift, telescope extension, and carriage tilt.'
+  },
+  {
+    id: 'counterweight',
+    name: 'Rear Counterweight (+750 kg)',
+    priceEUR: 1250,
+    desc: 'Adds rear ballast for 22% stronger forward tip-stability margin.'
+  },
+  {
+    id: 'all_terrain',
+    name: 'All-Terrain Lug Tires & 160 hp Tune',
+    priceEUR: 1550,
+    desc: '+18% hill-climb torque, stronger cornering grip, and 45 km/h Hare gear.'
+  },
+  {
+    id: 'regional_depots',
+    name: 'Ried & EDEKA Depot Pass',
+    priceEUR: 800,
+    desc: 'Unlocks Career fast travel to Ried Co-op & EDEKA Market and +25% direct-sale payouts.'
+  }
+];
 
 export interface BavarianContract {
   id: ContractId;
@@ -28,7 +84,7 @@ export interface BavarianContract {
   targetZ: number;
   targetRadius: number;
   startSpot: { x: number; z: number; heading: number };
-  requiredKind: 'any_yard' | 'crate' | 'log' | 'silage_wrapped' | 'hay' | 'yard_silage' | 'yard_crates';
+  requiredKind: 'any_yard' | 'crate' | 'log' | 'silage_wrapped' | 'hay' | 'pumpkin' | 'yard_silage' | 'yard_crates';
   requiredCount: number;
   requireIntact?: boolean;
   /** Optional fresh cargo spawn point near the job pickup so every job is cleanly repeatable! */
@@ -41,6 +97,9 @@ export interface CareerStats {
   bestStars: Record<string, number>;
   totalKm: number;
   rollovers: number;
+  unlockedTools: UnlockableTool[];
+  unlockedUpgrades: UpgradeId[];
+  directSalesCount: number;
 }
 
 const SAVE_KEY = 'openworld_scorpion_741_career_v1';
@@ -217,26 +276,81 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
     requiredCount: 2,
     requireIntact: true,
     pickupSpawn: { x: 492, z: -1128, kind: 'silage_wrapped', count: 2 }
+  },
+  {
+    id: 'ried_timber_depot',
+    title: '11. Ried Co-op Timber & Feed Depot',
+    shortTitle: '11. Ried Co-op Logs',
+    village: 'Lagerhaus Ried',
+    subtitle: 'Haul 2 pine logs from Graf-Pocci-Weg into the Lagerhaus Ried Co-op timber yard.',
+    recommendedTool: 'grapple',
+    payoutEUR: 2100,
+    parSeconds: 210,
+    targetX: -262,
+    targetZ: 403,
+    targetRadius: 15,
+    startSpot: { x: -245.5, z: 380.0, heading: 0.45 },
+    requiredKind: 'log',
+    requiredCount: 2,
+    pickupSpawn: { x: -236, z: 365, kind: 'log', count: 2 }
+  },
+  {
+    id: 'edeka_autumn_market',
+    title: '12. EDEKA Autumn Pumpkin Market',
+    shortTitle: '12. EDEKA Market',
+    village: 'EDEKA Bauernmarkt',
+    subtitle: 'Scoop 3 fresh harvest pumpkins from the east Münsing garden and deliver them to the EDEKA Farmers Market stall.',
+    recommendedTool: 'bucket',
+    payoutEUR: 2050,
+    parSeconds: 200,
+    targetX: 1582.5,
+    targetZ: 906.5,
+    targetRadius: 14,
+    startSpot: { x: 1574.0, z: 919.5, heading: -0.78 },
+    requiredKind: 'pumpkin',
+    requiredCount: 3,
+    requireIntact: true,
+    pickupSpawn: { x: 1570.2, z: 906.2, kind: 'pumpkin', count: 4 }
   }
 ];
+
+export function defaultCareerStats(): CareerStats {
+  return {
+    bankEUR: 500,
+    completedIds: [],
+    bestStars: {},
+    totalKm: 0,
+    rollovers: 0,
+    unlockedTools: [...STARTER_TOOLS],
+    unlockedUpgrades: [],
+    directSalesCount: 0
+  };
+}
 
 export function loadCareer(): CareerStats {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<CareerStats>;
+      const tools = Array.isArray(parsed.unlockedTools) ? parsed.unlockedTools : [...STARTER_TOOLS];
+      for (const t of STARTER_TOOLS) {
+        if (!tools.includes(t)) tools.push(t);
+      }
       return {
         bankEUR: parsed.bankEUR ?? 500,
         completedIds: Array.isArray(parsed.completedIds) ? parsed.completedIds : [],
         bestStars: parsed.bestStars && typeof parsed.bestStars === 'object' ? parsed.bestStars : {},
         totalKm: parsed.totalKm ?? 0,
-        rollovers: parsed.rollovers ?? 0
+        rollovers: parsed.rollovers ?? 0,
+        unlockedTools: tools,
+        unlockedUpgrades: Array.isArray(parsed.unlockedUpgrades) ? parsed.unlockedUpgrades : [],
+        directSalesCount: parsed.directSalesCount ?? 0
       };
     }
   } catch {
     // ignore storage errors
   }
-  return { bankEUR: 500, completedIds: [], bestStars: {}, totalKm: 0, rollovers: 0 };
+  return defaultCareerStats();
 }
 
 export function saveCareer(stats: CareerStats): void {

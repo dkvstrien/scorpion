@@ -43,6 +43,8 @@ export interface FarmProp {
   stackAwarded: boolean;
   inWater: boolean;
   lastImpactAt: number;
+  isRegional?: boolean;
+  depotSold?: boolean;
 }
 
 export class PropManager {
@@ -123,16 +125,42 @@ export class PropManager {
     this.spawnProp('tire', new THREE.Vector3(ox - 6.8, oy + 0.45, oz - 10.2), 0.9);
 
     // 7. REAL grabbable roadside logs & wrapped silage bales at the Münsinger Straße open-country spot (482, 938)!
-    // (Replaces static non-grabbable logs so players can genuinely pick up & load roadside timber and bales!)
+    // (Marked isRegional so roadside/regional goods don't inflate Home Farm Yard Shift counts!)
     const ocX = 482;
     const ocZ = 938;
     const ocY = getTerrainHeight(ocX, ocZ);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX - 1.6, ocY + 0.85, ocZ), 0.3);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX + 0.2, ocY + 0.85, ocZ - 0.5), 0.4);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX + 1.9, ocY + 0.85, ocZ - 0.2), 0.2);
-    this.spawnProp('log', new THREE.Vector3(ocX - 4.4, ocY + 0.5, ocZ + 2.4), 0.35);
-    this.spawnProp('log', new THREE.Vector3(ocX - 4.0, ocY + 0.5, ocZ + 3.4), 0.3);
-    this.spawnProp('log', new THREE.Vector3(ocX - 4.2, ocY + 1.15, ocZ + 2.9), 0.33);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX - 1.6, ocY + 0.85, ocZ), 0.3, true);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX + 0.2, ocY + 0.85, ocZ - 0.5), 0.4, true);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ocX + 1.9, ocY + 0.85, ocZ - 0.2), 0.2, true);
+    this.spawnProp('log', new THREE.Vector3(ocX - 4.4, ocY + 0.5, ocZ + 2.4), 0.35, true);
+    this.spawnProp('log', new THREE.Vector3(ocX - 4.0, ocY + 0.5, ocZ + 3.4), 0.3, true);
+    this.spawnProp('log', new THREE.Vector3(ocX - 4.2, ocY + 1.15, ocZ + 2.9), 0.33, true);
+
+    // 8. Regional tradable goods near Lagerhaus Ried Co-op & EDEKA Münsing Bauernmarkt!
+    const riedLogY = getTerrainHeight(-236, 365);
+    this.spawnProp('log', new THREE.Vector3(-237.5, riedLogY + 0.55, 365), 0.4, true);
+    this.spawnProp('log', new THREE.Vector3(-234.8, riedLogY + 0.55, 365.5), 0.32, true);
+    const riedHayY = getTerrainHeight(-250, 412);
+    this.spawnProp('hay_round', new THREE.Vector3(-250, riedHayY + 0.9, 412), 0.5, true);
+
+    // Fresh harvest pumpkins parked neatly off the road on the west lawn of EDEKA forecourt (~15 m from market buy-in pad)
+    const edekaPumpPts: [number, number][] = [
+      [1567.5, 907.0],
+      [1567.5, 908.8],
+      [1569.2, 907.2],
+      [1569.2, 909.0]
+    ];
+    edekaPumpPts.forEach(([px, pz], idx) => {
+      const py = getTerrainHeight(px, pz) + 0.42;
+      this.spawnProp('pumpkin', new THREE.Vector3(px, py, pz), idx * 0.6, true);
+    });
+  }
+
+  public removeProp(prop: FarmProp): void {
+    const idx = this.props.indexOf(prop);
+    if (idx >= 0) this.props.splice(idx, 1);
+    this.scene.remove(prop.mesh);
+    this.world.removeBody(prop.body);
   }
 
   public spawnExtraChaosWave(aroundX = FARM_YARD_CENTER.x, aroundZ = FARM_YARD_CENTER.z): void {
@@ -148,7 +176,12 @@ export class PropManager {
     }
   }
 
-  public spawnProp(kind: PropKind, pos: THREE.Vector3, rotY = Math.random() * Math.PI * 2): FarmProp {
+  public spawnProp(
+    kind: PropKind,
+    pos: THREE.Vector3,
+    rotY = Math.random() * Math.PI * 2,
+    isRegional = false
+  ): FarmProp {
     const id = this.nextId++;
     const mesh = new THREE.Group();
     let body: CANNON.Body;
@@ -439,7 +472,8 @@ export class PropManager {
       scored: false,
       stackAwarded: false,
       inWater: false,
-      lastImpactAt: 0
+      lastImpactAt: 0,
+      isRegional
     };
 
     body.addEventListener('collide', (e: { contact: CANNON.ContactEquation }) => {

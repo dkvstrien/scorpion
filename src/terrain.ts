@@ -120,6 +120,8 @@ let dgmRows = OSM_DATA.heightmap.rows;
 export let FARM_GROUND_Y = 25.0;
 export let FARM_EXIT_ROAD_Y = 25.0;
 export let DEMO_GROUND_Y = 56.0;
+export let RIED_COOP_Y = 60.0;
+export let EDEKA_MARKET_Y = 77.0;
 
 /**
  * Loads the pre-baked 10m-resolution road-graded Bavaria DGM1 LiDAR heightmap (~12ms local fetch)
@@ -149,6 +151,8 @@ export async function initDgm1Heightmap(): Promise<void> {
   FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_YARD_CENTER.x, FARM_YARD_CENTER.z) - LAKE_ELEV_M);
   FARM_EXIT_ROAD_Y = Math.max(1.2, getRealElevationMeters(-277.6, 922.2) - LAKE_ELEV_M);
   DEMO_GROUND_Y = Math.max(1.2, getRealElevationMeters(165, 622) - LAKE_ELEV_M);
+  RIED_COOP_Y = Math.max(1.2, getRealElevationMeters(-262, 399) - LAKE_ELEV_M);
+  EDEKA_MARKET_Y = Math.max(1.2, getRealElevationMeters(1580, 912) - LAKE_ELEV_M);
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -217,6 +221,8 @@ export function getRealElevationMeters(x: number, z: number): number {
 FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_YARD_CENTER.x, FARM_YARD_CENTER.z) - LAKE_ELEV_M);
 FARM_EXIT_ROAD_Y = Math.max(1.2, getRealElevationMeters(-277.6, 922.2) - LAKE_ELEV_M);
 DEMO_GROUND_Y = Math.max(1.2, getRealElevationMeters(165, 622) - LAKE_ELEV_M);
+RIED_COOP_Y = Math.max(1.2, getRealElevationMeters(-262, 399) - LAKE_ELEV_M);
+EDEKA_MARKET_Y = Math.max(1.2, getRealElevationMeters(1580, 912) - LAKE_ELEV_M);
 
 /**
  * True 1:1 vertical world Y (meters above Starnberger See 584.2 m ü.NN) directly from road-graded Bavaria DGM1 LiDAR!
@@ -256,6 +262,22 @@ export function getTerrainHeight(x: number, z: number): number {
   if (ddx < 40 && ddz < 42) {
     const demoFlat = (1 - smoothstep(26, 40, ddx)) * (1 - smoothstep(28, 42, ddz));
     y = y * (1 - demoFlat) + DEMO_GROUND_Y * demoFlat;
+  }
+
+  // Gentle level working yard for Lagerhaus Ried Co-op & Service Bay (-262, 399)
+  const rdx = Math.abs(x - -262);
+  const rdz = Math.abs(z - 399);
+  if (rdx < 24 && rdz < 24) {
+    const riedFlat = (1 - smoothstep(14, 24, rdx)) * (1 - smoothstep(14, 24, rdz));
+    y = y * (1 - riedFlat) + RIED_COOP_Y * riedFlat;
+  }
+
+  // Gentle level forecourt for EDEKA Bauernmarkt & Höhenrainer Straße approach (1580, 912)
+  const edx = Math.abs(x - 1580);
+  const edz = Math.abs(z - 912);
+  if (edx < 24 && edz < 22) {
+    const edekaFlat = (1 - smoothstep(14, 24, edx)) * (1 - smoothstep(13, 22, edz));
+    y = y * (1 - edekaFlat) + EDEKA_MARKET_Y * edekaFlat;
   }
 
   return y;
