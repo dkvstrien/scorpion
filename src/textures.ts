@@ -1032,3 +1032,188 @@ export function createLampGlowTexture(): THREE.CanvasTexture {
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
+
+export function createPierPlanksTexture(repeatX = 24, repeatY = 2): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(512, 512);
+  // Dark shadowed gaps between transverse weathered oak pier planks
+  ctx.fillStyle = '#2d2116';
+  ctx.fillRect(0, 0, 512, 512);
+
+  const plankCols = 8;
+  const plankW = 512 / plankCols;
+  const palette = ['#8e7050', '#836648', '#987a59', '#795d41', '#8b6d4e', '#7f6246', '#947555', '#856749'];
+
+  for (let p = 0; p < plankCols; p++) {
+    const px = p * plankW + 2.5;
+    const pw = plankW - 5;
+    ctx.fillStyle = palette[p % palette.length];
+    ctx.fillRect(px, 0, pw, 512);
+
+    // Subtle board-end butt joint staggered per plank
+    const seamY = ((p * 173 + 90) % 420) + 46;
+    ctx.fillStyle = '#36271a';
+    ctx.fillRect(px, seamY, pw, 3);
+
+    // Wood grain streaks running along the plank length (Y axis -> across pier width)
+    for (let g = 0; g < 18; g++) {
+      const gx = px + 3 + ((g * 19 + p * 7) % Math.max(4, Math.floor(pw - 6)));
+      ctx.fillStyle = g % 2 === 0 ? 'rgba(54, 37, 22, 0.17)' : 'rgba(214, 194, 162, 0.14)';
+      ctx.fillRect(gx, 0, 1.8, 512);
+    }
+
+    // Slight weathered silver-grey highlight along outer edges of each plank
+    ctx.fillStyle = 'rgba(220, 212, 198, 0.11)';
+    ctx.fillRect(px, 0, 4, 512);
+
+    // Galvanized deck bolts / nail pairs along the two longitudinal stringer lines
+    ctx.fillStyle = '#383838';
+    for (const ny of [76, 256, 436]) {
+      ctx.beginPath();
+      ctx.arc(px + pw * 0.3, ny, 2.4, 0, Math.PI * 2);
+      ctx.arc(px + pw * 0.7, ny, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  tex.anisotropy = 8;
+  return tex;
+}
+
+export function createPierPlanksBumpTexture(repeatX = 24, repeatY = 2): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(256, 256);
+  ctx.fillStyle = '#202020';
+  ctx.fillRect(0, 0, 256, 256);
+  const plankCols = 8;
+  const plankW = 256 / plankCols;
+  for (let p = 0; p < plankCols; p++) {
+    ctx.fillStyle = p % 2 === 0 ? '#c8c8c8' : '#b8b8b8';
+    ctx.fillRect(p * plankW + 2, 0, plankW - 4, 256);
+    for (let g = 0; g < 10; g++) {
+      ctx.fillStyle = g % 2 === 0 ? '#a6a6a6' : '#dadada';
+      ctx.fillRect(p * plankW + 3 + (g * 2.5), 0, 1.2, 256);
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  return tex;
+}
+
+export function createRoseWindowTexture(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(256, 256);
+  const cx = 128;
+  const cy = 128;
+  ctx.fillStyle = '#1d222c';
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Outer stained-glass border ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, 122, 0, Math.PI * 2);
+  ctx.fillStyle = '#2a4d82';
+  ctx.fill();
+
+  // 12 radiant stained-glass petals alternating Bavarian sapphire, warm amber-gold & ruby
+  const petalCols = ['#3366a8', '#e5a83b', '#b83c38', '#3c7a62'];
+  for (let i = 0; i < 12; i++) {
+    const a0 = (i / 12) * Math.PI * 2;
+    const a1 = ((i + 1) / 12) * Math.PI * 2;
+    const mid = (a0 + a1) * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, 110, a0, a1);
+    ctx.closePath();
+    ctx.fillStyle = petalCols[i % petalCols.length];
+    ctx.fill();
+    ctx.strokeStyle = '#1b1d22';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    // Inner bright trefoil jewel inside each radial petal
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(mid) * 76, cy + Math.sin(mid) * 76, 15, 0, Math.PI * 2);
+    ctx.fillStyle = i % 2 === 0 ? '#f6d27a' : '#7cb0e6';
+    ctx.fill();
+    ctx.strokeStyle = '#1b1d22';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
+  // Concentric stone/lead tracery rings & sunlit golden medallion center
+  ctx.beginPath();
+  ctx.arc(cx, cy, 52, 0, Math.PI * 2);
+  ctx.fillStyle = '#d98c2b';
+  ctx.fill();
+  ctx.strokeStyle = '#1b1d22';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, 26, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff0a8';
+  ctx.fill();
+  ctx.strokeStyle = '#1b1d22';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+export function createDeutschePostTexture(): THREE.CanvasTexture {
+  const [c, ctx] = makeCanvas(128, 128);
+  // Iconic German Deutsche Post yellow enamel body
+  ctx.fillStyle = '#f4c214';
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = '#c89b08';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, 124, 124);
+
+  // Dark metallic mail slot near top
+  ctx.fillStyle = '#202428';
+  ctx.fillRect(16, 14, 96, 14);
+  ctx.fillStyle = '#4a5056';
+  ctx.fillRect(16, 12, 96, 3);
+
+  // Classic black Posthorn emblem silhouette
+  ctx.strokeStyle = '#181a1d';
+  ctx.fillStyle = '#181a1d';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(64, 58, 13, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(30, 54);
+  ctx.lineTo(94, 54);
+  ctx.stroke();
+  // Horn bell on right + mouthpiece on left
+  ctx.beginPath();
+  ctx.moveTo(88, 54);
+  ctx.lineTo(104, 44);
+  ctx.lineTo(104, 64);
+  ctx.closePath();
+  ctx.fill();
+
+  // White collection-schedule plaque (Leerungszeiten) with red dot
+  ctx.fillStyle = '#f7f7f2';
+  ctx.fillRect(26, 84, 76, 30);
+  ctx.strokeStyle = '#25282c';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(26, 84, 76, 30);
+  ctx.fillStyle = '#d42c24';
+  ctx.fillRect(31, 89, 10, 10);
+  ctx.fillStyle = '#33383e';
+  ctx.fillRect(46, 91, 48, 3);
+  ctx.fillRect(46, 99, 38, 3);
+  ctx.fillRect(31, 106, 56, 3);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}

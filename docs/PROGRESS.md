@@ -630,3 +630,34 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
   - `.scratch/loop/25/01_east_slopes_longdrive.png` & `02_east_slopes_north.png`: eastern slopes now framed by leafy maize with golden tassels, pasture fences, wayside crosses, hay huts, Fleckvieh cattle, and varied-height hedgerows with oak & spruce trees.
   - `.scratch/loop/25/03_old_farmstead_surroundings.png` & `04_old_farmstead_east.png`: surrounding Old Farmstead meadows populated with trackside fences, trees, hay huts, wayside crosses, and field bale stacks while keeping the demolition pad completely clear.
   - `.scratch/loop/25/05_open_country_check.png`: Münsinger Straße intact with natural golden wheat stalks and zero regressions.
+
+---
+
+## Iteration 26 — Round 3: Look & Landmark Overhaul (Crisp Ground Edges, Baroque Church, Plank Pier, Gate Pillars & Mailboxes, Sunset Gradient, Chase Camera Collision) (2026-11-24)
+
+**Goal**: Address all 6 Look items and the remaining World Recognisable item from `.scratch/grades/round-2.md`: eliminate blurry green-pink ground transitions at the yard exit, dark-green haloes around Münsing house bases, and muddy brown smears on eastern slopes; model authentic Bavarian gate pillars and Deutsche Post mailboxes; texture the Sebald pier with weathered planks; articulate Pfarrkirche St. Mariä Himmelfahrt with Baroque pilasters, rose window, lancets, gable pediment, Turmuhr clocks, and street-visible copper onion dome; upgrade sunset sky to a 3-stop Golden Hour gradient; and add chase-camera roof/wall collision prevention.
+
+### Changes Made
+- **Crisp ground transitions** ([scripts/build-stylized-ground.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/build-stylized-ground.mjs), `public/map/dop_*.jpg`, [src/farm.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/farm.ts), [src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts)):
+  - Removed blurry dark-olive building footprint haloes, raw DOP bare-soil smears, and wide brown field-border strokes; made residential village lawns `100%` opaque crisp Bavarian green; tightened Home Farm cobble apron fade (`smoothstep(0.0, 0.55)`) extending flush through the gate pillars and overlapping seamlessly with the 3D gravel exit track.
+- **Bavarian gate pillars & Deutsche Post mailboxes** ([src/farm.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/farm.ts), [src/worldDetails.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/worldDetails.ts), [src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts)):
+  - Replaced plain concrete exit posts with dressed fieldstone & warm plaster gate pillars topped with red clay-tile pyramidal caps (`Pyramidendach`), iron hinges, and swung-open larch farm gate leaves.
+  - Modeled German **Deutsche Post Briefkästen** with concrete foot plinth, galvanized post, overhanging sloped rain hood, metallic slot flap, and crisp Posthorn + collection-schedule front texture (`createDeutschePostTexture`).
+- **Weathered plank Sebald pier** ([src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts), [src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts)):
+  - Added `createPierPlanksTexture` + bump map for transverse weathered oak planking with plank gaps, wood grain, and deck bolts, plus longitudinal dark-oak curb timbers, cast-iron bollard caps & mooring cleats, and a lakeside wooden bench.
+- **Baroque Münsing Church (`St. Mariä Himmelfahrt`)** ([src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts), [src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts)):
+  - Upgraded to warm sunlit golden-ochre stucco contrasted with crisp white Baroque pilasters, molded capitals & sandstone bases, projecting West Baroque gable pediment with gilded roof cross, roof dormers, radial stained-glass rose window (`createRoseWindowTexture`) with 8-spoke iron rosette, twin flanking arched west lancet windows, carved paneled oak double doors with brass handles, and a street-framed bell tower with 4 golden-rimmed Turmuhr clocks, louvered belfry, and plump fluted verdigris-copper `Zwiebelturm` onion dome.
+- **3-stop Golden Hour sunset sky & warm fog** ([src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Upgraded sky dome shader with `uHorizonColor → uMidColor → uTopColor` plus warm horizon sun-scatter glow (`0xf6b36b → 0xd97d6c → 0x2c4476`) and warm golden fog (`0xebb07a`).
+- **Chase camera roof/wall collision prevention** ([src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts), [src/farm.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/farm.ts), [src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts)):
+  - Added fast slab ray-AABB collision against all 1,690+ village/landmark building boxes plus exact Three.js raycast against Home Farm sheds, tool-shed canopy roof, and hay barn slopes so reversing under roofs pulls the camera cleanly clear instead of clipping through corrugated metal.
+
+### Verification & Screenshots (`.scratch/loop/26/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Screenshots inspected:
+  - `.scratch/loop/26/01_yard_exit_gates_mailboxes.png`: crisp cobble-to-gravel yard exit (no green-pink smear) framed by tiled-cap Bavarian gate pillars and open wooden farm gates.
+  - `.scratch/loop/26/02_muensing_church_street.png` & `03_muensing_church_closeup.png`: zero dark-green house haloes; full Baroque church with rose window, lancets, pilasters, Turmuhr clock, and complete copper onion dome framed cleanly from street level.
+  - `.scratch/loop/26/04_sunset_sky_church.png` & `04b_sunset_lake.png`: warm 3-stop Golden Hour sunset sky gradient over Münsing Church and Starnberger See / Schloss Ammerland.
+  - `.scratch/loop/26/05_sebald_pier_planks.png`: weathered transverse plank deck, raised timber curbs, bollards, cleats, and bench at pier end.
+  - `.scratch/loop/26/06_camera_roof_collision.png`: parked directly under the Home Farm Tool Shed canopy with zero corrugated roof blocking the view.
+  - `.scratch/loop/26/07_east_slopes_crisp_ground.png`: crisp green meadow slopes east of `x ≈ 600` with zero muddy brown smear.

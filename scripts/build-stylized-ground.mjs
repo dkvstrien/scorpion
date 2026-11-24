@@ -133,21 +133,22 @@ function sanitizeDopToMeadowBase(rawBuf, w, h, ch) {
       continue;
     }
 
-    // Natural vegetation / pasture / soil pixels: preserve genuine Bavarian crop & meadow color differences
-    // (golden harvest, ploughed earth, lush clover, dark pasture) with zero muddy grey/purple smears!
-    const isSoil = r > g * 0.96 && r > b * 1.18 && lum < 146;
+    // Natural vegetation / pasture pixels: keep clean coherent Bavarian meadow greens (no muddy red-brown raw-aerial smears —
+    // crisp vector OSM & openCountryFields polygons handle all ploughed earth, wheat & stubble patterns cleanly!)
+    const isSoil = r > g * 0.94 && r > b * 1.15;
     if (isSoil) {
-      out[o] = Math.round(baseR * 0.32 + Math.min(156, r) * 0.68);
-      out[o + 1] = Math.round(baseG * 0.36 + Math.min(142, g) * 0.64);
-      out[o + 2] = Math.round(baseB * 0.44 + Math.min(84, b) * 0.56);
+      // Gently fold any bare-earth raw aerial blobs into rich meadow green so slopes never show blurry brown smears
+      out[o] = Math.round(baseR * 0.88 + 10);
+      out[o + 1] = Math.round(baseG * 0.92 + 6);
+      out[o + 2] = Math.round(baseB * 0.92 + 4);
     } else {
-      const lumFactor = Math.max(0.74, Math.min(1.2, lum / 104));
-      const nr = Math.round(baseR * (0.58 + 0.42 * lumFactor) + (r - lum) * 0.34);
-      const ng = Math.round(baseG * (0.58 + 0.42 * lumFactor) + (g - lum) * 0.38);
-      const nb = Math.round(baseB * (0.58 + 0.42 * lumFactor) + (b - lum) * 0.16);
-      out[o] = Math.max(58, Math.min(142, nr));
-      out[o + 1] = Math.max(92, Math.min(162, ng));
-      out[o + 2] = Math.max(40, Math.min(76, nb));
+      const lumFactor = Math.max(0.82, Math.min(1.16, lum / 104));
+      const nr = Math.round(baseR * (0.68 + 0.32 * lumFactor) + (r - lum) * 0.24);
+      const ng = Math.round(baseG * (0.68 + 0.32 * lumFactor) + (g - lum) * 0.28);
+      const nb = Math.round(baseB * (0.68 + 0.32 * lumFactor) + (b - lum) * 0.12);
+      out[o] = Math.max(66, Math.min(126, nr));
+      out[o + 1] = Math.max(102, Math.min(156, ng));
+      out[o + 2] = Math.max(44, Math.min(72, nb));
     }
   }
   return out;
@@ -208,9 +209,8 @@ function buildQuadrantSvg(q, W, H, osm) {
   for (const f of osm.farmlands) {
     if (!overlaps(f.pts)) continue;
     const fill = farmFills[f.id % farmFills.length];
-    // Crisp earthen headland track & hedgerow border along every field boundary
-    parts.push(`<polygon points="${toPointsAttr(f.pts)}" fill="${fill}" fill-opacity="0.90" stroke="#7d7452" stroke-width="${(3.2 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
-    parts.push(`<polygon points="${toPointsAttr(f.pts)}" fill="none" stroke="#476e2e" stroke-width="${(1.5 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
+    // Crisp field headland border (clean olive-green verge, never blurry wide brown dirt smear!)
+    parts.push(`<polygon points="${toPointsAttr(f.pts)}" fill="${fill}" fill-opacity="0.90" stroke="#537d35" stroke-width="${(1.5 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
   }
 
   // 2. OSM Meadows (striped mown hayfields & varied Bavarian pasture greens with crisp boundaries!)
@@ -243,7 +243,7 @@ function buildQuadrantSvg(q, W, H, osm) {
   ];
   for (const cf of openCountryFields) {
     if (!overlaps(cf.pts)) continue;
-    parts.push(`<polygon points="${toPointsAttr(cf.pts)}" fill="${cf.fill}" fill-opacity="0.82" stroke="#7d7252" stroke-width="${(3.0 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
+    parts.push(`<polygon points="${toPointsAttr(cf.pts)}" fill="${cf.fill}" fill-opacity="0.82" stroke="#558038" stroke-width="${(1.4 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
   }
 
   // 3. OSM Forests / Woods (deep mossy Bavarian woodland floor with rich darker forest edge)
@@ -252,13 +252,13 @@ function buildQuadrantSvg(q, W, H, osm) {
     parts.push(`<polygon points="${toPointsAttr(pts)}" fill="#3d602f" fill-opacity="0.88" stroke="#325226" stroke-width="${(3.8 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
   }
 
-  // 4. OSM Residential village zones (crisp clean Bavarian garden lawns — 96% opaque so ZERO purple/grey DOP20 smears bleed through!)
+  // 4. OSM Residential village zones (100% opaque crisp Bavarian garden lawns — ZERO blurry smears or dark haloes!)
   for (const pts of osm.residentials) {
     if (!overlaps(pts)) continue;
-    parts.push(`<polygon points="${toPointsAttr(pts)}" fill="#5c8a3f" fill-opacity="0.96" stroke="#527d38" stroke-width="${(2.2 * pxPerM).toFixed(1)}"/>`);
+    parts.push(`<polygon points="${toPointsAttr(pts)}" fill="#5f8e41" fill-opacity="1.0" stroke="#57833b" stroke-width="${(1.4 * pxPerM).toFixed(1)}"/>`);
   }
 
-  // 5. Only EDEKA asphalt loading lot & Sebald compact pad stay on map; Church, Altwirt, Schloss, Home Farm & Demo Site
+  // 5. Only EDEKA asphalt loading lot stays on map; Church, Altwirt, Schloss, Home Farm & Demo Site
   // use crisp high-resolution tiled 3D gravel/cobble meshes in Three.js (zero blurry 1 m/px oval discs!)
   const spots = muensingData.spots;
   const plazas = [
@@ -269,62 +269,35 @@ function buildQuadrantSvg(q, W, H, osm) {
     parts.push(`<rect x="${sx(p.x - p.rx)}" y="${sy(p.z - p.ry)}" width="${(p.rx * 2 * pxPerM).toFixed(1)}" height="${(p.ry * 2 * pxPerM).toFixed(1)}" rx="6" fill="${p.col}" stroke="${p.edge}" stroke-width="${(1.8 * pxPerM).toFixed(1)}"/>`);
   }
 
-  // 6. Clean warm gravel farm tracks & driveways (track + service)
+  // 6. Tight gravel farm-track bed sitting strictly UNDER the crisp 3D gravel ribbons (no wide blurry brown halo!)
   for (const pts of osm.roadsTrack) {
     if (!overlaps(pts)) continue;
     const pAttr = toPointsAttr(pts);
-    parts.push(`<polyline points="${pAttr}" fill="none" stroke="#6a7a46" stroke-width="${(5.2 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-    parts.push(`<polyline points="${pAttr}" fill="none" stroke="#8e836e" stroke-width="${(3.2 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<polyline points="${pAttr}" fill="none" stroke="#968d7a" stroke-width="${(2.6 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
 
-  // 7. Tight Building Foundation Pads ONLY under real buildings (skip hero landmark zones so zero ghost dark rectangles appear in front of Schloss Ammerland or Münsing Church!)
-  const heroClearZones = [
-    [spots.schlossAmmerland[0], spots.schlossAmmerland[1], 46],
-    [spots.muensingChurch[0], spots.muensingChurch[1], 36],
-    [spots.muensingAltwirt[0], spots.muensingAltwirt[1], 28],
-    [spots.sebaldPier[0], spots.sebaldPier[1], 24]
-  ];
-  for (const pts of osm.buildings) {
-    if (!overlaps(pts)) continue;
-    let cx = 0, cz = 0;
-    for (const [bx, bz] of pts) { cx += bx; cz += bz; }
-    cx /= pts.length; cz /= pts.length;
-    if (heroClearZones.some(([hx, hz, hr]) => Math.hypot(cx - hx, cz - hz) < hr)) continue;
-    const pAttr = toPointsAttr(pts);
-    // Crisp tight contact-shadow pad strictly inside footprint (no blurry 4.4 m grey halo smear!)
-    parts.push(`<polygon points="${pAttr}" fill="#4d6138" stroke="#6f7a58" stroke-width="${(1.1 * pxPerM).toFixed(1)}" stroke-linejoin="round"/>`);
-  }
+  // 7. No blurry dark-green footprint haloes under buildings — real-time directional shadows & crisp 3D plinths ground every house cleanly!
 
   // 8. Crisp Paved Road Corridors (clean green verge + dark charcoal asphalt roadbed right under the 3D road ribbons!)
   // First draw grass shoulders, then dark asphalt beds so intersections join seamlessly!
   for (const pts of osm.roadsVillage) {
     if (!overlaps(pts)) continue;
-    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#587e3d" stroke-width="${(10.0 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#5f8e41" stroke-width="${(8.8 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
   for (const pts of osm.roadsMain) {
     if (!overlaps(pts)) continue;
-    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#567c3c" stroke-width="${(13.6 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#5d8b40" stroke-width="${(11.6 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
   for (const pts of osm.roadsVillage) {
     if (!overlaps(pts)) continue;
-    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#4c5055" stroke-width="${(6.8 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#4c5055" stroke-width="${(6.2 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
   for (const pts of osm.roadsMain) {
     if (!overlaps(pts)) continue;
-    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#3e4247" stroke-width="${(9.4 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#3e4247" stroke-width="${(8.8 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
 
-  // Home Farm East & West access driveways
-  const farmYardX = spots.farm[0] - 33.5;
-  const farmYardZ = spots.farm[1] + 16.4;
-  const farmLanes = [
-    [[farmYardX + 20, farmYardZ - 4], [-305, 921.5], [-277.6, 922.2]],
-    [[farmYardX - 21, farmYardZ - 5], [-379, 914], [-395.1, 904.6]]
-  ];
-  for (const pts of farmLanes) {
-    if (!overlaps(pts)) continue;
-    parts.push(`<polyline points="${toPointsAttr(pts)}" fill="none" stroke="#857d6e" stroke-width="${(6.2 * pxPerM).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"/>`);
-  }
+  // Home Farm East & West driveways are rendered as crisp 3D cobble/gravel meshes (keep ground beneath pure clean grass!)
 
   // 9. Starnberger See Shoreline Pebble Bank & Deep Emerald Lakebed (west quadrants)
   if (q.minX < -900) {

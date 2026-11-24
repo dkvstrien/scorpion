@@ -193,6 +193,10 @@ class ScorpionGame {
   private propMgr: PropManager;
   private tractor: ClaasScorpion;
   private minimap: MuensingMiniMap;
+  private camRaycaster = new THREE.Raycaster();
+  private camRayOrigin = new THREE.Vector3();
+  private camRayDir = new THREE.Vector3();
+  private camPullFrac = 1;
   private waypointBeacon: THREE.Group;
   private guideArrow: THREE.Group;
   private grabHighlightRing: THREE.Mesh;
@@ -552,13 +556,14 @@ class ScorpionGame {
     this.rimLight.position.set(-140, 48, -120);
     this.scene.add(this.rimLight);
 
-    // Atmospheric horizon-to-zenith gradient sky dome with soft sun glow matching distance fog!
+    // Atmospheric 3-stop horizon -> mid-sky -> zenith gradient sky dome with Golden Hour glow!
     this.skyDomeMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
       uniforms: {
-        uTopColor: { value: new THREE.Color(0x528cc8) },
+        uTopColor: { value: new THREE.Color(0x4c89c8) },
+        uMidColor: { value: new THREE.Color(0x8bbde6) },
         uHorizonColor: { value: new THREE.Color(0xc8dff0) },
         uSunColor: { value: new THREE.Color(0xfff4d6) },
         uSunDir: { value: new THREE.Vector3(0.5, 0.65, 0.35).normalize() }
@@ -572,6 +577,7 @@ class ScorpionGame {
       `,
       fragmentShader: `
         uniform vec3 uTopColor;
+        uniform vec3 uMidColor;
         uniform vec3 uHorizonColor;
         uniform vec3 uSunColor;
         uniform vec3 uSunDir;
@@ -579,10 +585,17 @@ class ScorpionGame {
         void main() {
           vec3 dir = normalize(vWorldDir);
           float h = clamp(dir.y, 0.0, 1.0);
-          vec3 col = mix(uHorizonColor, uTopColor, pow(h, 0.52));
-          float sunAmt = max(dot(dir, normalize(uSunDir)), 0.0);
-          col += uSunColor * pow(sunAmt, 14.0) * 0.28;
-          col += uSunColor * smoothstep(0.9965, 0.9994, sunAmt) * 0.85;
+          float lowMix = smoothstep(0.0, 0.14, h);
+          float highMix = smoothstep(0.11, 0.44, h);
+          vec3 col = mix(uHorizonColor, uMidColor, lowMix);
+          col = mix(col, uTopColor, highMix);
+          vec3 sunD = normalize(uSunDir);
+          float sunAmt = max(dot(dir, sunD), 0.0);
+          // Warm golden-hour atmospheric scatter belt along the sunlit horizon
+          float horizBand = exp(-h * 7.5) * (0.35 + 0.65 * pow(sunAmt, 2.0));
+          col += uSunColor * horizBand * 0.24;
+          col += uSunColor * pow(sunAmt, 12.0) * 0.32;
+          col += uSunColor * smoothstep(0.9965, 0.9994, sunAmt) * 0.9;
           gl_FragColor = vec4(col, 1.0);
         }
       `
@@ -933,16 +946,16 @@ class ScorpionGame {
       },
       sunset: {
         label: 'Golden Sunset',
-        sky: 0xd98a5b,
-        fog: 0xd99b72,
-        fogNear: 320,
-        fogFar: 1850,
-        sunCol: 0xffa857,
-        sunInt: 1.65,
-        sunOff: [-110, 32, -25],
-        hemiSky: 0xffc494,
-        hemiInt: 0.65,
-        nightAmt: 0.6,
+        sky: 0xe69f66,
+        fog: 0xebb07a,
+        fogNear: 360,
+        fogFar: 2050,
+        sunCol: 0xffb866,
+        sunInt: 1.72,
+        sunOff: [-115, 28, -22],
+        hemiSky: 0xffd09c,
+        hemiInt: 0.72,
+        nightAmt: 0.58,
         autoLights: true
       },
       dusk: {
@@ -984,9 +997,14 @@ class ScorpionGame {
     this.hemiLight.intensity = cfg.hemiInt;
     if (this.skyDomeMat) {
       this.skyDomeMat.uniforms.uTopColor.value.setHex(
-        tod === 'afternoon' ? 0x4c89c8 : tod === 'sunset' ? 0x5c4a76 : tod === 'dusk' ? 0x182c4e : 0x8bb2cc
+        tod === 'afternoon' ? 0x3f7ec2 : tod === 'sunset' ? 0x2c4476 : tod === 'dusk' ? 0x15284a : 0x7da8c7
       );
-      this.skyDomeMat.uniforms.uHorizonColor.value.setHex(cfg.fog);
+      this.skyDomeMat.uniforms.uMidColor.value.setHex(
+        tod === 'afternoon' ? 0x86bce6 : tod === 'sunset' ? 0xd97d6c : tod === 'dusk' ? 0x29436e : 0xb9d4e4
+      );
+      this.skyDomeMat.uniforms.uHorizonColor.value.setHex(
+        tod === 'sunset' ? 0xf6b36b : cfg.fog
+      );
       this.skyDomeMat.uniforms.uSunColor.value.setHex(cfg.sunCol);
       this.skyDomeMat.uniforms.uSunDir.value.set(cfg.sunOff[0], cfg.sunOff[1], cfg.sunOff[2]).normalize();
     }
@@ -2220,13 +2238,95 @@ class ScorpionGame {
       Math.max(groundAtCam + 1.8, this.tractor.position.y + 1.9 + Math.sin(this.camPitch) * this.camDist),
       desiredZ
     );
+
+    // Prevent chase camera from clipping inside shed roofs, barns, or village walls!
+    const pivot = this.camRayOrigin.set(
+      this.tractor.position.x,
+      this.tractor.position.y + 2.35,
+      this.tractor.position.z
+    );
+    const rayVec = this.camRayDir.subVectors(desiredPos, pivot);
+    const maxDist = rayVec.length();
+    let bestDist = maxDist;
+
+    if (maxDist > 0.5) {
+      rayVec.multiplyScalar(1 / maxDist);
+
+      // 1. Fast slab ray-AABB test against all 1,690+ village & landmark buildings
+      const ox = pivot.x;
+      const oy = pivot.y;
+      const oz = pivot.z;
+      const dx = rayVec.x;
+      const dy = rayVec.y;
+      const dz = rayVec.z;
+      const invX = Math.abs(dx) > 1e-6 ? 1 / dx : 1e9;
+      const invY = Math.abs(dy) > 1e-6 ? 1 / dy : 1e9;
+      const invZ = Math.abs(dz) > 1e-6 ? 1 / dz : 1e9;
+      const minXRay = Math.min(ox, desiredPos.x) - 1;
+      const maxXRay = Math.max(ox, desiredPos.x) + 1;
+      const minZRay = Math.min(oz, desiredPos.z) - 1;
+      const maxZRay = Math.max(oz, desiredPos.z) + 1;
+
+      for (const b of this.realWorld.camBoxes) {
+        if (b.maxX < minXRay || b.minX > maxXRay || b.maxZ < minZRay || b.minZ > maxZRay) continue;
+        const tx1 = (b.minX - ox) * invX;
+        const tx2 = (b.maxX - ox) * invX;
+        let tmin = Math.min(tx1, tx2);
+        let tmax = Math.max(tx1, tx2);
+        const ty1 = (b.minY - oy) * invY;
+        const ty2 = (b.maxY - oy) * invY;
+        tmin = Math.max(tmin, Math.min(ty1, ty2));
+        tmax = Math.min(tmax, Math.max(ty1, ty2));
+        const tz1 = (b.minZ - oz) * invZ;
+        const tz2 = (b.maxZ - oz) * invZ;
+        tmin = Math.max(tmin, Math.min(tz1, tz2));
+        tmax = Math.min(tmax, Math.max(tz1, tz2));
+        if (tmax >= Math.max(0.05, tmin) && tmin < bestDist) {
+          const hitD = Math.max(2.3, tmin - 0.65);
+          if (hitD < bestDist) bestDist = hitD;
+        }
+      }
+
+      // 2. Exact Three.js raycast against Home Farm sheds, tool-shed canopy roof, hay barn & silos
+      if (this.farm.camOccluders.length > 0) {
+        this.camRaycaster.set(pivot, rayVec);
+        this.camRaycaster.near = 0.25;
+        this.camRaycaster.far = maxDist + 0.6;
+        const hits = this.camRaycaster.intersectObjects(this.farm.camOccluders, false);
+        if (hits.length > 0) {
+          const hitD = Math.max(2.3, hits[0].distance - 0.85);
+          if (hitD < bestDist) bestDist = hitD;
+        }
+        // Also cast slightly higher (+0.65 m) from cab roof so low overhanging shed roofs never sit right in the camera near-plane!
+        const hiOrigin = pivot.clone();
+        hiOrigin.y += 0.65;
+        this.camRaycaster.set(hiOrigin, rayVec);
+        this.camRaycaster.far = maxDist + 0.5;
+        const hiHits = this.camRaycaster.intersectObjects(this.farm.camOccluders, false);
+        if (hiHits.length > 0) {
+          const hitD = Math.max(2.3, hiHits[0].distance - 0.95);
+          if (hitD < bestDist) bestDist = hitD;
+        }
+      }
+
+      const targetFrac = Math.max(0.24, Math.min(1, bestDist / maxDist));
+      // Pull inward fast to guarantee zero roof-clipping frames; ease back out smoothly
+      this.camPullFrac =
+        targetFrac < this.camPullFrac
+          ? THREE.MathUtils.lerp(this.camPullFrac, targetFrac, Math.min(1, dt * 18))
+          : THREE.MathUtils.lerp(this.camPullFrac, targetFrac, Math.min(1, dt * 4.5));
+      desiredPos.copy(pivot).addScaledVector(rayVec, maxDist * this.camPullFrac);
+      desiredPos.y = Math.max(getDrivableGroundY(desiredPos.x, desiredPos.z) + 1.5, desiredPos.y);
+    }
+
     const desiredLook = new THREE.Vector3(
       this.tractor.position.x - Math.sin(this.tractor.heading) * 2.2,
       this.tractor.position.y + 2.25 + this.tractor.boomPitch * 1.1,
       this.tractor.position.z - Math.cos(this.tractor.heading) * 2.2
     );
 
-    this.smoothCamPos.lerp(desiredPos, Math.min(1, dt * 6.5));
+    const lerpRate = this.camPullFrac < 0.92 ? 15 : 6.5;
+    this.smoothCamPos.lerp(desiredPos, Math.min(1, dt * lerpRate));
     this.smoothLookAt.lerp(desiredLook, Math.min(1, dt * 8));
     this.camera.position.copy(this.smoothCamPos);
     if (this.camShake > 0.005) {

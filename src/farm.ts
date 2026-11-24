@@ -49,6 +49,7 @@ export interface RackSpot {
 export class FarmEnvironment {
   public zones: TidyZone[] = [];
   public rackSpots: RackSpot[] = [];
+  public camOccluders: THREE.Object3D[] = [];
   public pondCenter = new THREE.Vector3(FARM_YARD_CENTER.x - 19, FARM_GROUND_Y, FARM_YARD_CENTER.z + 24);
   public pondRadius = 3.4;
   public trailerDeckY = FARM_GROUND_Y + 1.02;
@@ -141,9 +142,9 @@ export class FarmEnvironment {
     const { waterMesh } = buildRealMuensingTerrain(scene, world, groundMat, detailBump, meadowTex);
     this.lakeWaterMesh = waterMesh;
 
-    // High-resolution tiled Bavarian Hofpflaster & gravel farmyard apron with crisp mipmaps & feathered grass border!
-    const groundTex = createTiledYardGravelTexture(13, 12);
-    const apronGeo = new THREE.PlaneGeometry(52, 48, 28, 26);
+    // High-resolution tiled Bavarian Hofpflaster & gravel farmyard apron with crisp edge transition!
+    const groundTex = createTiledYardGravelTexture(14, 12);
+    const apronGeo = new THREE.PlaneGeometry(54, 48, 30, 26);
     apronGeo.rotateX(-Math.PI / 2);
     const apos = apronGeo.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < apos.count; i++) {
@@ -164,7 +165,7 @@ export class FarmEnvironment {
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2
     });
-    // Crisp smooth rounded-rectangle alpha edge mask + subtle driveway track darkening in local yard coordinates!
+    // Crisp tight rounded-rectangle edge mask extending flush to East gate pillars (no blurry fade halo!)
     apronMat.onBeforeCompile = (shader) => {
       shader.vertexShader =
         'varying vec2 vYardLocal;\n' +
@@ -176,17 +177,17 @@ export class FarmEnvironment {
         'varying vec2 vYardLocal;\n' +
         shader.fragmentShader.replace(
           '#include <dithering_fragment>',
-          `vec2 q = abs(vYardLocal) - vec2(21.5, 19.5);
+          `vec2 q = abs(vYardLocal - vec2(1.0, 0.0)) - vec2(23.2, 20.5);
           float edgeDist = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
-          float alphaMask = 1.0 - smoothstep(1.2, 4.2, edgeDist);
+          float alphaMask = 1.0 - smoothstep(0.0, 0.55, edgeDist);
           // Subtle compacted tire path along main East-West exit lane (z = -4)
           float lane = 1.0 - smoothstep(1.2, 3.2, abs(vYardLocal.y + 4.0));
-          gl_FragColor.rgb *= (1.0 - lane * 0.11);
+          gl_FragColor.rgb *= (1.0 - lane * 0.09);
           gl_FragColor.a *= alphaMask;
           #include <dithering_fragment>`
         );
     };
-    apronMat.customProgramCacheKey = () => 'bavaria-yard-apron-v2';
+    apronMat.customProgramCacheKey = () => 'bavaria-yard-apron-v3';
 
     const ground = new THREE.Mesh(apronGeo, apronMat);
     ground.position.set(this.ox, 0, this.oz);
@@ -196,23 +197,78 @@ export class FarmEnvironment {
 
   private buildBoundaries(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
     const stoneTex = createStoneWallTexture();
-    const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.95 });
-    const copeMat = new THREE.MeshStandardMaterial({ color: 0x857f75, roughness: 0.93 });
+    const stonePlinthMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0x9c9486, roughness: 0.94 });
+    const plasterPillarMat = new THREE.MeshStandardMaterial({ color: 0xefe6d4, roughness: 0.86 });
+    const tileRoofMat = new THREE.MeshStandardMaterial({ color: 0xa6462b, roughness: 0.78 });
+    const ironMat = new THREE.MeshStandardMaterial({ color: 0x262a2e, roughness: 0.52, metalness: 0.58 });
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x765533, roughness: 0.92 });
+    const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x4f341d, roughness: 0.92 });
 
-    // Stone gate pillars framing the wide East farmyard exit lane (z = oz - 4) straight past the farmhouse to the road!
+    // Authentic Bavarian Masonry Gate Pillars with pitched clay-tile caps & swung-open timber farm gates!
     const gateX = this.ox + 23.5;
-    for (const gz of [this.oz - 10.5, this.oz + 2.5]) {
+    for (const [idx, gz] of [this.oz - 10.5, this.oz + 2.5].entries()) {
       const gy = getTerrainHeight(gateX, gz);
-      const post = new THREE.Mesh(new THREE.BoxGeometry(1.05, 2.0, 1.05), stoneMat);
-      post.position.set(gateX, gy + 1.0, gz);
-      post.castShadow = true;
-      post.receiveShadow = true;
-      scene.add(post);
-      const cap = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.2, 1.22), copeMat);
-      cap.position.set(gateX, gy + 2.08, gz);
-      scene.add(cap);
-      this.addStaticBox(world, groundMat, gateX, gy + 1.0, gz, 1.1, 2.0, 1.1);
+      const pillarGrp = new THREE.Group();
+
+      // Dressed fieldstone base plinth
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.65, 1.12), stonePlinthMat);
+      plinth.position.y = 0.32;
+      plinth.castShadow = true;
+      plinth.receiveShadow = true;
+      pillarGrp.add(plinth);
+
+      // Warm cream stucco masonry column shaft with timber corner quoins
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.86, 1.52, 0.86), plasterPillarMat);
+      shaft.position.y = 1.4;
+      shaft.castShadow = true;
+      shaft.receiveShadow = true;
+      pillarGrp.add(shaft);
+
+      // Molded timber eaves collar + overhanging red clay-tile pyramidal cap (Pyramidendach)
+      const collar = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.14, 1.14), darkWoodMat);
+      collar.position.y = 2.18;
+      pillarGrp.add(collar);
+
+      const tileCap = new THREE.Mesh(new THREE.ConeGeometry(0.88, 0.54, 4), tileRoofMat);
+      tileCap.rotation.y = Math.PI / 4;
+      tileCap.position.y = 2.52;
+      tileCap.castShadow = true;
+      pillarGrp.add(tileCap);
+
+      // Wrought-iron gate hinges on inward face
+      const innerSign = idx === 0 ? 1 : -1;
+      for (const hy of [0.85, 1.65]) {
+        const hinge = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.24), ironMat);
+        hinge.position.set(0, hy, innerSign * 0.48);
+        pillarGrp.add(hinge);
+      }
+
+      // Open swung-back Bavarian timber farm gate leaf latched clear to the yard side (driveway 100% unobstructed!)
+      const leaf = new THREE.Group();
+      const leafLen = 2.6;
+      for (const ry of [0.55, 1.05, 1.55]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(leafLen, 0.12, 0.09), woodMat);
+        rail.position.set(-leafLen * 0.5, ry, 0);
+        rail.castShadow = true;
+        leaf.add(rail);
+      }
+      for (const px of [-0.12, -1.3, -2.5]) {
+        const stile = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.32, 0.12), darkWoodMat);
+        stile.position.set(px, 1.06, 0);
+        leaf.add(stile);
+      }
+      const diag = new THREE.Mesh(new THREE.BoxGeometry(2.45, 0.1, 0.08), woodMat);
+      diag.position.set(-1.3, 1.05, 0);
+      diag.rotation.z = 0.42;
+      leaf.add(diag);
+      // Swing gate leaf gently open outward/inward parallel to the driveway
+      leaf.position.set(-0.35, 0.05, innerSign * 0.55);
+      leaf.rotation.y = innerSign * -0.18;
+      pillarGrp.add(leaf);
+
+      pillarGrp.position.set(gateX, gy, gz);
+      scene.add(pillarGrp);
+      this.addStaticBox(world, groundMat, gateX, gy + 1.15, gz, 1.05, 2.3, 1.05);
     }
 
     // Bavarian timber post-and-rail paddock fencing along North & West edges (leaving wide East & West farm lane exits!)
@@ -289,6 +345,7 @@ export class FarmEnvironment {
     backWall.position.set(cx, y + h * 0.5, cz + d * 0.5);
     backWall.castShadow = true;
     scene.add(backWall);
+    this.camOccluders.push(backWall);
     this.addStaticBox(world, groundMat, cx, y + h * 0.5, cz + d * 0.5, w, h, 0.5);
 
     for (const s of [-1, 1]) {
@@ -296,6 +353,7 @@ export class FarmEnvironment {
       sideWall.position.set(cx + s * (w * 0.5), y + h * 0.5, cz);
       sideWall.castShadow = true;
       scene.add(sideWall);
+      this.camOccluders.push(sideWall);
       this.addStaticBox(world, groundMat, cx + s * (w * 0.5), y + h * 0.5, cz, 0.5, h, d);
     }
 
@@ -307,6 +365,7 @@ export class FarmEnvironment {
       slope.rotation.z = -s * roofAngle;
       slope.castShadow = true;
       scene.add(slope);
+      this.camOccluders.push(slope);
     }
 
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.36, 0.34), timber);
@@ -573,6 +632,7 @@ export class FarmEnvironment {
     workshop.castShadow = true;
     workshop.receiveShadow = true;
     scene.add(workshop);
+    this.camOccluders.push(workshop);
     this.addStaticBox(world, groundMat, wx, y + 2.6, wz, 17.8, 5.2, 5.2);
 
     const canopy = new THREE.Mesh(new THREE.BoxGeometry(17.2, 0.2, 5.2), roofMetal);
@@ -580,6 +640,7 @@ export class FarmEnvironment {
     canopy.rotation.x = 0.14;
     canopy.castShadow = true;
     scene.add(canopy);
+    this.camOccluders.push(canopy);
 
     for (const sx of [-7.7, -2.55, 2.55, 7.7]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.26, 3.8, 0.26), timber);

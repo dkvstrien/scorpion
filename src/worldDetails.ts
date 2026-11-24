@@ -8,7 +8,7 @@ import {
   SEBALD_PIER,
   WATER_LEVEL
 } from './terrain';
-import { createBarnWoodTexture, createHayTexture } from './textures';
+import { createBarnWoodTexture, createDeutschePostTexture, createHayTexture } from './textures';
 
 function makeCropCardTexture(kind: 'maize' | 'wheat'): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -558,22 +558,45 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
     scene.add(g);
   }
 
-  // Yellow Deutsche Post letterboxes & village bins
-  const postboxSpots: [number, number][] = [
-    [1364, 994],
-    [1444, 1028],
-    [-976, 708],
-    [-281, 918],
-    [486, -1198]
+  // Modeled German Deutsche Post letterboxes (Briefkästen) with sloped rain hood, mail slot & Posthorn emblem!
+  const postFrontMat = new THREE.MeshStandardMaterial({ map: createDeutschePostTexture(), roughness: 0.38 });
+  const postHoodMat = new THREE.MeshStandardMaterial({ color: 0xe6b40e, roughness: 0.42 });
+  const postSlotMat = new THREE.MeshStandardMaterial({ color: 0x22262a, roughness: 0.5, metalness: 0.4 });
+  const postBaseMat = new THREE.MeshStandardMaterial({ color: 0x7c7c76, roughness: 0.92 });
+  const postboxMats = [postYellow, postYellow, postYellow, postYellow, postFrontMat, postFrontMat];
+  const postboxSpots: [number, number, number][] = [
+    [1364, 994, 0.15],
+    [1444, 1028, -0.35],
+    [-976, 708, Math.PI / 2],
+    [-281, 918, -Math.PI / 2],
+    [486, -1198, 0.2]
   ];
-  for (const [px, pz] of postboxSpots) {
+  for (const [px, pz, rot] of postboxSpots) {
     const gy = getTerrainHeight(px, pz);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.25, 6), metalGrey);
-    pole.position.set(px, gy + 0.62, pz);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.58, 0.34), postYellow);
-    box.position.set(px, gy + 1.32, pz);
+    const pg = new THREE.Group();
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.14, 8), postBaseMat);
+    foot.position.y = 0.07;
+    pg.add(foot);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 1.24, 8), metalGrey);
+    pole.position.y = 0.64;
+    pole.castShadow = true;
+    pg.add(pole);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.54, 0.28), postboxMats);
+    box.position.y = 1.32;
     box.castShadow = true;
-    scene.add(pole, box);
+    pg.add(box);
+    // Overhanging pitched rain hood & metallic slot lip
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.06, 0.36), postHoodMat);
+    hood.position.set(0, 1.61, 0.02);
+    hood.rotation.x = 0.18;
+    hood.castShadow = true;
+    pg.add(hood);
+    const slotFlap = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.055, 0.04), postSlotMat);
+    slotFlap.position.set(0, 1.5, 0.15);
+    pg.add(slotFlap);
+    pg.position.set(px, gy, pz);
+    pg.rotation.y = rot;
+    scene.add(pg);
   }
 
   // === 4. NEIGHBORING BAVARIAN FARM CLUTTER (NOT JUST THE HOME FARM!) ===
