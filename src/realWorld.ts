@@ -135,226 +135,379 @@ function createClockTexture(): THREE.CanvasTexture {
 }
 
 /**
- * 4 Authentic Upper Bavarian Architectural Facade Textures (modeled directly from real Münsing & Starnberger See homes!):
- * - 'einfirsthof': Signature cream-plaster ground floor + rich dark weathered brown larch timber upper story + carved balcony & red geraniums!
- * - 'timber': Full warm weathered brown Alpine timber plank farmhouse / chalet with dark green shutters!
- * - 'barn': Tall weathered dark-brown vertical timber Stadel planks + wide double wooden barn doors + hayloft hatch!
- * - 'landhaus': Warm ochre/cream village plaster with painted Alpine window trim (Lüftlmalerei) + dark timber eaves & shutters!
+ * 8 Rich 512x512 Upper Bavarian Architectural Facade Textures (varied render, wood cladding, Lüftlmalerei frescos,
+ * varied shutter styles & colors, barn boards, modern steel halls & contemporary homes — paired with real 3D
+ * projecting balconies, chimneys, barn doors, overhanging roof fascia & PV solar panels from LoD2!).
  */
 function createBavarianArchetypeTexture(
-  kind: 'einfirsthof' | 'timber' | 'barn' | 'landhaus' | 'machine_hall' | 'detached'
+  kind:
+    | 'einfirsthof'
+    | 'einfirsthof_b'
+    | 'lueftlmalerei'
+    | 'timber'
+    | 'landhaus'
+    | 'barn'
+    | 'machine_hall'
+    | 'detached'
 ): THREE.CanvasTexture {
   const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 256;
+  c.width = 512;
+  c.height = 512;
   const ctx = c.getContext('2d')!;
+  ctx.scale(2, 2); // Draw crisp 2x retina vector detail on 256x256 logical coordinates!
 
-  const drawPlanks = (y0: number, y1: number, baseHex: string, vertical = false) => {
+  const addPlasterGrain = (y0: number, y1: number) => {
+    for (let i = 0; i < 900; i++) {
+      const gx = ((i * 73) % 256);
+      const gy = y0 + ((i * 41) % Math.max(1, y1 - y0));
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(65,52,36,0.035)' : 'rgba(255,252,244,0.05)';
+      ctx.fillRect(gx, gy, 3, 2);
+    }
+  };
+
+  const drawPlanks = (y0: number, y1: number, baseHex: string, vertical = false, step = 11) => {
     ctx.fillStyle = baseHex;
     ctx.fillRect(0, y0, 256, y1 - y0);
     if (vertical) {
-      for (let x = 0; x < 256; x += 12) {
-        ctx.fillStyle = x % 24 === 0 ? 'rgba(0,0,0,0.14)' : 'rgba(255,220,175,0.06)';
-        ctx.fillRect(x, y0, 10, y1 - y0);
-        ctx.fillStyle = 'rgba(25,14,6,0.34)';
-        ctx.fillRect(x + 10, y0, 2, y1 - y0);
+      for (let x = 0; x < 256; x += step) {
+        const shade = ((x * 13) % 3);
+        ctx.fillStyle = shade === 0 ? 'rgba(0,0,0,0.14)' : shade === 1 ? 'rgba(255,220,175,0.07)' : 'rgba(40,22,8,0.06)';
+        ctx.fillRect(x, y0, step - 2, y1 - y0);
+        ctx.fillStyle = 'rgba(22,12,5,0.38)';
+        ctx.fillRect(x + step - 2, y0, 2, y1 - y0);
       }
     } else {
-      for (let y = y0; y < y1; y += 11) {
-        ctx.fillStyle = y % 22 === 0 ? 'rgba(0,0,0,0.12)' : 'rgba(255,220,180,0.06)';
-        ctx.fillRect(0, y, 256, 9);
-        ctx.fillStyle = 'rgba(28,15,6,0.3)';
-        ctx.fillRect(0, y + 9, 256, 2);
+      for (let y = y0; y < y1; y += step) {
+        const shade = ((y * 7) % 3);
+        ctx.fillStyle = shade === 0 ? 'rgba(0,0,0,0.12)' : shade === 1 ? 'rgba(255,222,182,0.07)' : 'rgba(42,24,10,0.05)';
+        ctx.fillRect(0, y, 256, step - 2);
+        ctx.fillStyle = 'rgba(26,14,6,0.34)';
+        ctx.fillRect(0, y + step - 2, 256, 2);
       }
     }
   };
 
-  const drawWindow = (wx: number, wy: number, shutterColor: string, flowers: boolean, lueftl = false) => {
-    if (lueftl) {
-      // Subtle painted Upper Bavarian Lüftlmalerei frame around window!
-      ctx.strokeStyle = '#9c6638';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(wx - 18, wy - 23, 36, 46);
-      ctx.fillStyle = '#c27b48';
-      ctx.fillRect(wx - 10, wy - 28, 20, 5);
+  const drawWindow = (
+    wx: number,
+    wy: number,
+    opts: {
+      w?: number;
+      h?: number;
+      shutter?: string;
+      flowers?: boolean;
+      lueftl?: boolean;
+      frame?: string;
+      modern?: boolean;
+      arched?: boolean;
     }
-    if (shutterColor) {
-      ctx.fillStyle = shutterColor;
-      ctx.fillRect(wx - 24, wy - 19, 10, 40);
-      ctx.fillRect(wx + 14, wy - 19, 10, 40);
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(wx - 24, wy - 19, 10, 40);
-      ctx.strokeRect(wx + 14, wy - 19, 10, 40);
-    }
-    ctx.fillStyle = '#2b3b45';
-    ctx.fillRect(wx - 13, wy - 18, 26, 38);
-    ctx.fillStyle = 'rgba(255, 222, 152, 0.28)';
-    ctx.fillRect(wx - 11, wy - 16, 22, 34);
-    ctx.fillStyle = '#efe9dc';
-    ctx.fillRect(wx - 1, wy - 18, 2, 38);
-    ctx.fillRect(wx - 13, wy - 1, 26, 2);
+  ) => {
+    const ww = opts.w ?? 26;
+    const wh = opts.h ?? 36;
+    const hw = ww * 0.5;
+    const hh = wh * 0.5;
 
-    if (flowers) {
-      ctx.fillStyle = '#4e2f18';
-      ctx.fillRect(wx - 17, wy + 19, 34, 7);
-      ctx.fillStyle = '#2d6330';
-      ctx.fillRect(wx - 16, wy + 16, 32, 4);
-      ctx.fillStyle = '#d62f29';
-      ctx.fillRect(wx - 13, wy + 13, 5, 5);
-      ctx.fillRect(wx - 3, wy + 12, 6, 5);
-      ctx.fillRect(wx + 7, wy + 13, 5, 5);
+    if (opts.lueftl) {
+      // Authentic Upper Bavarian Lüftlmalerei Baroque frescoed window frame!
+      ctx.fillStyle = 'rgba(186, 134, 72, 0.25)';
+      ctx.fillRect(wx - hw - 10, wy - hh - 10, ww + 20, wh + 18);
+      ctx.strokeStyle = '#9b5c34';
+      ctx.lineWidth = 2.4;
+      ctx.strokeRect(wx - hw - 8, wy - hh - 8, ww + 16, wh + 15);
+      // Painted Baroque scroll pediment above window
+      ctx.fillStyle = '#3b6b8c';
+      ctx.beginPath();
+      ctx.moveTo(wx - hw - 9, wy - hh - 8);
+      ctx.quadraticCurveTo(wx, wy - hh - 20, wx + hw + 9, wy - hh - 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#d49a42';
+      ctx.beginPath();
+      ctx.arc(wx, wy - hh - 12, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      // Subtle painted sill garland
+      ctx.strokeStyle = '#487442';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(wx - hw - 4, wy + hh + 7);
+      ctx.quadraticCurveTo(wx, wy + hh + 12, wx + hw + 4, wy + hh + 7);
+      ctx.stroke();
+    }
+
+    if (opts.shutter) {
+      const sw = 10;
+      ctx.fillStyle = opts.shutter;
+      ctx.fillRect(wx - hw - sw - 1, wy - hh - 1, sw, wh + 2);
+      ctx.fillRect(wx + hw + 1, wy - hh - 1, sw, wh + 2);
+      // Louver slats on shutters
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      for (let sy = wy - hh + 3; sy < wy + hh - 2; sy += 4) {
+        ctx.fillRect(wx - hw - sw + 1, sy, sw - 4, 1.4);
+        ctx.fillRect(wx + hw + 3, sy, sw - 4, 1.4);
+      }
+      ctx.strokeStyle = 'rgba(0,0,0,0.34)';
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(wx - hw - sw - 1, wy - hh - 1, sw, wh + 2);
+      ctx.strokeRect(wx + hw + 1, wy - hh - 1, sw, wh + 2);
+    }
+
+    // Recessed window shadow + surround frame
+    ctx.fillStyle = opts.frame ?? '#ebe4d6';
+    ctx.fillRect(wx - hw - 2, wy - hh - 2, ww + 4, wh + 4);
+    // Glass pane with realistic sky reflection gradient
+    const gGrad = ctx.createLinearGradient(wx, wy - hh, wx, wy + hh);
+    gGrad.addColorStop(0, '#2a3d4d');
+    gGrad.addColorStop(0.55, '#3b5263');
+    gGrad.addColorStop(1, '#24303a');
+    ctx.fillStyle = gGrad;
+    ctx.fillRect(wx - hw, wy - hh, ww, wh);
+    // Subtle warm interior reflection
+    ctx.fillStyle = 'rgba(255, 228, 168, 0.22)';
+    ctx.fillRect(wx - hw + 2, wy - hh + 2, ww - 4, wh * 0.45);
+    // Mullions
+    ctx.fillStyle = opts.modern ? '#363b40' : '#f2ece0';
+    ctx.fillRect(wx - 1, wy - hh, 2, wh);
+    if (!opts.modern) {
+      ctx.fillRect(wx - hw, wy - 2, ww, 2);
+    }
+    // Stone / wooden sill
+    ctx.fillStyle = opts.modern ? '#4f5559' : '#7b7468';
+    ctx.fillRect(wx - hw - 3, wy + hh + 1, ww + 6, 3.5);
+
+    if (opts.flowers) {
+      ctx.fillStyle = '#523219';
+      ctx.fillRect(wx - hw - 2, wy + hh + 1, ww + 4, 6);
+      ctx.fillStyle = '#2c6430';
+      ctx.fillRect(wx - hw - 1, wy + hh - 2, ww + 2, 4);
+      ctx.fillStyle = '#d9322b';
+      ctx.fillRect(wx - hw + 2, wy + hh - 5, 4.5, 4.5);
+      ctx.fillRect(wx - 2, wy + hh - 6, 5, 4.5);
+      ctx.fillRect(wx + hw - 7, wy + hh - 5, 4.5, 4.5);
     }
   };
 
   if (kind === 'einfirsthof') {
-    // Upper half: Rich dark weathered brown Bavarian timber!
-    drawPlanks(0, 128, '#6e472a', false);
-    // Lower half: Warm Bavarian cream-ochre lime plaster + stone foundation plinth
-    ctx.fillStyle = '#f2ead9';
-    ctx.fillRect(0, 128, 256, 100);
-    ctx.fillStyle = '#877f73';
+    // Upper story: Horizontal dark weathered Bavarian larch cladding; Lower story: Warm cream lime render
+    drawPlanks(0, 126, '#6d4528', false, 10);
+    ctx.fillStyle = '#f3ecdc';
+    ctx.fillRect(0, 126, 256, 102);
+    addPlasterGrain(126, 228);
+    // Carved timber floor belt beam (clean—no flat fake red flowers since real 3D balconies project out!)
+    ctx.fillStyle = '#472a16';
+    ctx.fillRect(0, 120, 256, 8);
+    ctx.fillStyle = '#827b6f';
     ctx.fillRect(0, 228, 256, 28);
-
-    // Classic carved brown wooden Bavarian wrap-around balcony (Balkon) across mid-floor!
-    ctx.fillStyle = '#4e2f19';
-    ctx.fillRect(0, 104, 256, 28);
-    for (let x = 4; x < 256; x += 12) {
-      ctx.fillStyle = '#7c5130';
-      ctx.fillRect(x, 108, 7, 20);
+    // Varied asymmetric window spacing (2 wide upstairs, 3 downstairs)
+    drawWindow(64, 58, { w: 28, h: 36, shutter: '#264f33', flowers: false });
+    drawWindow(192, 58, { w: 28, h: 36, shutter: '#264f33', flowers: false });
+    drawWindow(42, 174, { w: 24, h: 34, shutter: '#264f33', flowers: true });
+    drawWindow(128, 174, { w: 26, h: 34, shutter: '#264f33', flowers: false });
+    drawWindow(214, 174, { w: 24, h: 34, shutter: '#264f33', flowers: true });
+  } else if (kind === 'einfirsthof_b') {
+    // Variant B: Vertical weathered larch upper + warm ochre-sand render lower + brown shutters!
+    drawPlanks(0, 132, '#5e3c22', true, 12);
+    ctx.fillStyle = '#eee1c6';
+    ctx.fillRect(0, 132, 256, 98);
+    addPlasterGrain(132, 230);
+    ctx.fillStyle = '#442915';
+    ctx.fillRect(0, 127, 256, 7);
+    ctx.fillStyle = '#787166';
+    ctx.fillRect(0, 230, 256, 26);
+    for (const wx of [48, 128, 208]) {
+      drawWindow(wx, 62, { w: 24, h: 34, shutter: '#5a381d', flowers: false });
     }
-    ctx.fillStyle = '#3b2211';
-    ctx.fillRect(0, 102, 256, 4);
-    ctx.fillRect(0, 128, 256, 5);
-    // Bright red geranium boxes lined along the wooden balcony!
-    for (let x = 14; x < 244; x += 38) {
-      ctx.fillStyle = '#2b5e2e';
-      ctx.fillRect(x, 96, 28, 6);
-      ctx.fillStyle = '#d83029';
-      ctx.fillRect(x + 3, 93, 6, 5);
-      ctx.fillRect(x + 12, 92, 6, 5);
-      ctx.fillRect(x + 20, 93, 5, 5);
+    drawWindow(52, 176, { w: 26, h: 34, shutter: '#5a381d', flowers: true });
+    drawWindow(146, 176, { w: 26, h: 34, shutter: '#5a381d', flowers: false });
+    // Arched timber front door on right
+    ctx.fillStyle = '#53331b';
+    ctx.fillRect(202, 166, 28, 64);
+    ctx.strokeStyle = '#331d0e';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(202, 166, 28, 64);
+  } else if (kind === 'lueftlmalerei') {
+    // Authentic Upper Bavarian Lüftlmalerei painted townhouse / Bauernhaus!
+    ctx.fillStyle = '#f6eedb';
+    ctx.fillRect(0, 0, 256, 228);
+    addPlasterGrain(0, 228);
+    // Decorative painted Bavarian eaves frieze band & corner quoins
+    ctx.fillStyle = '#4d301a';
+    ctx.fillRect(0, 0, 256, 10);
+    ctx.fillStyle = '#d49a42';
+    ctx.fillRect(0, 10, 256, 4);
+    ctx.fillStyle = '#3b6b8c';
+    for (let x = 8; x < 256; x += 24) {
+      ctx.beginPath();
+      ctx.arc(x, 18, 5, 0, Math.PI);
+      ctx.fill();
     }
-
-    for (const wx of [44, 128, 212]) {
-      drawWindow(wx, 48, '#285234', false);
-      drawWindow(wx, 174, '#285234', true);
+    // Painted Baroque corner quoin blocks
+    ctx.fillStyle = 'rgba(168, 124, 72, 0.24)';
+    for (let y = 24; y < 224; y += 22) {
+      const qw = (y / 22) % 2 === 0 ? 14 : 9;
+      ctx.fillRect(0, y, qw, 18);
+      ctx.fillRect(256 - qw, y, qw, 18);
+    }
+    ctx.fillStyle = '#81796c';
+    ctx.fillRect(0, 228, 256, 28);
+    for (const wx of [54, 128, 202]) {
+      drawWindow(wx, 66, { w: 24, h: 34, shutter: '#295738', flowers: true, lueftl: true });
+      drawWindow(wx, 170, { w: 24, h: 34, shutter: '#295738', flowers: false, lueftl: true });
     }
   } else if (kind === 'timber') {
-    // Full warm weathered brown Bavarian larch-wood chalet/farmhouse!
-    drawPlanks(0, 226, '#7a4f2d', false);
-    ctx.fillStyle = '#7e766b';
+    // Full warm honey-weathered Bavarian timber chalet / farmhouse!
+    drawPlanks(0, 226, '#7e522e', false, 10);
+    ctx.fillStyle = '#7b7469';
     ctx.fillRect(0, 226, 256, 30);
-
-    // Heavy horizontal timber mid-beam & carved timber rail
-    ctx.fillStyle = '#492b16';
-    ctx.fillRect(0, 114, 256, 12);
-    for (const wx of [44, 128, 212]) {
-      drawWindow(wx, 52, '#2a5636', true);
-      drawWindow(wx, 172, '#2a5636', false);
-    }
+    ctx.fillStyle = '#4a2c16';
+    ctx.fillRect(0, 118, 256, 8);
+    drawWindow(56, 56, { w: 26, h: 34, shutter: '#2a5636', flowers: true });
+    drawWindow(176, 56, { w: 32, h: 34, shutter: '', flowers: true, frame: '#e8dfc9' });
+    drawWindow(48, 170, { w: 26, h: 34, shutter: '#2a5636', flowers: false });
+    drawWindow(128, 170, { w: 26, h: 34, shutter: '#2a5636', flowers: false });
+    drawWindow(208, 170, { w: 26, h: 34, shutter: '#2a5636', flowers: true });
   } else if (kind === 'barn') {
-    // Authentic Upper Bavarian weathered dark-brown vertical timber Stadel (Hay Barn)!
-    drawPlanks(0, 232, '#5a3a21', true);
-    ctx.fillStyle = '#6f685e';
-    ctx.fillRect(0, 232, 256, 24);
-    // Horizontal cross-bracing beams
-    ctx.fillStyle = '#3d2513';
-    ctx.fillRect(0, 112, 256, 10);
-    ctx.fillRect(0, 12, 256, 8);
-    // Wide double sliding wooden barn doors in center
-    ctx.fillStyle = '#472c18';
-    ctx.fillRect(72, 128, 112, 104);
-    ctx.strokeStyle = '#2c190c';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(72, 128, 56, 104);
-    ctx.strokeRect(128, 128, 56, 104);
-    // Diagonal X-bracing on barn doors
-    ctx.beginPath();
-    ctx.moveTo(74, 130);
-    ctx.lineTo(126, 230);
-    ctx.moveTo(126, 130);
-    ctx.lineTo(74, 230);
-    ctx.moveTo(130, 130);
-    ctx.lineTo(182, 230);
-    ctx.moveTo(182, 130);
-    ctx.lineTo(130, 230);
-    ctx.stroke();
-    // Upper hayloft vent hatch
-    ctx.fillStyle = '#25170e';
-    ctx.fillRect(104, 38, 48, 52);
-    ctx.strokeStyle = '#8b5e36';
-    ctx.strokeRect(104, 38, 48, 52);
-  } else if (kind === 'machine_hall') {
-    // Modern Bavarian agricultural machine hall / cattle shed: ribbed grey-sage steel cladding + translucent daylight band + roller bay!
-    ctx.fillStyle = '#8b9694';
-    ctx.fillRect(0, 0, 256, 232);
-    for (let x = 0; x < 256; x += 8) {
-      ctx.fillStyle = x % 16 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)';
-      ctx.fillRect(x, 0, 4, 232);
+    // Weathered vertical dark-brown rough-sawn timber Stadl with hayloft vent & stone lower foundation!
+    drawPlanks(0, 212, '#5c3b22', true, 10);
+    // Weathered fieldstone base masonry
+    ctx.fillStyle = '#736c62';
+    ctx.fillRect(0, 212, 256, 44);
+    for (let y = 216; y < 252; y += 10) {
+      for (let x = (y % 20 === 0 ? 0 : 12); x < 256; x += 26) {
+        ctx.fillStyle = (x + y) % 3 === 0 ? '#847c70' : '#655f55';
+        ctx.fillRect(x + 1, y, 22, 8);
+      }
     }
-    // Translucent polycarbonate daylight strip near roof eaves
-    ctx.fillStyle = '#d6e3e0';
-    ctx.fillRect(0, 18, 256, 36);
-    ctx.strokeStyle = '#5f6b69';
+    // Timber cross-beams & gable ventilation slats
+    ctx.fillStyle = '#3c2413';
+    ctx.fillRect(0, 108, 256, 9);
+    ctx.fillRect(0, 10, 256, 7);
+    ctx.fillStyle = '#24160d';
+    ctx.fillRect(46, 34, 42, 46);
+    ctx.fillRect(168, 34, 42, 46);
+    ctx.strokeStyle = '#7d5432';
     ctx.lineWidth = 3;
+    ctx.strokeRect(46, 34, 42, 46);
+    ctx.strokeRect(168, 34, 42, 46);
+  } else if (kind === 'machine_hall') {
+    // Modern Bavarian agricultural machine hall / cattle shed: ribbed steel + translucent skylight strip + bay door!
+    ctx.fillStyle = '#8b9794';
+    ctx.fillRect(0, 0, 256, 228);
+    for (let x = 0; x < 256; x += 7) {
+      ctx.fillStyle = x % 14 === 0 ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
+      ctx.fillRect(x, 0, 3.5, 228);
+    }
+    ctx.fillStyle = '#d5e4e1';
+    ctx.fillRect(0, 18, 256, 34);
+    ctx.strokeStyle = '#5c6967';
+    ctx.lineWidth = 2.5;
     for (let x = 0; x < 256; x += 32) {
       ctx.beginPath();
       ctx.moveTo(x, 18);
-      ctx.lineTo(x, 54);
+      ctx.lineTo(x, 52);
       ctx.stroke();
     }
-    // Concrete curb plinth
-    ctx.fillStyle = '#7c807e';
-    ctx.fillRect(0, 224, 256, 32);
-    // Wide sectional industrial roller door
-    ctx.fillStyle = '#5d6668';
-    ctx.fillRect(70, 108, 116, 118);
-    ctx.strokeStyle = '#3b4244';
+    ctx.fillStyle = '#7b7f7d';
+    ctx.fillRect(0, 220, 256, 36);
+    ctx.fillStyle = '#586264';
+    ctx.fillRect(68, 104, 120, 118);
+    ctx.strokeStyle = '#363d40';
     ctx.lineWidth = 2;
-    for (let y = 122; y < 226; y += 16) {
+    for (let y = 118; y < 222; y += 15) {
       ctx.beginPath();
-      ctx.moveTo(70, y);
-      ctx.lineTo(186, y);
+      ctx.moveTo(68, y);
+      ctx.lineTo(188, y);
       ctx.stroke();
     }
-    ctx.strokeRect(70, 108, 116, 118);
+    ctx.strokeRect(68, 104, 120, 118);
   } else if (kind === 'detached') {
-    // Newer Bavarian detached home: clean light plaster, anthracite window frames, stone plinth
+    // Newer Bavarian detached home: clean render, modern anthracite windows, vertical larch timber accent strip!
     ctx.fillStyle = '#f2f0ea';
     ctx.fillRect(0, 0, 256, 228);
-    for (let i = 0; i < 450; i++) {
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(0,0,0,0.025)' : 'rgba(255,255,255,0.04)';
-      ctx.fillRect(Math.random() * 256, Math.random() * 228, 2, 2);
-    }
-    ctx.fillStyle = '#737678';
+    addPlasterGrain(0, 228);
+    // Contemporary vertical larch accent band between windows
+    drawPlanks(20, 228, '#966c42', true, 7);
+    ctx.fillStyle = '#f2f0ea';
+    ctx.fillRect(0, 0, 104, 228);
+    ctx.fillRect(156, 0, 100, 228);
+    addPlasterGrain(0, 228);
+    ctx.fillStyle = '#707477';
     ctx.fillRect(0, 228, 256, 28);
-    for (const wx of [44, 128, 212]) {
-      drawWindow(wx, 54, '#3d444a', false, false);
-      drawWindow(wx, 166, '', false, false);
-    }
+    drawWindow(52, 60, { w: 34, h: 32, modern: true, frame: '#3b4147' });
+    drawWindow(204, 60, { w: 34, h: 32, modern: true, frame: '#3b4147' });
+    drawWindow(52, 166, { w: 38, h: 40, modern: true, frame: '#3b4147' });
+    drawWindow(204, 166, { w: 30, h: 34, modern: true, frame: '#3b4147' });
   } else {
-    // Warm ochre/cream village Landhaus with Alpine painted window borders & dark timber eaves
-    ctx.fillStyle = '#f4ebd7';
+    // Traditional Bavarian pastel village house (base neutral warm-white so per-building pastel tints read richly!)
+    ctx.fillStyle = '#f4efe2';
     ctx.fillRect(0, 0, 256, 226);
-    for (let i = 0; i < 600; i++) {
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)';
-      ctx.fillRect(Math.random() * 256, Math.random() * 226, 2, 2);
-    }
+    addPlasterGrain(0, 226);
     ctx.fillStyle = '#53351d';
-    ctx.fillRect(0, 0, 256, 14); // Dark timber top eaves band
-    ctx.fillStyle = '#857e74';
+    ctx.fillRect(0, 0, 256, 12);
+    ctx.fillStyle = '#827b70';
     ctx.fillRect(0, 226, 256, 30);
-    for (const wx of [44, 128, 212]) {
-      drawWindow(wx, 56, '#2a5636', true, true);
-      drawWindow(wx, 166, '#2a5636', false, true);
-    }
+    // Varied blue-grey & brown wooden shutters + classic front entry door!
+    drawWindow(48, 58, { w: 24, h: 34, shutter: '#495f6e', flowers: true });
+    drawWindow(128, 58, { w: 24, h: 34, shutter: '#495f6e', flowers: false });
+    drawWindow(208, 58, { w: 24, h: 34, shutter: '#495f6e', flowers: true });
+    drawWindow(48, 168, { w: 24, h: 34, shutter: '#495f6e', flowers: false });
+    drawWindow(208, 168, { w: 24, h: 34, shutter: '#495f6e', flowers: false });
+    // Arched/framed village front door with stone steps
+    ctx.fillStyle = '#5c3b20';
+    ctx.fillRect(113, 158, 30, 68);
+    ctx.strokeStyle = '#ebe4d6';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(113, 158, 30, 68);
+    ctx.fillStyle = '#324858';
+    ctx.fillRect(119, 165, 18, 14);
   }
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createSolarPanelTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#0e1d3b';
+  ctx.fillRect(0, 0, 256, 256);
+  // Crisp deep-navy silicon PV cell grid with fine silver busbars
+  for (let y = 0; y < 256; y += 32) {
+    for (let x = 0; x < 256; x += 32) {
+      const shade = ((x + y) / 32) % 2 === 0 ? '#12264d' : '#0c1b36';
+      ctx.fillStyle = shade;
+      ctx.fillRect(x + 2, y + 2, 28, 28);
+    }
+  }
+  ctx.strokeStyle = 'rgba(218, 232, 248, 0.72)';
+  ctx.lineWidth = 2.4;
+  for (let i = 0; i <= 256; i += 64) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 256);
+    ctx.moveTo(0, i);
+    ctx.lineTo(256, i);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(180, 206, 232, 0.32)';
+  ctx.lineWidth = 1.2;
+  for (let i = 32; i < 256; i += 64) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 256);
+    ctx.moveTo(0, i);
+    ctx.lineTo(256, i);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
   return tex;
 }
 
@@ -808,53 +961,91 @@ export class RealMuensingWorld {
    */
   private buildRealBavarianBuildings(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
     const materials: THREE.MeshStandardMaterial[] = [
-      // 0: Einfirsthof (white plaster lower + rich dark brown timber upper + wooden balcony & geraniums)
+      // 0: Einfirsthof A (cream render lower + horizontal dark weathered larch upper)
       new THREE.MeshStandardMaterial({
         map: createBavarianArchetypeTexture('einfirsthof'),
         vertexColors: true,
         roughness: 0.86,
         metalness: 0.02
       }),
-      // 1: Traditional Bavarian village house (warm cream/ochre render + shutters + painted Alpine trim)
+      // 1: Einfirsthof B (warm sand render lower + vertical weathered larch upper + brown shutters)
+      new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('einfirsthof_b'),
+        vertexColors: true,
+        roughness: 0.87,
+        metalness: 0.02
+      }),
+      // 2: Lüftlmalerei Bavarian House (ornamental painted Baroque fresco window frames & frieze)
+      new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('lueftlmalerei'),
+        vertexColors: true,
+        roughness: 0.84,
+        metalness: 0.02
+      }),
+      // 3: Timber-Clad Alpine Chalet / Bauernhaus (full horizontal wood cladding)
+      new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('timber'),
+        vertexColors: true,
+        roughness: 0.89,
+        metalness: 0.02
+      }),
+      // 4: Traditional Pastel Bavarian Village House (varied cream/yellow/peach/sage render + blue-grey shutters & front door)
       new THREE.MeshStandardMaterial({
         map: createBavarianArchetypeTexture('landhaus'),
         vertexColors: true,
         roughness: 0.84,
         metalness: 0.02
       }),
-      // 2: Timber barn / Stadl (dark weathered vertical boards + X-braced sliding barn doors)
+      // 5: Dark Weathered Vertical Timber Barn / Stadl + stone foundation
       new THREE.MeshStandardMaterial({
         map: createBavarianArchetypeTexture('barn'),
         vertexColors: true,
         roughness: 0.92,
         metalness: 0.02
       }),
-      // 3: Modern agricultural machine hall / cattle shed (ribbed steel cladding + daylight strip)
+      // 6: Modern Agricultural Machine Hall / Cattle Shed (ribbed steel cladding + skylight strip)
       new THREE.MeshStandardMaterial({
         map: createBavarianArchetypeTexture('machine_hall'),
         vertexColors: true,
         roughness: 0.62,
         metalness: 0.25
       }),
-      // 4: Newer detached home / garage (clean render + dark anthracite frames)
+      // 7: Newer Contemporary Detached Home (clean render + modern anthracite windows + larch wood accent)
       new THREE.MeshStandardMaterial({
         map: createBavarianArchetypeTexture('detached'),
         vertexColors: true,
         roughness: 0.84,
         metalness: 0.03
       }),
-      // 5: ALL LoD2 Roofs — neutral tile relief multiplied by each building's REAL DOP20-sampled RGB roof color!
+      // 8: ALL Overhanging LoD2 Roofs — clay tile relief multiplied by each building's REAL DOP20-sampled RGB roof color!
       new THREE.MeshStandardMaterial({
         map: createNeutralRoofTileTexture(),
         vertexColors: true,
         roughness: 0.78,
         metalness: 0.06,
         side: THREE.DoubleSide
+      }),
+      // 9: 3D Architectural Trim (projecting balconies, geranium boxes, chimneys, barn doors, overhanging roof fascia!)
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.86,
+        metalness: 0.04
+      }),
+      // 10: 3D Rooftop Solar Panel Arrays (deep glossy navy photovoltaic cell grid!)
+      new THREE.MeshStandardMaterial({
+        map: createSolarPanelTexture(),
+        vertexColors: true,
+        roughness: 0.28,
+        metalness: 0.22
       })
     ];
 
-    fetch('./map/lod2_buildings.bin')
-      .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(`HTTP ${res.status}`))))
+    fetch('./map/lod2_buildings.zbin')
+      .then((res) => {
+        if (!res.ok || !res.body) return Promise.reject(new Error(`HTTP ${res.status}`));
+        const ds = new DecompressionStream('gzip');
+        return new Response(res.body.pipeThrough(ds)).arrayBuffer();
+      })
       .then((buf) => {
         const dv = new DataView(buf);
         const magic =

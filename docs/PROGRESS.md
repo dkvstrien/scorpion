@@ -293,3 +293,34 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 
 ### Honest Scores Before → After
 `3/3/2/3/2/3/3/3/3/2` → `3/3/2/3/2/3/3/3/3/3` (Stability 2→3; Fixes #1–#4 all complete).
+
+---
+
+## Iteration 13 — Fix #5 (Part 1): Varied Bavarian Architecture & 3D LoD2 Building Details (2026-11-24)
+
+**Goal**: Break the "boxes with identical painted windows" look across all 1,690 real Bavaria LoD2 buildings by generating true 3D roof overhangs & timber fascia, 3D projecting balconies with geranium boxes, 3D chimneys, 3D rooftop solar panels, 3D framed barn doors, and 8 distinct 512×512 Bavarian facade textures (including Lüftlmalerei, varied wood cladding, pastel village render, barns, machine halls, and contemporary detached homes) — while keeping `public/map/` lean.
+
+### Changes Made
+- Upgraded [scripts/compile-lod2-bavaria.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/compile-lod2-bavaria.mjs) to compile all `1,690` LoD2 buildings into 11 merged draw calls with real 3D geometry derived directly from the LoD2 footprints and roof polygons:
+  - **3D Roof Overhangs & Dark-Timber Fascia** on all gable, hip, and shed roofs (preserving watertight ridge vertices).
+  - **333 real 3D projecting Bavarian wooden balconies** with red/pink geranium flower boxes.
+  - **446 real 3D brick & stucco chimneys** with slate caps.
+  - **133 real 3D rooftop PV solar panel arrays** cleanly inset on sunny sloped roofs.
+  - **414 real 3D framed double wooden barn doors** on timber barns & agricultural Einfirsthöfe.
+  - Per-building UV phase offsets and pastel/timber color tints so adjacent neighbors never repeat identically.
+  - Compressed output to `public/map/lod2_buildings.zbin` (**`2.0 MB`** gzipped, decompressed natively via `DecompressionStream('gzip')`), reducing total `public/map/` from `6.7 MB` down to **`4.1 MB`**!
+- Upgraded [src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts) with 8 crisp `512×512` architectural facade styles (Einfirsthof A/B, Lüftlmalerei Baroque painted trim, Timber Chalet, Pastel Village House with blue-grey shutters & doors, Weathered Timber Barn with fieldstone base, Ribbed Steel Machine Hall, Contemporary Detached Home with larch accent) plus glossy navy PV solar panel texture & trim material.
+
+### Verification & Weakest Things Observed (`.scratch/loop/13/`)
+- `npx tsc --noEmit && npm run build`: pass (`0` errors). `agweb console error`: `0` console errors. `public/map` = **`4.1 MB`**.
+- Screenshots inspected:
+  - `.scratch/loop/13/03_home_farm.png`: Real Wimpasing farmhouse now shows Lüftlmalerei window pediments + timber overhang fascia; 27×15 m Einfirsthof shows 3D barn doors + chimney + horizontal wood cladding; 31×23 m house shows 3D side balcony with geraniums + brick chimney.
+  - `.scratch/loop/13/06_weipertshausen.png`: Huge leap in architectural richness — warm timber chalet with projecting balcony + geraniums + chimney, Einfirsthof with vertical timber & 3D barn doors, distant roof with solar panel & brick chimney.
+  - `.scratch/loop/13/01_muensing_church.png`, `.scratch/loop/13/02_zum_altwirt.png`, `.scratch/loop/13/04_ammerland_street.png`: Distinct balconies, overhangs, chimneys, varied window/shutter styles across every village.
+- **Weakest things still visible** (targeted in Iter 14 next!):
+  1. Hero landmark St. Mariä Himmelfahrt in `01_muensing_church.png` still reads as a stark plain white box with a flat brown rectangle door.
+  2. Giant low-poly mountain cones in `04_ammerland_street.png` look like toy pyramids behind Ammerland.
+  3. Foreground destructible chestnut trees in `02_zum_altwirt.png` & `04_ammerland_schloss.png` read as single smooth green lollipop spheres.
+
+### Honest Scores Before → After
+`3/3/2/3/2/3/3/3/3/3` → `3/3/3/3/2/3/3/3/3/3` (World: recognisable 2→3; Look solid 2, pushing to honest 3 in Iter 14).
