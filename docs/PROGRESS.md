@@ -611,3 +611,22 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 - `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `du -sh public/`: **`6.8M`**.
 - Verified live in `agweb`: `samplesLoaded: 15` (`loopSamplesLoaded: 6`, `sfxSamplesLoaded: 9`), `sampleRateHz: 44100`, `ctxState: "running"`, responsive live RPM/load/hydraulic/surface telemetry (`rpmNorm: 0.753`, `engineLoad: 1`, `idleRate: 1.392`, `loadRate: 1.377`, `hydroRate: 1.21`, `surfaceGains.gravel: 0.129`) with `0` console errors.
 - Screenshots inspected: `.scratch/loop/24/01_credits_audio.png` (Credits & Data tab with full audio attributions) and `.scratch/loop/24/02_audio_live.png` (live horn + driving + hydraulic lift).
+
+---
+
+## Iteration 25 — Round 3: Off-Road World Density (East Slopes & Old Farmstead) & Organic Hedgerows/Crops (2026-11-24)
+
+**Goal**: Address both World Density items from `.scratch/grades/round-2.md`: bring the meadows east of `x ≈ 600` (`31-long-drive.png`) and the open fields around the Old Farmstead (`21-demo-after.png`) up to the same visual density as Münsinger Straße (field boundaries, fences & trees along farm tracks, wayside crosses, hay huts, feeding racks + cattle, bale/cordwood clusters), and replace uniform boxy hedgerows & crop blocks with multi-height organic hedgerows interspersed with trees and leafy crossed-card crops.
+
+### Changes Made
+- Upgraded [src/worldDetails.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/worldDetails.ts):
+  - **Trackside fences & trees**: Extended pasture fence generation to cover rural OSM `track` roads (plus explicit field-boundary fences across eastern slopes `x = 600..1240` and Old Farmstead pastures outside the 38 m demo buffer) and added irregular trackside broadleaf oaks/birches and alpine spruces along unpaved tracks.
+  - **Dense off-road rural landmarks**: Added 12 new field-boundary hedgerows, 9 new Bavarian `Heustadl` hay huts, 10 new cattle feeding racks (`Heuraufen`) with water troughs and grazing Fleckvieh herds, 10 new wayside crosses (`Marterl`), 6 parked vintage tractors/wagons, 10 field bale pyramids/cordwood piles, and cultivated wheat & maize strips across the eastern slopes (`x > 600`) and Old Farmstead surroundings.
+  - **Natural hedgerows & leafy crops**: Rebuilt hedgerows with wide height variation (`0.52–3.4 m`), organic lateral jitter, occasional field gaps, multi-tone green palette, and interspersed multi-lobe hedgerow oak/birch/spruce trees (batched in lightweight `InstancedMesh`es). Replaced boxy `BoxGeometry` maize/wheat blocks with alpha-cutout crossed-card leafy cornstalks (with arching leaves & golden tassels) and nodding golden wheat stalks.
+
+### Verification & Screenshots (`.scratch/loop/25/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Screenshots inspected:
+  - `.scratch/loop/25/01_east_slopes_longdrive.png` & `02_east_slopes_north.png`: eastern slopes now framed by leafy maize with golden tassels, pasture fences, wayside crosses, hay huts, Fleckvieh cattle, and varied-height hedgerows with oak & spruce trees.
+  - `.scratch/loop/25/03_old_farmstead_surroundings.png` & `04_old_farmstead_east.png`: surrounding Old Farmstead meadows populated with trackside fences, trees, hay huts, wayside crosses, and field bale stacks while keeping the demolition pad completely clear.
+  - `.scratch/loop/25/05_open_country_check.png`: Münsinger Straße intact with natural golden wheat stalks and zero regressions.
