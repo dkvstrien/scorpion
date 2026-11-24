@@ -144,6 +144,21 @@
               <div class="delivery-hint">Follow the green GPS beacon on the mini-map.</div>
             </div>
 
+            <div id="daily-orders-block" class="daily-orders-mini">
+              <div class="daily-orders-mini-head">
+                <span>Village Daily Orders</span>
+                <span id="daily-orders-count">0 filled</span>
+              </div>
+              <div class="daily-order-line">
+                <span id="ried-order-text">Ried Co-op: 2 Dry Hay Bales (0/2)</span>
+                <strong id="ried-order-pay">+€680</strong>
+              </div>
+              <div class="daily-order-line">
+                <span id="edeka-order-text">EDEKA Market: 2 Produce Pallets (0/2)</span>
+                <strong id="edeka-order-pay">+€840</strong>
+              </div>
+            </div>
+
             <div class="damage-row">
               <span>Damaged: <strong id="damaged-val" class="ok">0</strong></span>
               <span>Rollovers: <strong id="rollover-val">0</strong></span>
@@ -338,6 +353,22 @@
               <div class="btn-row">
                 <button id="btn-career-tp-ried" class="hud-btn small-btn">Ried Co-op</button>
                 <button id="btn-career-tp-edeka" class="hud-btn small-btn">EDEKA Market</button>
+              </div>
+            </div>
+            <div class="career-ledger-wrap">
+              <div class="ledger-box">
+                <div class="ledger-title">
+                  <span>Career Goals</span>
+                  <span id="career-goals-summary">0/5</span>
+                </div>
+                <div id="career-goals-list" class="ledger-list"></div>
+              </div>
+              <div class="ledger-box">
+                <div class="ledger-title">
+                  <span>Earnings History</span>
+                  <span id="career-total-earned">Total: €0</span>
+                </div>
+                <div id="career-earnings-list" class="ledger-list"></div>
               </div>
             </div>
           </div>

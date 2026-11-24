@@ -91,8 +91,124 @@ export interface BavarianContract {
   pickupSpawn?: { x: number; z: number; kind: PropKind; count: number };
 }
 
+export interface EarningsEntry {
+  label: string;
+  amountEUR: number;
+}
+
+export interface VillageDailyOrder {
+  depot: 'ried' | 'edeka';
+  depotName: string;
+  title: string;
+  itemLabel: string;
+  kinds: PropKind[];
+  needed: number;
+  bonusEUR: number;
+}
+
+export const RIED_DAILY_ORDERS: VillageDailyOrder[] = [
+  {
+    depot: 'ried',
+    depotName: 'Ried Co-op',
+    title: 'Dry Meadow Hay Delivery',
+    itemLabel: 'Dry Hay Bales',
+    kinds: ['hay_round', 'hay_square'],
+    needed: 2,
+    bonusEUR: 680
+  },
+  {
+    depot: 'ried',
+    depotName: 'Ried Co-op',
+    title: 'Sealed Silage Co-op Order',
+    itemLabel: 'Sealed Silage Bales',
+    kinds: ['silage_wrapped'],
+    needed: 2,
+    bonusEUR: 820
+  },
+  {
+    depot: 'ried',
+    depotName: 'Ried Co-op',
+    title: 'Timber Yard Sawlogs',
+    itemLabel: 'Pine Logs',
+    kinds: ['log'],
+    needed: 2,
+    bonusEUR: 760
+  }
+];
+
+export const EDEKA_DAILY_ORDERS: VillageDailyOrder[] = [
+  {
+    depot: 'edeka',
+    depotName: 'EDEKA Market',
+    title: 'Fresh Produce Pallet Restock',
+    itemLabel: 'Produce Pallets',
+    kinds: ['crate'],
+    needed: 2,
+    bonusEUR: 840
+  },
+  {
+    depot: 'edeka',
+    depotName: 'EDEKA Market',
+    title: 'Bavarian Harvest Pumpkins',
+    itemLabel: 'Intact Pumpkins',
+    kinds: ['pumpkin'],
+    needed: 3,
+    bonusEUR: 640
+  },
+  {
+    depot: 'edeka',
+    depotName: 'EDEKA Market',
+    title: 'Express Market Pallet Run',
+    itemLabel: 'Produce Pallet',
+    kinds: ['crate'],
+    needed: 1,
+    bonusEUR: 490
+  }
+];
+
+export interface CareerGoal {
+  id: string;
+  title: string;
+  done: (c: CareerStats) => boolean;
+  progressText: (c: CareerStats) => string;
+}
+
+export const CAREER_GOALS: CareerGoal[] = [
+  {
+    id: 'first_job',
+    title: 'Complete your first Bavarian contract',
+    done: (c) => c.completedIds.length >= 1,
+    progressText: (c) => `${Math.min(1, c.completedIds.length)}/1`
+  },
+  {
+    id: 'daily_supplier',
+    title: 'Fill 2 rotating village daily orders (Ried or EDEKA)',
+    done: (c) => c.dailyOrdersCompleted >= 2,
+    progressText: (c) => `${Math.min(2, c.dailyOrdersCompleted)}/2`
+  },
+  {
+    id: 'full_rack',
+    title: 'Unlock all 5 Quick-Hitch attachments',
+    done: (c) => c.unlockedTools.length >= 5,
+    progressText: (c) => `${c.unlockedTools.length}/5`
+  },
+  {
+    id: 'machine_upgrades',
+    title: 'Install 2 Scorpion 741 Workshop upgrades',
+    done: (c) => c.unlockedUpgrades.length >= 2,
+    progressText: (c) => `${Math.min(2, c.unlockedUpgrades.length)}/2`
+  },
+  {
+    id: 'master_contractor',
+    title: 'Earn €8,000 lifetime contracting revenue',
+    done: (c) => c.totalEarnedEUR >= 8000,
+    progressText: (c) => `€${Math.min(8000, c.totalEarnedEUR).toLocaleString()}/€8,000`
+  }
+];
+
 export interface CareerStats {
   bankEUR: number;
+  totalEarnedEUR: number;
   completedIds: string[];
   bestStars: Record<string, number>;
   totalKm: number;
@@ -100,6 +216,12 @@ export interface CareerStats {
   unlockedTools: UnlockableTool[];
   unlockedUpgrades: UpgradeId[];
   directSalesCount: number;
+  dailyOrdersCompleted: number;
+  riedOrderIdx: number;
+  riedOrderProgress: number;
+  edekaOrderIdx: number;
+  edekaOrderProgress: number;
+  earningsLog: EarningsEntry[];
 }
 
 const SAVE_KEY = 'openworld_scorpion_741_career_v1';
@@ -317,13 +439,20 @@ export const BAVARIAN_CONTRACTS: BavarianContract[] = [
 export function defaultCareerStats(): CareerStats {
   return {
     bankEUR: 500,
+    totalEarnedEUR: 0,
     completedIds: [],
     bestStars: {},
     totalKm: 0,
     rollovers: 0,
     unlockedTools: [...STARTER_TOOLS],
     unlockedUpgrades: [],
-    directSalesCount: 0
+    directSalesCount: 0,
+    dailyOrdersCompleted: 0,
+    riedOrderIdx: 0,
+    riedOrderProgress: 0,
+    edekaOrderIdx: 0,
+    edekaOrderProgress: 0,
+    earningsLog: []
   };
 }
 
@@ -338,13 +467,20 @@ export function loadCareer(): CareerStats {
       }
       return {
         bankEUR: parsed.bankEUR ?? 500,
+        totalEarnedEUR: parsed.totalEarnedEUR ?? Math.max(0, (parsed.bankEUR ?? 500) - 500),
         completedIds: Array.isArray(parsed.completedIds) ? parsed.completedIds : [],
         bestStars: parsed.bestStars && typeof parsed.bestStars === 'object' ? parsed.bestStars : {},
         totalKm: parsed.totalKm ?? 0,
         rollovers: parsed.rollovers ?? 0,
         unlockedTools: tools,
         unlockedUpgrades: Array.isArray(parsed.unlockedUpgrades) ? parsed.unlockedUpgrades : [],
-        directSalesCount: parsed.directSalesCount ?? 0
+        directSalesCount: parsed.directSalesCount ?? 0,
+        dailyOrdersCompleted: parsed.dailyOrdersCompleted ?? 0,
+        riedOrderIdx: parsed.riedOrderIdx ?? 0,
+        riedOrderProgress: parsed.riedOrderProgress ?? 0,
+        edekaOrderIdx: parsed.edekaOrderIdx ?? 0,
+        edekaOrderProgress: parsed.edekaOrderProgress ?? 0,
+        earningsLog: Array.isArray(parsed.earningsLog) ? parsed.earningsLog.slice(0, 12) : []
       };
     }
   } catch {

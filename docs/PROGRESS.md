@@ -661,3 +661,21 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
   - `.scratch/loop/26/05_sebald_pier_planks.png`: weathered transverse plank deck, raised timber curbs, bollards, cleats, and bench at pier end.
   - `.scratch/loop/26/06_camera_roof_collision.png`: parked directly under the Home Farm Tool Shed canopy with zero corrugated roof blocking the view.
   - `.scratch/loop/26/07_east_slopes_crisp_ground.png`: crisp green meadow slopes east of `x ≈ 600` with zero muddy brown smear.
+
+---
+
+## Iteration 27 — Round 3: Rotating Village Daily Orders (Ried & EDEKA) and Career Goals & Earnings Ledger (2026-11-24)
+
+**Goal**: Address the Content item from `.scratch/grades/round-2.md` by giving villages a repeatable reason to return (rotating daily orders at Ried Co-op and EDEKA Market) and displaying Career Goals and Earnings History cleanly in the Workshop.
+
+### Changes Made
+- Extended [src/contracts.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/contracts.ts) with rotating `RIED_DAILY_ORDERS` (3 orders: Dry Hay Bales, Sealed Silage Bales, Pine Logs) and `EDEKA_DAILY_ORDERS` (3 orders: Produce Pallets, Harvest Pumpkins, Express Pallet Run), 5 trackable `CAREER_GOALS` milestones, and persistent `totalEarnedEUR`, `dailyOrdersCompleted`, active order indices/progress, and `earningsLog` in `CareerStats`.
+- Updated [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css), and [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts):
+  - Added a compact **Village Daily Orders** tracker inside the expanded Jobs drawer (`#daily-orders-block`) showing today's active Ried Co-op and EDEKA Market requests, live progress, and bonus payouts; completing an order awards the bonus payout, logs it, and automatically rotates to the next order.
+  - Added **Career Goals (`X/5`)** and **Earnings History** ledger panels cleanly inside the Workshop modal (`[B]` / `Esc` → Workshop), recording every contract payout, village daily order bonus, direct sale, and yard tidy bonus via `recordEarning`.
+
+### Verification & Screenshots (`.scratch/loop/27/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Screenshots inspected:
+  - `.scratch/loop/27/01_jobs_daily_orders.png`: expanded Jobs drawer showing clean Village Daily Orders for Ried Co-op and EDEKA Market with zero truncation.
+  - `.scratch/loop/27/02_workshop_goals_ledger.png`: Workshop modal cleanly fitting all 5 attachments, 4 upgrades, all 5 Career Goals, and the Earnings History ledger inside `1280×720`.

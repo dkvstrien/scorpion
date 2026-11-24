@@ -1487,15 +1487,15 @@ kbd {
 }
 .workshop-section-title {
   font-family: 'Fredoka', sans-serif;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--claas-green);
-  margin: 6px 0 4px;
+  margin: 4px 0 3px;
   letter-spacing: 0.02em;
 }
 .workshop-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 5px;
 }
 .workshop-item {
   display: flex;
@@ -1505,7 +1505,7 @@ kbd {
   background: rgba(255, 255, 255, 0.055);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 9px;
-  padding: 6px 9px;
+  padding: 4px 8px;
 }
 .workshop-item.owned {
   border-color: rgba(159, 211, 46, 0.4);
@@ -1545,6 +1545,81 @@ kbd {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+.daily-orders-mini {
+  margin-top: 7px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  background: rgba(159, 211, 46, 0.08);
+  border: 1px solid rgba(159, 211, 46, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.daily-orders-mini-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.67rem;
+  font-weight: 800;
+  color: var(--claas-green);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.daily-order-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  color: #e4eee4;
+}
+.daily-order-line strong {
+  color: #d8ff7a;
+  white-space: nowrap;
+}
+.career-ledger-wrap {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ledger-box {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  padding: 6px 8px;
+}
+.ledger-title {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 0.74rem;
+  color: var(--claas-green);
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+}
+.ledger-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 118px;
+  overflow-y: auto;
+}
+.ledger-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.65rem;
+  color: #d7e4d8;
+}
+.ledger-row.done {
+  color: #b7ef5a;
+}
+.ledger-row strong {
+  color: #e9ff9b;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {

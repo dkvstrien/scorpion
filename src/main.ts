@@ -33,13 +33,16 @@ import {
 } from './terrain';
 import {
   BAVARIAN_CONTRACTS,
+  CAREER_GOALS,
   CareerStats,
   ContractId,
   createGuideArrow,
   createWaypointBeacon,
   defaultCareerStats,
+  EDEKA_DAILY_ORDERS,
   loadCareer,
   positionWaypointBeacon,
+  RIED_DAILY_ORDERS,
   saveCareer,
   UnlockableTool,
   UpgradeId,
@@ -874,6 +877,52 @@ class ScorpionGame {
         upGrid.appendChild(card);
       }
     }
+
+    // Populate Career Goals & Earnings History Ledger inside Workshop!
+    const goalsDone = CAREER_GOALS.filter((g) => g.done(this.career)).length;
+    const goalsSumEl = document.getElementById('career-goals-summary');
+    if (goalsSumEl) goalsSumEl.textContent = `${goalsDone}/${CAREER_GOALS.length}`;
+    const goalsList = document.getElementById('career-goals-list');
+    if (goalsList) {
+      goalsList.innerHTML = '';
+      for (const g of CAREER_GOALS) {
+        const done = g.done(this.career);
+        const row = document.createElement('div');
+        row.className = `ledger-row${done ? ' done' : ''}`;
+        row.innerHTML = `<span>${done ? '✓' : '○'} ${g.title}</span><strong>${g.progressText(this.career)}</strong>`;
+        goalsList.appendChild(row);
+      }
+    }
+    const earnedEl = document.getElementById('career-total-earned');
+    if (earnedEl) earnedEl.textContent = `Total: €${this.career.totalEarnedEUR.toLocaleString()}`;
+    const earnList = document.getElementById('career-earnings-list');
+    if (earnList) {
+      earnList.innerHTML = '';
+      if (this.career.earningsLog.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'ledger-row';
+        empty.innerHTML = '<span>Complete jobs or village orders to log payouts</span><strong>€0</strong>';
+        earnList.appendChild(empty);
+      } else {
+        for (const e of this.career.earningsLog) {
+          const row = document.createElement('div');
+          row.className = 'ledger-row';
+          row.innerHTML = `<span>${e.label}</span><strong>+€${e.amountEUR.toLocaleString()}</strong>`;
+          earnList.appendChild(row);
+        }
+      }
+    }
+  }
+
+  private recordEarning(label: string, amountEUR: number): void {
+    this.career.bankEUR += amountEUR;
+    this.career.totalEarnedEUR += amountEUR;
+    this.career.earningsLog.unshift({ label, amountEUR });
+    if (this.career.earningsLog.length > 10) {
+      this.career.earningsLog.length = 10;
+    }
+    saveCareer(this.career);
+    this.refreshCareerUI();
   }
 
   private setPaused(next: boolean, tab?: 'settings' | 'workshop' | 'controls' | 'credits'): void {
@@ -903,6 +952,20 @@ class ScorpionGame {
     const kmStr = `${this.career.totalKm.toFixed(1)} km`;
     this.odoEl.textContent = kmStr;
     this.freeplayOdoEl.textContent = kmStr;
+
+    const depotBonus = this.career.unlockedUpgrades.includes('regional_depots') ? 1.25 : 1.0;
+    const riedOrd = RIED_DAILY_ORDERS[this.career.riedOrderIdx % RIED_DAILY_ORDERS.length];
+    const edekaOrd = EDEKA_DAILY_ORDERS[this.career.edekaOrderIdx % EDEKA_DAILY_ORDERS.length];
+    const cntEl = document.getElementById('daily-orders-count');
+    if (cntEl) cntEl.textContent = `${this.career.dailyOrdersCompleted} filled`;
+    const rText = document.getElementById('ried-order-text');
+    if (rText) rText.textContent = `Ried Co-op: ${riedOrd.needed} ${riedOrd.itemLabel} (${this.career.riedOrderProgress}/${riedOrd.needed})`;
+    const rPay = document.getElementById('ried-order-pay');
+    if (rPay) rPay.textContent = `+€${Math.round(riedOrd.bonusEUR * depotBonus)}`;
+    const eText = document.getElementById('edeka-order-text');
+    if (eText) eText.textContent = `EDEKA Market: ${edekaOrd.needed} ${edekaOrd.itemLabel} (${this.career.edekaOrderProgress}/${edekaOrd.needed})`;
+    const ePay = document.getElementById('edeka-order-pay');
+    if (ePay) ePay.textContent = `+€${Math.round(edekaOrd.bonusEUR * depotBonus)}`;
   }
 
   private applyTimeOfDay(tod: TimeOfDay): void {
@@ -1104,14 +1167,13 @@ class ScorpionGame {
           ? 2
           : 1;
     const bonus = stars === 3 ? 300 : stars === 2 ? 100 : 0;
-    this.career.bankEUR += c.payoutEUR + bonus;
+    const totalPay = c.payoutEUR + bonus;
     if (!this.career.completedIds.includes(contractId)) {
       this.career.completedIds.push(contractId);
     }
     this.career.bestStars[contractId] = Math.max(this.career.bestStars[contractId] ?? 0, stars);
-    saveCareer(this.career);
+    this.recordEarning(c.shortTitle, totalPay);
     this.populateContractsUI();
-    this.refreshCareerUI();
 
     const mins = Math.floor(this.jobElapsedSec / 60);
     const secs = String(Math.floor(this.jobElapsedSec % 60)).padStart(2, '0');
@@ -1730,13 +1792,29 @@ class ScorpionGame {
         ) {
           p.depotSold = true;
           const payout = Math.round(240 * depotBonus);
-          this.career.bankEUR += payout;
           this.career.directSalesCount++;
-          saveCareer(this.career);
-          this.refreshCareerUI();
+          this.recordEarning(`Ried: ${p.label}`, payout);
+          const riedOrder = RIED_DAILY_ORDERS[this.career.riedOrderIdx % RIED_DAILY_ORDERS.length];
+          let orderToast = `Ried Co-op bought ${p.label}: +€${payout}`;
+          if (riedOrder.kinds.includes(p.kind)) {
+            this.career.riedOrderProgress++;
+            if (this.career.riedOrderProgress >= riedOrder.needed) {
+              const ordBonus = Math.round(riedOrder.bonusEUR * depotBonus);
+              this.career.dailyOrdersCompleted++;
+              this.career.riedOrderProgress = 0;
+              this.career.riedOrderIdx = (this.career.riedOrderIdx + 1) % RIED_DAILY_ORDERS.length;
+              this.recordEarning(`Ried Daily Order`, ordBonus);
+              const nextOrder = RIED_DAILY_ORDERS[this.career.riedOrderIdx];
+              orderToast = `Ried Daily Order Complete! +€${payout + ordBonus} · Next: ${nextOrder.needed} ${nextOrder.itemLabel}`;
+            } else {
+              saveCareer(this.career);
+              this.refreshCareerUI();
+              orderToast = `Ried Co-op +€${payout} · Daily Order (${this.career.riedOrderProgress}/${riedOrder.needed})`;
+            }
+          }
           this.audio.playScoreChime(true);
           this.particles.spawnConfetti(new THREE.Vector3(p.body.position.x, p.body.position.y + 0.8, p.body.position.z));
-          this.showToast(`Lagerhaus Ried bought ${p.label}: +€${payout}`, 'trick');
+          this.showToast(orderToast, 'trick');
           if (p.isRegional) soldThisFrame.push(p);
         }
 
@@ -1757,13 +1835,29 @@ class ScorpionGame {
           p.depotSold = true;
           const base = p.kind === 'crate' ? 260 : 140;
           const payout = Math.round(base * depotBonus);
-          this.career.bankEUR += payout;
           this.career.directSalesCount++;
-          saveCareer(this.career);
-          this.refreshCareerUI();
+          this.recordEarning(`EDEKA: ${p.label}`, payout);
+          const edekaOrder = EDEKA_DAILY_ORDERS[this.career.edekaOrderIdx % EDEKA_DAILY_ORDERS.length];
+          let orderToast = `EDEKA Market bought ${p.label}: +€${payout}`;
+          if (edekaOrder.kinds.includes(p.kind)) {
+            this.career.edekaOrderProgress++;
+            if (this.career.edekaOrderProgress >= edekaOrder.needed) {
+              const ordBonus = Math.round(edekaOrder.bonusEUR * depotBonus);
+              this.career.dailyOrdersCompleted++;
+              this.career.edekaOrderProgress = 0;
+              this.career.edekaOrderIdx = (this.career.edekaOrderIdx + 1) % EDEKA_DAILY_ORDERS.length;
+              this.recordEarning(`EDEKA Daily Order`, ordBonus);
+              const nextOrder = EDEKA_DAILY_ORDERS[this.career.edekaOrderIdx];
+              orderToast = `EDEKA Daily Order Complete! +€${payout + ordBonus} · Next: ${nextOrder.needed} ${nextOrder.itemLabel}`;
+            } else {
+              saveCareer(this.career);
+              this.refreshCareerUI();
+              orderToast = `EDEKA Market +€${payout} · Daily Order (${this.career.edekaOrderProgress}/${edekaOrder.needed})`;
+            }
+          }
           this.audio.playScoreChime(true);
           this.particles.spawnConfetti(new THREE.Vector3(p.body.position.x, p.body.position.y + 0.8, p.body.position.z));
-          this.showToast(`EDEKA Market bought ${p.label}: +€${payout}`, 'trick');
+          this.showToast(orderToast, 'trick');
           if (p.isRegional) soldThisFrame.push(p);
         }
       }
@@ -1788,9 +1882,8 @@ class ScorpionGame {
           const pos = new THREE.Vector3(p.body.position.x, p.body.position.y + 0.7, p.body.position.z);
           this.particles.spawnConfetti(pos);
           this.audio.playScoreChime(p.isWrappedSilage && !p.isPopped);
-          this.career.bankEUR += p.isWrappedSilage && !p.isPopped ? 120 : 60;
-          saveCareer(this.career);
-          this.refreshCareerUI();
+          const tidyPay = p.isWrappedSilage && !p.isPopped ? 120 : 60;
+          this.recordEarning(`Yard: ${p.label}`, tidyPay);
           this.showToast(
             p.isWrappedSilage && !p.isPopped
               ? `SEALED SILAGE STORED! +€120`
@@ -1814,9 +1907,7 @@ class ScorpionGame {
             );
             if (restingOnProp) {
               p.stackAwarded = true;
-              this.career.bankEUR += 150;
-              saveCareer(this.career);
-              this.refreshCareerUI();
+              this.recordEarning('Clean Stack Bonus', 150);
               this.audio.playScoreChime(true);
               this.particles.spawnConfetti(new THREE.Vector3(p.body.position.x, p.body.position.y + 0.6, p.body.position.z));
               this.showToast(`CLEAN STACK BONUS! +€150`, 'trick');
@@ -2692,7 +2783,8 @@ class ScorpionGame {
         isTipped: this.tractor.isTipped,
         elevM: Math.round(getRealElevationMeters(this.tractor.position.x, this.tractor.position.z)),
         x: Math.round(this.tractor.position.x),
-        z: Math.round(this.tractor.position.z)
+        z: Math.round(this.tractor.position.z),
+        heading: +this.tractor.heading.toFixed(3)
       })
     };
   }
