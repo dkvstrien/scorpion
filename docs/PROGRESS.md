@@ -71,3 +71,28 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 `Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=1, Finish=1, Stability=2`
 
 **Next**: Iteration 5 — Priority C (Split visual mesh code out of `src/tractor.ts` into `src/scorpionModel.ts` and rebuild the 2022 CLAAS Scorpion 741 Varipower Platform 2 / K33 model accurately!).
+
+---
+
+## Iteration 5 — Priority C: Accurate 2022 CLAAS Scorpion 741 Varipower Model (`src/scorpionModel.ts`) (2026-11-24)
+
+**Goal**: Split all visual mesh code cleanly out of `src/tractor.ts` into `src/scorpionModel.ts` and rebuild the Scorpion 741 (Platform 2 / Type K33) to match the real machine without touching Priority B physics.
+
+### Changes Made
+- Created [src/scorpionModel.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/scorpionModel.ts) (`buildScorpion741Model`, `buildAttachmentMesh`) and removed ~480 lines of inline mesh construction from [src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts) while keeping every physics parameter & collider untouched.
+- Rebuilt the 2022 CLAAS Scorpion 741 Varipower (K33) details:
+  - Offset panoramic left cab with swept dark ROPS pillars, curved skylight, rear cab glass, windshield wiper blade, wing mirrors, interior joystick console, white roof with amber rotating beacon + **4 front AND 2 rear LED worklights**.
+  - Sloped CLAAS-green right engine hood with dark cooling louvres, curved exhaust stack + heat shield, and high-res **`CLAAS SCORPION 741 VARIPOWER`** side decals + **`SCORPION 741`** boom decal.
+  - Stepped charcoal chassis, left-side 2-step boarding stairs & hydraulic tank, sculpted rear counterweight with bold **`CLAAS`** badge, German **`TÖL SC741`** agricultural plate, red/amber LED taillights, and **rear automatic trailer hitch + 7-pin socket**.
+  - Low rear-pivoting telescopic boom alongside cab with dark wear-pad collar, **front boom wiper**, boom LED worklight, twin curved hoses, and **front 4-pin electrical socket** on boom head.
+  - Directional V-chevron lugged 460/70 R24 tires on CLAAS red-orange rims with 8 chrome lug bolts and steering-mounted front mudguards.
+
+### Verification & Evidence (`.scratch/loop/5/`)
+- `npx tsc --noEmit && npm run build`: clean pass (`0` errors).
+- Visual close-up inspection via `read_file`: `hero_front_right.png`, `hero_front_left.png`, `hero_rear.png`, `01_muensing_church.png` — proportions, livery, decals, hitch, worklights, and tires read clearly as a real CLAAS Scorpion 741.
+- Performance & Regression Check: `01_muensing_church` **`60 fps`**, `0` console errors; 25 km/h empty boom-down full-lock turn regression **`4/4` tires, `1°` max roll**.
+
+### Scorecard Update
+`Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=1, Finish=1, Stability=2`
+
+**Next**: Iteration 6 — Priority D (Core gameplay loop: 10 varied repeatable 3–5 min Bavarian contracting jobs across every village with star ratings & cargo spawning).

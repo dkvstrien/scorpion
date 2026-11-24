@@ -1408,6 +1408,12 @@ class ScorpionGame {
         this.tractor.teleportTo(x, z, heading);
         this.snapCameraToTractor();
       },
+      setCameraOrbit: (yawOff: number, pitch: number, dist: number) => {
+        this.camYawOffset = yawOff;
+        this.camPitch = pitch;
+        this.camDist = dist;
+        this.snapCameraToTractor();
+      },
       loadHeavySilage: () => {
         // Pick up a wrapped silage bale + a second heavy bale/crate onto the forks/grabber for real load-moment testing
         this.tractor.freePlayMode = true;
