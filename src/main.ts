@@ -449,12 +449,15 @@ class ScorpionGame {
         this.showToast(`LAUNCHED ${label}! (${Math.round(speed * 2.2)} mph)`, 'trick');
       },
       onPropGrabbed: (label, _tool, isSilageIntact) => {
-        this.audio.playHitch(true);
+        this.audio.playGrab(true);
         if (isSilageIntact) {
           this.showToast('Gentle Silage Grip — Plastic Sealed!');
         } else {
           this.showToast(`Loaded: ${label} — Watch Tip-O-Meter!`);
         }
+      },
+      onPropReleased: () => {
+        this.audio.playGrab(false);
       },
       onWrongTool: (message) => {
         this.audio.playImpact(4, 'metal');

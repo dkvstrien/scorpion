@@ -5,6 +5,9 @@ export interface AudioTelemetry {
   enabled: boolean;
   ctxState: string;
   samplesLoaded: number;
+  loopSamplesLoaded: number;
+  sfxSamplesLoaded: number;
+  sampleRateHz: number;
   sampleNames: string[];
   surface: SurfaceType;
   rpmNorm: number;
@@ -15,7 +18,7 @@ export interface AudioTelemetry {
   surfaceGains: { tarmac: number; gravel: number; grass: number };
 }
 
-type SampleKey =
+type LoopSampleKey =
   | 'diesel_idle'
   | 'diesel_load'
   | 'hydraulic_pump'
@@ -23,7 +26,18 @@ type SampleKey =
   | 'surface_gravel'
   | 'surface_grass';
 
-const SAMPLE_FILES: Record<SampleKey, string> = {
+type SfxSampleKey =
+  | 'impact_wood'
+  | 'impact_metal'
+  | 'impact_hay'
+  | 'crush_wood'
+  | 'crush_metal'
+  | 'grab_clamp'
+  | 'hitch_lock'
+  | 'horn'
+  | 'church_bell';
+
+const LOOP_SAMPLE_FILES: Record<LoopSampleKey, string> = {
   diesel_idle: './audio/diesel_idle.wav',
   diesel_load: './audio/diesel_load.wav',
   hydraulic_pump: './audio/hydraulic_pump.wav',
@@ -32,11 +46,23 @@ const SAMPLE_FILES: Record<SampleKey, string> = {
   surface_grass: './audio/surface_grass.wav'
 };
 
+const SFX_SAMPLE_FILES: Record<SfxSampleKey, string> = {
+  impact_wood: './audio/impact_wood.mp3',
+  impact_metal: './audio/impact_metal.mp3',
+  impact_hay: './audio/impact_hay.mp3',
+  crush_wood: './audio/crush_wood.mp3',
+  crush_metal: './audio/crush_metal.mp3',
+  grab_clamp: './audio/grab_clamp.mp3',
+  hitch_lock: './audio/hitch_lock.mp3',
+  horn: './audio/horn.mp3',
+  church_bell: './audio/church_bell.mp3'
+};
+
 export class FarmAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
 
-  // Fallback low-level synth while WAV samples decode (~20-60ms)
+  // Fallback low-level synth while real recorded samples decode (~20-60ms)
   private engineOsc: OscillatorNode | null = null;
   private engineSub: OscillatorNode | null = null;
   private engineGain: GainNode | null = null;
@@ -48,8 +74,10 @@ export class FarmAudio {
   private hydroOsc: OscillatorNode | null = null;
   private hydroGain: GainNode | null = null;
 
-  // Layered sampled engine, hydraulic pump & surface tire-roll loops
-  private loadedSamples = new Set<SampleKey>();
+  // Layered real-recorded engine, hydraulic pump, surface tire-roll loops & one-shot SFX
+  private loadedLoops = new Set<LoopSampleKey>();
+  private sfxBuffers = new Map<SfxSampleKey, AudioBuffer>();
+  private sampleRateHz = 44100;
   private dieselIdleSrc: AudioBufferSourceNode | null = null;
   private dieselIdleGain: GainNode | null = null;
   private dieselIdleFilter: BiquadFilterNode | null = null;
@@ -89,6 +117,9 @@ export class FarmAudio {
     enabled: true,
     ctxState: 'uninitialized',
     samplesLoaded: 0,
+    loopSamplesLoaded: 0,
+    sfxSamplesLoaded: 0,
+    sampleRateHz: 44100,
     sampleNames: [],
     surface: 'gravel',
     rpmNorm: 0,
@@ -100,13 +131,17 @@ export class FarmAudio {
   };
 
   public getAudioState(): AudioTelemetry {
+    const names = [...Array.from(this.loadedLoops), ...Array.from(this.sfxBuffers.keys())].sort();
     return {
       ...this.telemetry,
       started: this.started,
       enabled: this.enabled,
       ctxState: this.ctx ? this.ctx.state : 'uninitialized',
-      samplesLoaded: this.loadedSamples.size,
-      sampleNames: Array.from(this.loadedSamples).sort(),
+      samplesLoaded: this.loadedLoops.size + this.sfxBuffers.size,
+      loopSamplesLoaded: this.loadedLoops.size,
+      sfxSamplesLoaded: this.sfxBuffers.size,
+      sampleRateHz: this.sampleRateHz,
+      sampleNames: names,
       surfaceGains: { ...this.telemetry.surfaceGains }
     };
   }
@@ -234,28 +269,69 @@ export class FarmAudio {
     master: GainNode,
     surfFilter: BiquadFilterNode
   ): Promise<void> {
-    const entries = Object.entries(SAMPLE_FILES) as [SampleKey, string][];
-    await Promise.all(
-      entries.map(async ([key, url]) => {
+    const loopEntries = Object.entries(LOOP_SAMPLE_FILES) as [LoopSampleKey, string][];
+    const sfxEntries = Object.entries(SFX_SAMPLE_FILES) as [SfxSampleKey, string][];
+
+    await Promise.all([
+      ...loopEntries.map(async ([key, url]) => {
         try {
           const res = await fetch(url);
           if (!res.ok) return;
           const arrayBuf = await res.arrayBuffer();
           const audioBuf = await ctx.decodeAudioData(arrayBuf.slice(0));
+          this.sampleRateHz = audioBuf.sampleRate;
           this.attachLoopSample(ctx, master, surfFilter, key, audioBuf);
-          this.loadedSamples.add(key);
+          this.loadedLoops.add(key);
         } catch {
           // Keep graceful fallback if a sample fails to fetch/decode
         }
+      }),
+      ...sfxEntries.map(async ([key, url]) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const arrayBuf = await res.arrayBuffer();
+          const audioBuf = await ctx.decodeAudioData(arrayBuf.slice(0));
+          this.sfxBuffers.set(key, audioBuf);
+        } catch {
+          // Keep graceful fallback if an SFX sample fails to fetch/decode
+        }
       })
-    );
+    ]);
+  }
+
+  private playSfxBuffer(
+    key: SfxSampleKey,
+    gainVal: number,
+    rate = 1,
+    delaySec = 0,
+    maxDur?: number
+  ): boolean {
+    if (!this.ctx || !this.master || !this.enabled) return false;
+    const buf = this.sfxBuffers.get(key);
+    if (!buf) return false;
+    const t = this.ctx.currentTime + delaySec;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.setValueAtTime(rate, t);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(Math.max(0.001, gainVal), t);
+    src.connect(g);
+    g.connect(this.master);
+    src.start(t);
+    if (maxDur !== undefined) {
+      g.gain.setValueAtTime(Math.max(0.001, gainVal), t + Math.max(0.02, maxDur - 0.05));
+      g.gain.exponentialRampToValueAtTime(0.001, t + maxDur);
+      src.stop(t + maxDur + 0.01);
+    }
+    return true;
   }
 
   private attachLoopSample(
     ctx: AudioContext,
     master: GainNode,
     surfFilter: BiquadFilterNode,
-    key: SampleKey,
+    key: LoopSampleKey,
     buffer: AudioBuffer
   ): void {
     const src = ctx.createBufferSource();
@@ -267,12 +343,12 @@ export class FarmAudio {
     if (key === 'diesel_idle') {
       const flt = ctx.createBiquadFilter();
       flt.type = 'lowpass';
-      flt.frequency.value = 420;
-      flt.Q.value = 1.1;
+      flt.frequency.value = 680;
+      flt.Q.value = 0.85;
       src.connect(flt);
       flt.connect(gain);
       gain.connect(master);
-      gain.gain.setTargetAtTime(0.26, ctx.currentTime, 0.14);
+      gain.gain.setTargetAtTime(0.28, ctx.currentTime, 0.14);
       src.start();
       this.dieselIdleSrc = src;
       this.dieselIdleFilter = flt;
@@ -280,8 +356,8 @@ export class FarmAudio {
     } else if (key === 'diesel_load') {
       const flt = ctx.createBiquadFilter();
       flt.type = 'lowpass';
-      flt.frequency.value = 540;
-      flt.Q.value = 1.3;
+      flt.frequency.value = 920;
+      flt.Q.value = 0.9;
       src.connect(flt);
       flt.connect(gain);
       gain.connect(master);
@@ -291,9 +367,9 @@ export class FarmAudio {
       this.dieselLoadGain = gain;
     } else if (key === 'hydraulic_pump') {
       const flt = ctx.createBiquadFilter();
-      flt.type = 'bandpass';
-      flt.frequency.value = 520;
-      flt.Q.value = 1.5;
+      flt.type = 'lowpass';
+      flt.frequency.value = 2200;
+      flt.Q.value = 0.8;
       src.connect(flt);
       flt.connect(gain);
       gain.connect(master);
@@ -485,8 +561,8 @@ export class FarmAudio {
       this.dieselIdleGain!.gain.setTargetAtTime(idleVol, t, 0.08);
       this.dieselLoadGain!.gain.setTargetAtTime(loadVol, t, 0.08);
 
-      this.dieselIdleFilter.frequency.setTargetAtTime(360 + rpm * 520, t, 0.08);
-      this.dieselLoadFilter.frequency.setTargetAtTime(420 + rpm * 780 + engineLoad * 560, t, 0.08);
+      this.dieselIdleFilter.frequency.setTargetAtTime(620 + rpm * 1200, t, 0.08);
+      this.dieselLoadFilter.frequency.setTargetAtTime(780 + rpm * 1650 + engineLoad * 900, t, 0.08);
     } else {
       this.engineOsc.frequency.setTargetAtTime(42 + rpm * 48, t, 0.08);
       this.engineSub.frequency.setTargetAtTime(21 + rpm * 24, t, 0.08);
@@ -506,11 +582,11 @@ export class FarmAudio {
       this.hydroGain.gain.setTargetAtTime(0, t, 0.08);
       this.hydroSampleSrc.playbackRate.setTargetAtTime(hydroRate, t, 0.05);
       this.hydroSampleFilter.frequency.setTargetAtTime(
-        440 + hydroLoad * 380 + loadNorm * 320 + squeezeLoad * 440,
+        1600 + hydroLoad * 1800 + loadNorm * 650 + squeezeLoad * 900,
         t,
         0.06
       );
-      this.hydroSampleGain.gain.setTargetAtTime(hAmt * (0.20 + loadNorm * 0.12), t, 0.05);
+      this.hydroSampleGain.gain.setTargetAtTime(hAmt * (0.24 + loadNorm * 0.14), t, 0.05);
     } else {
       this.hydroOsc.frequency.setTargetAtTime(185 + hydroLoad * 95 + squeezeLoad * 180 + loadNorm * 65, t, 0.05);
       this.hydroGain.gain.setTargetAtTime(hAmt * 0.075, t, 0.05);
@@ -584,9 +660,10 @@ export class FarmAudio {
 
   public playChurchBell(distanceFactor = 1): void {
     if (!this.ctx || !this.master || !this.enabled) return;
-    const vol = Math.min(0.22, 0.22 * Math.max(0.15, distanceFactor));
+    const vol = Math.min(0.45, 0.45 * Math.max(0.18, distanceFactor));
+    if (this.playSfxBuffer('church_bell', vol, 0.98 + Math.random() * 0.04)) return;
     const t = this.ctx.currentTime;
-    // Warm Bavarian bronze bell partials
+    // Fallback bell partials while sample decodes
     const freqs = [293.66, 587.33, 880, 1174.66];
     freqs.forEach((f, idx) => {
       if (!this.ctx || !this.master) return;
@@ -594,7 +671,7 @@ export class FarmAudio {
       const g = this.ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(f, t);
-      const amp = vol / (idx + 1);
+      const amp = (vol * 0.5) / (idx + 1);
       g.gain.setValueAtTime(0.001, t);
       g.gain.linearRampToValueAtTime(amp, t + 0.02);
       g.gain.exponentialRampToValueAtTime(0.0005, t + 2.8 - idx * 0.45);
@@ -610,6 +687,12 @@ export class FarmAudio {
     const now = performance.now();
     if (now - this.lastCarHornTime < 1100) return;
     this.lastCarHornTime = now;
+
+    if (this.sfxBuffers.has('horn')) {
+      this.playSfxBuffer('horn', 0.25, 1.18, 0, 0.22);
+      if (alarm) this.playSfxBuffer('horn', 0.24, 1.22, 0.26, 0.22);
+      return;
+    }
 
     const t = this.ctx.currentTime;
     const pulses = alarm ? [0, 0.24] : [0];
@@ -636,6 +719,7 @@ export class FarmAudio {
 
   public playHorn(): void {
     if (!this.ctx || !this.master || !this.enabled) return;
+    if (this.playSfxBuffer('horn', 0.42, 0.88, 0, 0.48)) return;
     const t = this.ctx.currentTime;
     for (const f of [310, 392]) {
       const osc = this.ctx.createOscillator();
@@ -657,8 +741,18 @@ export class FarmAudio {
     }
   }
 
+  public playGrab(grabbing = true): void {
+    if (!this.ctx || !this.master || !this.enabled) return;
+    const rate = grabbing ? 1.0 + Math.random() * 0.08 : 0.78 + Math.random() * 0.06;
+    const gain = grabbing ? 0.46 : 0.32;
+    if (this.playSfxBuffer('grab_clamp', gain, rate)) return;
+    this.playHitch(grabbing);
+  }
+
   public playHitch(attach = true): void {
     if (!this.ctx || !this.master || !this.enabled) return;
+    const rate = attach ? 1.0 : 0.84;
+    if (this.playSfxBuffer('hitch_lock', 0.48, rate)) return;
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const g = this.ctx.createGain();
@@ -732,6 +826,8 @@ export class FarmAudio {
 
   public playCrush(isMetallic = false): void {
     if (!this.ctx || !this.master || !this.enabled) return;
+    const key: SfxSampleKey = isMetallic ? 'crush_metal' : 'crush_wood';
+    if (this.playSfxBuffer(key, 0.56, 0.92 + Math.random() * 0.16)) return;
     const t = this.ctx.currentTime;
 
     const bufferSize = Math.floor(this.ctx.sampleRate * 0.28);
@@ -775,6 +871,14 @@ export class FarmAudio {
     const now = performance.now();
     if (now - this.lastImpactTime < 55) return;
     this.lastImpactTime = now;
+
+    if (material !== 'water') {
+      const sfxKey: SfxSampleKey =
+        material === 'metal' ? 'impact_metal' : material === 'hay' ? 'impact_hay' : 'impact_wood';
+      const sfxGain = Math.min(0.62, Math.max(0.09, strength * 0.09));
+      const rate = 0.88 + Math.random() * 0.24;
+      if (this.playSfxBuffer(sfxKey, sfxGain, rate)) return;
+    }
 
     const vol = Math.min(0.38, Math.max(0.04, strength * 0.055));
     const t = this.ctx.currentTime;

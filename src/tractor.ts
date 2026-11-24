@@ -49,6 +49,7 @@ export interface TractorCallbacks {
   onPropDamaged: (prop: FarmProp, reason: string) => void;
   onPropFling: (label: string, speed: number) => void;
   onPropGrabbed: (label: string, tool: AttachmentType, isSilageIntact?: boolean) => void;
+  onPropReleased?: () => void;
   onWrongTool: (message: string) => void;
   onToolChanged: (tool: AttachmentType, attached: boolean) => void;
   onDust: (pos: THREE.Vector3) => void;
@@ -515,6 +516,7 @@ export class ClaasScorpion {
       this.heldVillageObj = null;
       this.clampClosed = false;
       this.squeezePressure = 0;
+      this.callbacks.onPropReleased?.();
       return;
     }
 
@@ -557,6 +559,7 @@ export class ClaasScorpion {
     this.heldProps = [];
     this.clampClosed = false;
     this.squeezePressure = 0;
+    this.callbacks.onPropReleased?.();
   }
 
   private warnOnce(msg: string): void {

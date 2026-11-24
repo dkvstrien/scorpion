@@ -584,3 +584,30 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
   - `Go to Job` toast + clean non-truncated dropdown + single-line Workshop button → `.scratch/loop/23/01_jobs_dropdown_clean.png`.
   - Forks too high → `Lower forks [E] to grab Produce Pallet` (`.scratch/loop/23/02_grab_height_prompt.png`); forks lowered → `[Space] Grab: Produce Pallet (1100 kg)` → lifted **`1,100 kg`** on first press (`.scratch/loop/23/02b_grab_ready_lifted.png`); Career bank remained strictly `€500`; Career yard exit prompt empty (`""`).
   - All 7 fast-travel buttons matched `#location-readout` 1-to-1 with neutral `Old Farmstead` button (`.scratch/loop/23/03_travel_names_consistent.png`) and consistent Controls gear labels (`.scratch/loop/23/04_controls_gear_labels.png`).
+
+---
+
+## Iteration 24 — Round 3: Real 44.1 kHz Field-Recorded Audio Overhaul (Loops & One-Shot SFX) (2026-11-24)
+
+**Goal**: Replace the 22 kHz procedurally generated PRNG noise loops and oscillator one-shots with real microphone-recorded 44.1 kHz CC0 / Public Domain / CC-BY audio files for diesel idle & rev, hydraulic pump, tarmac/gravel/grass rolling, impacts, crushes, grab/release, hitch, horn, and church bell, and credit all sources in the Credits & Data tab while keeping `public/` well under 20 MB.
+
+### Changes Made
+- Added [scripts/process-real-audio.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/process-real-audio.mjs) (and removed obsolete procedural generator `scripts/build-audio-samples.mjs`) to master 15 real field recordings at **44.1 kHz** into `public/audio/` (`2.54 MB`; full `public/` = **`6.8 MB`**):
+  - **6 seamless circular-crossfaded 44.1 kHz 16-bit PCM `.wav` loops (`4.4–5.0 s`, `0.45–0.55 s` equal-power crossfades)**:
+    - `diesel_idle.wav` (`4.99 s`) ← Ursus C-342 diesel tractor recording (Work With Sounds / Museum of Municipal Engineering, Wikimedia Commons, CC BY 4.0)
+    - `diesel_load.wav` (`5.00 s`) ← 4-cylinder John Deere diesel tractor recording (Work With Sounds / Werstas, Wikimedia Commons, CC BY 4.0)
+    - `hydraulic_pump.wav` (`4.65 s`) ← real hydraulic lift recording (`stephan`, Wikimedia Commons, Public Domain)
+    - `surface_tarmac.wav` (`4.65 s`) ← lift-truck rolling on tarmac (`ezwa`, Wikimedia Commons, Public Domain)
+    - `surface_gravel.wav` (`4.64 s`) ← dual-offset gravel crunch (`Secretlondon`, Wikimedia Commons, CC BY-SA 3.0)
+    - `surface_grass.wav` (`4.40 s`) ← overlapped leaves & soft-earth foliage (`TinyWorlds`, OpenGameArt, CC0 1.0)
+  - **9 real 44.1 kHz `.mp3` one-shot SFX**:
+    - `impact_wood.mp3`, `impact_metal.mp3`, `impact_hay.mp3`, `crush_wood.mp3`, `crush_metal.mp3`, `grab_clamp.mp3`, `hitch_lock.mp3` ← *100 CC0 metal and wood SFX* (`rubberduck`, OpenGameArt, CC0 1.0)
+    - `horn.mp3` ← real vehicle horn (`15HPanska_Ruttner_Jan`, Wikimedia Commons, CC0)
+    - `church_bell.mp3` ← real bronze church bell (`Pete w. View`, Wikimedia Commons, CC BY-SA 4.0)
+- Updated [src/audio.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/audio.ts), [src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts), and [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts) to preload and decode all 15 real recordings (wiring impacts, wood/metal crush, grab & release via `playGrab`, attachment hitch, horn, traffic horn, and church bell to real sample buffers, widening engine/hydraulic lowpass filters so natural recordings breathe, and reporting `samplesLoaded`, `loopSamplesLoaded`, `sfxSamplesLoaded`, and `sampleRateHz` in `getAudioState()`).
+- Updated the **Credits & Data** tab in [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html) to attribute every real recording and replace `"Web Audio synthesizer"` with `"Web Audio API sample engine"`.
+
+### Verification & Screenshots (`.scratch/loop/24/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `du -sh public/`: **`6.8M`**.
+- Verified live in `agweb`: `samplesLoaded: 15` (`loopSamplesLoaded: 6`, `sfxSamplesLoaded: 9`), `sampleRateHz: 44100`, `ctxState: "running"`, responsive live RPM/load/hydraulic/surface telemetry (`rpmNorm: 0.753`, `engineLoad: 1`, `idleRate: 1.392`, `loadRate: 1.377`, `hydroRate: 1.21`, `surfaceGains.gravel: 0.129`) with `0` console errors.
+- Screenshots inspected: `.scratch/loop/24/01_credits_audio.png` (Credits & Data tab with full audio attributions) and `.scratch/loop/24/02_audio_live.png` (live horn + driving + hydraulic lift).
