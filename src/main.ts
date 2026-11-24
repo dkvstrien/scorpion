@@ -14,6 +14,7 @@ import {
   FARM_CENTER,
   getDrivableGroundY,
   getRealElevationMeters,
+  getShorelineX,
   initDgm1Heightmap,
   REAL_SPOTS,
   WATER_LEVEL
@@ -40,6 +41,8 @@ class ScorpionGame {
   private hemiLight!: THREE.HemisphereLight;
   private sunLight!: THREE.DirectionalLight;
   private rimLight!: THREE.DirectionalLight;
+  private skyDomeMat!: THREE.ShaderMaterial;
+  private cloudMat!: THREE.MeshStandardMaterial;
   private currentEnvRT: THREE.WebGLRenderTarget | null = null;
 
   private world: CANNON.World;
@@ -335,16 +338,54 @@ class ScorpionGame {
     this.rimLight.position.set(-140, 48, -120);
     this.scene.add(this.rimLight);
 
-    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f7, roughness: 0.96 });
-    for (let i = 0; i < 20; i++) {
+    // Atmospheric horizon-to-zenith gradient sky dome with soft sun glow matching distance fog!
+    this.skyDomeMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        uTopColor: { value: new THREE.Color(0x528cc8) },
+        uHorizonColor: { value: new THREE.Color(0xc8dff0) },
+        uSunColor: { value: new THREE.Color(0xfff4d6) },
+        uSunDir: { value: new THREE.Vector3(0.5, 0.65, 0.35).normalize() }
+      },
+      vertexShader: `
+        varying vec3 vWorldDir;
+        void main() {
+          vWorldDir = normalize(position);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uTopColor;
+        uniform vec3 uHorizonColor;
+        uniform vec3 uSunColor;
+        uniform vec3 uSunDir;
+        varying vec3 vWorldDir;
+        void main() {
+          vec3 dir = normalize(vWorldDir);
+          float h = clamp(dir.y, 0.0, 1.0);
+          vec3 col = mix(uHorizonColor, uTopColor, pow(h, 0.52));
+          float sunAmt = max(dot(dir, normalize(uSunDir)), 0.0);
+          col += uSunColor * pow(sunAmt, 14.0) * 0.28;
+          col += uSunColor * smoothstep(0.9965, 0.9994, sunAmt) * 0.85;
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `
+    });
+    const skyDome = new THREE.Mesh(new THREE.SphereGeometry(2900, 24, 16), this.skyDomeMat);
+    this.scene.add(skyDome);
+
+    this.cloudMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f7, roughness: 0.96 });
+    for (let i = 0; i < 28; i++) {
       const cloud = new THREE.Group();
       for (let p = 0; p < 4; p++) {
-        const puff = new THREE.Mesh(new THREE.SphereGeometry(5.5 + (p % 2) * 2.5, 10, 8), cloudMat);
-        puff.position.set((p - 1.5) * 4.4, (p % 2) * 1.1, ((p % 3) - 1) * 1.6);
-        puff.scale.y = 0.52;
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(9 + (p % 2) * 4, 10, 8), this.cloudMat);
+        puff.position.set((p - 1.5) * 7.5, (p % 2) * 1.8, ((p % 3) - 1) * 2.8);
+        puff.scale.y = 0.48;
         cloud.add(puff);
       }
-      cloud.position.set(-980 + i * 115, 115 + (i % 3) * 18, -720 + (i % 4) * 380);
+      cloud.position.set(-1650 + i * 124, 185 + (i % 3) * 26, -1250 + (i % 5) * 580);
       this.scene.add(cloud);
       this.clouds.push(cloud);
     }
@@ -472,6 +513,19 @@ class ScorpionGame {
     this.sunLight.intensity = cfg.sunInt;
     this.hemiLight.color.setHex(cfg.hemiSky);
     this.hemiLight.intensity = cfg.hemiInt;
+    if (this.skyDomeMat) {
+      this.skyDomeMat.uniforms.uTopColor.value.setHex(
+        tod === 'afternoon' ? 0x4c89c8 : tod === 'sunset' ? 0x5c4a76 : tod === 'dusk' ? 0x101c33 : 0x8bb2cc
+      );
+      this.skyDomeMat.uniforms.uHorizonColor.value.setHex(cfg.fog);
+      this.skyDomeMat.uniforms.uSunColor.value.setHex(cfg.sunCol);
+      this.skyDomeMat.uniforms.uSunDir.value.set(cfg.sunOff[0], cfg.sunOff[1], cfg.sunOff[2]).normalize();
+    }
+    if (this.cloudMat) {
+      this.cloudMat.color.setHex(
+        tod === 'sunset' ? 0xffd2b0 : tod === 'dusk' ? 0x3b4d6b : tod === 'morning' ? 0xf5f8fa : 0xf7f9fb
+      );
+    }
     this.realWorld.setNightMode(cfg.nightAmt);
     this.setWorkLights(cfg.autoLights);
     this.btnTime.textContent = cfg.label;
@@ -1241,8 +1295,8 @@ class ScorpionGame {
     }
 
     for (const c of this.clouds) {
-      c.position.x += dt * 0.55;
-      if (c.position.x > 680) c.position.x = -380;
+      c.position.x += dt * 0.65;
+      if (c.position.x > 1850) c.position.x = -1850;
     }
 
     if (this.started) {
@@ -1255,6 +1309,21 @@ class ScorpionGame {
         this.tractor.hydroLoad,
         this.tractor.squeezePressure
       );
+      // Determine current Bavarian area for ambient audio (lake waves, woodland birds, farm cowbells, village)
+      const px = this.tractor.position.x;
+      const pz = this.tractor.position.z;
+      const shoreDist = px - getShorelineX(pz);
+      const dFarm = Math.hypot(px - FARM_CENTER.x, pz - FARM_CENTER.z);
+      const dVillage = Math.hypot(px - REAL_SPOTS.muensingChurch.x, pz - REAL_SPOTS.muensingChurch.z);
+      const area: 'forest' | 'farm' | 'lake' | 'village' =
+        shoreDist < 170
+          ? 'lake'
+          : dFarm < 220 || Math.hypot(px - 496, pz + 1189) < 160
+            ? 'farm'
+            : dVillage < 240
+              ? 'village'
+              : 'forest';
+      this.audio.updateAmbience(dt, area);
     }
 
     this.updateCamera(dt);
@@ -1266,7 +1335,7 @@ class ScorpionGame {
    */
   public installTestHarness(): void {
     const viewpoints: Record<string, { x: number; z: number; heading: number; yawOff?: number }> = {
-      '01_muensing_church': { x: 1352.0, z: 992.5, heading: -Math.PI / 2 + 0.08, yawOff: 0.14 },
+      '01_muensing_church': { x: 1336.0, z: 993.5, heading: -Math.PI / 2 + 0.14, yawOff: 0.12 },
       '02_zum_altwirt': { x: 1435.8, z: 1055.9, heading: -0.45, yawOff: 0.15 },
       '03_wimpasing_farm': { x: FARM_CENTER.x - 2, z: FARM_CENTER.z + 14.5, heading: 0.18, yawOff: 0.22 },
       '04_ammerland_schloss': { x: -999.3, z: 832.1, heading: Math.PI / 2 + 0.18, yawOff: 0.16 },

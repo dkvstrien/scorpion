@@ -12,7 +12,15 @@ export class FarmAudio {
   private hydroOsc: OscillatorNode | null = null;
   private hydroGain: GainNode | null = null;
 
+  private ambGain: GainNode | null = null;
+  private ambFilter: BiquadFilterNode | null = null;
+  private ambPhase = 0;
+  private birdTimer = 2.4;
+  private cowbellTimer = 6.5;
+
   public enabled = true;
+  public ambienceEnabled = true;
+  public masterVolume = 0.85;
   private started = false;
   private lastImpactTime = 0;
   private lastAlarmTime = 0;
@@ -34,7 +42,7 @@ export class FarmAudio {
     this.ctx = ctx;
 
     const master = ctx.createGain();
-    master.gain.value = this.enabled ? 0.34 : 0;
+    master.gain.value = this.enabled ? 0.38 * this.masterVolume : 0;
     master.connect(ctx.destination);
     this.master = master;
 
@@ -98,13 +106,144 @@ export class FarmAudio {
     this.hydroOsc = hOsc;
     this.hydroGain = hGain;
 
+    // Gentle filtered broadband breeze / lake-water ambience bed
+    const ambBufLen = ctx.sampleRate * 2;
+    const ambBuf = ctx.createBuffer(1, ambBufLen, ctx.sampleRate);
+    const ambData = ambBuf.getChannelData(0);
+    let lastOut = 0;
+    for (let i = 0; i < ambBufLen; i++) {
+      const white = Math.random() * 2 - 1;
+      lastOut = (lastOut + 0.04 * white) / 1.04;
+      ambData[i] = lastOut * 3.2;
+    }
+    const ambSrc = ctx.createBufferSource();
+    ambSrc.buffer = ambBuf;
+    ambSrc.loop = true;
+    const ambFilter = ctx.createBiquadFilter();
+    ambFilter.type = 'bandpass';
+    ambFilter.frequency.value = 340;
+    ambFilter.Q.value = 0.7;
+    const ambGain = ctx.createGain();
+    ambGain.gain.value = 0.0;
+    ambSrc.connect(ambFilter);
+    ambFilter.connect(ambGain);
+    ambGain.connect(master);
+    ambSrc.start();
+    this.ambFilter = ambFilter;
+    this.ambGain = ambGain;
+
     this.started = true;
   }
 
   public setEnabled(on: boolean): void {
     this.enabled = on;
     if (this.master && this.ctx) {
-      this.master.gain.setTargetAtTime(on ? 0.34 : 0, this.ctx.currentTime, 0.05);
+      this.master.gain.setTargetAtTime(on ? 0.38 * this.masterVolume : 0, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  public setMasterVolume(vol: number): void {
+    this.masterVolume = Math.max(0, Math.min(1, vol));
+    if (this.master && this.ctx && this.enabled) {
+      this.master.gain.setTargetAtTime(0.38 * this.masterVolume, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  public setAmbienceEnabled(on: boolean): void {
+    this.ambienceEnabled = on;
+    if (!on && this.ambGain && this.ctx) {
+      this.ambGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.15);
+    }
+  }
+
+  public updateAmbience(dt: number, area: 'forest' | 'farm' | 'lake' | 'village'): void {
+    if (!this.ctx || !this.master || !this.ambGain || !this.ambFilter || !this.enabled || !this.ambienceEnabled) {
+      return;
+    }
+    this.ambPhase += dt;
+    const t = this.ctx.currentTime;
+
+    if (area === 'lake') {
+      // Slow rhythmic lapping water waves along Starnberger See shore
+      const swell = 0.5 + 0.5 * Math.sin(this.ambPhase * 1.35);
+      this.ambFilter.frequency.setTargetAtTime(240 + swell * 260, t, 0.18);
+      this.ambGain.gain.setTargetAtTime(0.055 + swell * 0.055, t, 0.18);
+    } else if (area === 'forest') {
+      // Soft rustling pine canopy breeze + periodic woodland birdsong chirps
+      const rustle = 0.5 + 0.5 * Math.sin(this.ambPhase * 0.7);
+      this.ambFilter.frequency.setTargetAtTime(520 + rustle * 260, t, 0.25);
+      this.ambGain.gain.setTargetAtTime(0.035 + rustle * 0.018, t, 0.25);
+      this.birdTimer -= dt;
+      if (this.birdTimer <= 0) {
+        this.birdTimer = 2.6 + Math.random() * 3.8;
+        this.playBirdChirp();
+      }
+    } else if (area === 'farm') {
+      // Quiet meadow breeze + occasional distant Alpine cowbell & faint meadow bird
+      this.ambFilter.frequency.setTargetAtTime(380, t, 0.25);
+      this.ambGain.gain.setTargetAtTime(0.025, t, 0.25);
+      this.cowbellTimer -= dt;
+      if (this.cowbellTimer <= 0) {
+        this.cowbellTimer = 6.5 + Math.random() * 7.0;
+        this.playCowbell();
+      }
+      this.birdTimer -= dt * 0.45;
+      if (this.birdTimer <= 0) {
+        this.birdTimer = 4.5 + Math.random() * 5.0;
+        this.playBirdChirp(0.6);
+      }
+    } else {
+      // Village: soft warm air bed (church bell rings periodically from main loop)
+      this.ambFilter.frequency.setTargetAtTime(320, t, 0.3);
+      this.ambGain.gain.setTargetAtTime(0.022, t, 0.3);
+    }
+  }
+
+  private playBirdChirp(volScale = 1): void {
+    if (!this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    const base = 2400 + Math.random() * 1100;
+    const notes = Math.random() > 0.4 ? [0, 0.11, 0.21] : [0, 0.12];
+    for (const off of notes) {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(base, t + off);
+      osc.frequency.exponentialRampToValueAtTime(base * (1.18 + Math.random() * 0.22), t + off + 0.055);
+      osc.frequency.exponentialRampToValueAtTime(base * 0.92, t + off + 0.095);
+      g.gain.setValueAtTime(0.0005, t + off);
+      g.gain.linearRampToValueAtTime(0.024 * volScale, t + off + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + off + 0.095);
+      osc.connect(g);
+      g.connect(this.master);
+      osc.start(t + off);
+      osc.stop(t + off + 0.105);
+    }
+  }
+
+  private playCowbell(): void {
+    if (!this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    const hits = Math.random() > 0.5 ? [0, 0.28] : [0];
+    for (const off of hits) {
+      for (const freq of [540, 810]) {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        const bp = this.ctx.createBiquadFilter();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq + Math.random() * 14, t + off);
+        bp.type = 'bandpass';
+        bp.frequency.value = freq;
+        bp.Q.value = 5.5;
+        g.gain.setValueAtTime(0.0008, t + off);
+        g.gain.linearRampToValueAtTime(0.032, t + off + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0005, t + off + 0.38);
+        osc.connect(bp);
+        bp.connect(g);
+        g.connect(this.master);
+        osc.start(t + off);
+        osc.stop(t + off + 0.42);
+      }
     }
   }
 

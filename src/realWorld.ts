@@ -10,6 +10,7 @@ import {
   WATER_LEVEL
 } from './terrain';
 import { createAsphaltTexture } from './textures';
+import { buildBavarianWorldDetails } from './worldDetails';
 
 export interface DynamicVillageObj {
   id: number;
@@ -608,6 +609,7 @@ export class RealMuensingWorld {
     this.buildRealBavarianBuildings(scene, world, groundMat);
     this.buildHeroLandmarks(scene, world, groundMat);
     this.buildMultiSpeciesBavarianForests(scene);
+    buildBavarianWorldDetails(scene);
     this.buildInteractivePropsAndCars();
     this.buildDestructibleTreesAndLamps();
     this.buildPedestrians();

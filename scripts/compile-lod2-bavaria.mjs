@@ -324,7 +324,7 @@ async function main() {
       if (Math.abs(cx - farmSpot[0]) < 56 && Math.abs(cz - farmSpot[1]) < 54) continue;
       if (Math.hypot(cx - churchSpot[0], cz - churchSpot[1]) < 24) continue;
       if (Math.hypot(cx - altwirtSpot[0], cz - altwirtSpot[1]) < 18) continue;
-      if (Math.hypot(cx - schlossSpot[0], cz - schlossSpot[1]) < 36) continue;
+      if (Math.hypot(cx - schlossSpot[0], cz - schlossSpot[1]) < 46) continue;
       if (Math.hypot(cx - sebaldSpot[0], cz - sebaldSpot[1]) < 18) continue;
 
       totalKept++;
@@ -372,6 +372,7 @@ async function main() {
       const roofRgb = rgbToLinear(roofRgbRaw);
 
       // 1. Emit triangulated LoD2 WallSurfaces with foundation skirt (-1.4m) & height-aligned UVs!
+      const emittedWallPts = [];
       for (const ring of walls) {
         const shifted = ring.map(([x, y, z]) => {
           const sy = y + yShift;
@@ -413,23 +414,28 @@ async function main() {
           const uv1 = [poly2[i1][0] / 9.5, Math.max(0, Math.min(1, (p1[1] - uvBaseY) / Math.max(4.8, baseH * 0.88)))];
           const uv2 = [poly2[i2][0] / 9.5, Math.max(0, Math.min(1, (p2[1] - uvBaseY) / Math.max(4.8, baseH * 0.88)))];
           pushTri(wallAcc, p0, p1, p2, outN, uv0, uv1, uv2, wallRgb);
+          emittedWallPts.push(p0, p1, p2);
         }
       }
 
-      // Compute max wall height so orphan floating CityGML roof-only turret/chimney caps never float in mid-air!
-      let maxWallY = -Infinity;
-      for (const poly of walls) {
-        for (const [, y] of poly) {
-          if (y > maxWallY) maxWallY = y;
-        }
-      }
-
-      // 2. Emit triangulated LoD2 RoofSurfaces with outward-upward normals & DOP20-sampled tile colors!
+      // 2. Emit triangulated LoD2 RoofSurfaces ONLY when grounded on actual emitted wall vertices (zero floating turret caps!)
       for (const ring of roofs) {
-        let rMinY = Infinity;
-        for (const [, y] of ring) if (y < rMinY) rMinY = y;
-        if (rMinY > maxWallY + 1.0) continue; // Skip detached floating spire/turret caps without supporting walls
         const shifted = ring.map(([x, y, z]) => [x, y + yShift + 0.03, z]);
+        let touching = 0;
+        for (const rp of shifted) {
+          for (let wi = 0; wi < emittedWallPts.length; wi++) {
+            const wp = emittedWallPts[wi];
+            const dx = rp[0] - wp[0];
+            const dy = rp[1] - wp[1];
+            const dz = rp[2] - wp[2];
+            if (dx * dx + dy * dy + dz * dz < 1.2) {
+              touching++;
+              break;
+            }
+          }
+          if (touching >= 2) break;
+        }
+        if (touching < 2) continue;
         const n = computeNewellNormal(shifted);
         if (!n) continue;
         // Roofs always face upward (n.y >= 0)
