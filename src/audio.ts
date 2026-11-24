@@ -1,6 +1,42 @@
+import type { SurfaceType } from './terrain';
+
+export interface AudioTelemetry {
+  started: boolean;
+  enabled: boolean;
+  ctxState: string;
+  samplesLoaded: number;
+  sampleNames: string[];
+  surface: SurfaceType;
+  rpmNorm: number;
+  engineLoad: number;
+  idleRate: number;
+  loadRate: number;
+  hydroRate: number;
+  surfaceGains: { tarmac: number; gravel: number; grass: number };
+}
+
+type SampleKey =
+  | 'diesel_idle'
+  | 'diesel_load'
+  | 'hydraulic_pump'
+  | 'surface_tarmac'
+  | 'surface_gravel'
+  | 'surface_grass';
+
+const SAMPLE_FILES: Record<SampleKey, string> = {
+  diesel_idle: './audio/diesel_idle.wav',
+  diesel_load: './audio/diesel_load.wav',
+  hydraulic_pump: './audio/hydraulic_pump.wav',
+  surface_tarmac: './audio/surface_tarmac.wav',
+  surface_gravel: './audio/surface_gravel.wav',
+  surface_grass: './audio/surface_grass.wav'
+};
+
 export class FarmAudio {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+
+  // Fallback low-level synth while WAV samples decode (~20-60ms)
   private engineOsc: OscillatorNode | null = null;
   private engineSub: OscillatorNode | null = null;
   private engineGain: GainNode | null = null;
@@ -11,6 +47,28 @@ export class FarmAudio {
 
   private hydroOsc: OscillatorNode | null = null;
   private hydroGain: GainNode | null = null;
+
+  // Layered sampled engine, hydraulic pump & surface tire-roll loops
+  private loadedSamples = new Set<SampleKey>();
+  private dieselIdleSrc: AudioBufferSourceNode | null = null;
+  private dieselIdleGain: GainNode | null = null;
+  private dieselIdleFilter: BiquadFilterNode | null = null;
+
+  private dieselLoadSrc: AudioBufferSourceNode | null = null;
+  private dieselLoadGain: GainNode | null = null;
+  private dieselLoadFilter: BiquadFilterNode | null = null;
+
+  private hydroSampleSrc: AudioBufferSourceNode | null = null;
+  private hydroSampleGain: GainNode | null = null;
+  private hydroSampleFilter: BiquadFilterNode | null = null;
+
+  private surfaceFilter: BiquadFilterNode | null = null;
+  private tarmacSrc: AudioBufferSourceNode | null = null;
+  private tarmacGain: GainNode | null = null;
+  private gravelSrc: AudioBufferSourceNode | null = null;
+  private gravelGain: GainNode | null = null;
+  private grassSrc: AudioBufferSourceNode | null = null;
+  private grassGain: GainNode | null = null;
 
   private ambGain: GainNode | null = null;
   private ambFilter: BiquadFilterNode | null = null;
@@ -25,6 +83,33 @@ export class FarmAudio {
   private lastImpactTime = 0;
   private lastAlarmTime = 0;
   private lastCarHornTime = 0;
+
+  private telemetry: AudioTelemetry = {
+    started: false,
+    enabled: true,
+    ctxState: 'uninitialized',
+    samplesLoaded: 0,
+    sampleNames: [],
+    surface: 'gravel',
+    rpmNorm: 0,
+    engineLoad: 0,
+    idleRate: 1,
+    loadRate: 1,
+    hydroRate: 1,
+    surfaceGains: { tarmac: 0, gravel: 0, grass: 0 }
+  };
+
+  public getAudioState(): AudioTelemetry {
+    return {
+      ...this.telemetry,
+      started: this.started,
+      enabled: this.enabled,
+      ctxState: this.ctx ? this.ctx.state : 'uninitialized',
+      samplesLoaded: this.loadedSamples.size,
+      sampleNames: Array.from(this.loadedSamples).sort(),
+      surfaceGains: { ...this.telemetry.surfaceGains }
+    };
+  }
 
   public init(): void {
     if (this.started) {
@@ -42,18 +127,18 @@ export class FarmAudio {
     this.ctx = ctx;
 
     const master = ctx.createGain();
-    master.gain.value = this.enabled ? 0.38 * this.masterVolume : 0;
+    master.gain.value = this.enabled ? 0.42 * this.masterVolume : 0;
     master.connect(ctx.destination);
     this.master = master;
 
-    // Warm chunky CLAAS Deutz diesel engine synth
+    // Gentle warm fallback engine synth (faded to 0 once diesel_idle & diesel_load WAVs finish decoding)
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 175;
-    filter.Q.value = 2.4;
+    filter.Q.value = 2.0;
 
     const eGain = ctx.createGain();
-    eGain.gain.value = 0.16;
+    eGain.gain.value = 0.12;
 
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
@@ -75,7 +160,7 @@ export class FarmAudio {
     this.engineFilter = filter;
     this.engineGain = eGain;
 
-    // Subtle Varipower turbocharger whistle under heavy throttle!
+    // Subtle Varipower turbocharger spool under heavy throttle / heavy load
     const tGain = ctx.createGain();
     tGain.gain.value = 0;
     const tOsc = ctx.createOscillator();
@@ -87,13 +172,13 @@ export class FarmAudio {
     this.turboOsc = tOsc;
     this.turboGain = tGain;
 
-    // Hydraulic pump hum
+    // Fallback hydraulic hum (faded out once hydraulic_pump.wav finishes decoding)
     const hGain = ctx.createGain();
     hGain.gain.value = 0;
     const hFilter = ctx.createBiquadFilter();
     hFilter.type = 'bandpass';
     hFilter.frequency.value = 440;
-    hFilter.Q.value = 3;
+    hFilter.Q.value = 2.6;
 
     const hOsc = ctx.createOscillator();
     hOsc.type = 'sawtooth';
@@ -105,6 +190,14 @@ export class FarmAudio {
 
     this.hydroOsc = hOsc;
     this.hydroGain = hGain;
+
+    // Shared surface tone filter for tarmac / gravel / grass loops
+    const surfFilter = ctx.createBiquadFilter();
+    surfFilter.type = 'lowpass';
+    surfFilter.frequency.value = 900;
+    surfFilter.Q.value = 0.7;
+    surfFilter.connect(master);
+    this.surfaceFilter = surfFilter;
 
     // Gentle filtered broadband breeze / lake-water ambience bed
     const ambBufLen = ctx.sampleRate * 2;
@@ -133,19 +226,113 @@ export class FarmAudio {
     this.ambGain = ambGain;
 
     this.started = true;
+    void this.loadAudioSamples(ctx, master, surfFilter);
+  }
+
+  private async loadAudioSamples(
+    ctx: AudioContext,
+    master: GainNode,
+    surfFilter: BiquadFilterNode
+  ): Promise<void> {
+    const entries = Object.entries(SAMPLE_FILES) as [SampleKey, string][];
+    await Promise.all(
+      entries.map(async ([key, url]) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const arrayBuf = await res.arrayBuffer();
+          const audioBuf = await ctx.decodeAudioData(arrayBuf.slice(0));
+          this.attachLoopSample(ctx, master, surfFilter, key, audioBuf);
+          this.loadedSamples.add(key);
+        } catch {
+          // Keep graceful fallback if a sample fails to fetch/decode
+        }
+      })
+    );
+  }
+
+  private attachLoopSample(
+    ctx: AudioContext,
+    master: GainNode,
+    surfFilter: BiquadFilterNode,
+    key: SampleKey,
+    buffer: AudioBuffer
+  ): void {
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+
+    if (key === 'diesel_idle') {
+      const flt = ctx.createBiquadFilter();
+      flt.type = 'lowpass';
+      flt.frequency.value = 420;
+      flt.Q.value = 1.1;
+      src.connect(flt);
+      flt.connect(gain);
+      gain.connect(master);
+      gain.gain.setTargetAtTime(0.26, ctx.currentTime, 0.14);
+      src.start();
+      this.dieselIdleSrc = src;
+      this.dieselIdleFilter = flt;
+      this.dieselIdleGain = gain;
+    } else if (key === 'diesel_load') {
+      const flt = ctx.createBiquadFilter();
+      flt.type = 'lowpass';
+      flt.frequency.value = 540;
+      flt.Q.value = 1.3;
+      src.connect(flt);
+      flt.connect(gain);
+      gain.connect(master);
+      src.start();
+      this.dieselLoadSrc = src;
+      this.dieselLoadFilter = flt;
+      this.dieselLoadGain = gain;
+    } else if (key === 'hydraulic_pump') {
+      const flt = ctx.createBiquadFilter();
+      flt.type = 'bandpass';
+      flt.frequency.value = 520;
+      flt.Q.value = 1.5;
+      src.connect(flt);
+      flt.connect(gain);
+      gain.connect(master);
+      src.start();
+      this.hydroSampleSrc = src;
+      this.hydroSampleFilter = flt;
+      this.hydroSampleGain = gain;
+    } else if (key === 'surface_tarmac') {
+      src.connect(gain);
+      gain.connect(surfFilter);
+      src.start();
+      this.tarmacSrc = src;
+      this.tarmacGain = gain;
+    } else if (key === 'surface_gravel') {
+      src.connect(gain);
+      gain.connect(surfFilter);
+      src.start();
+      this.gravelSrc = src;
+      this.gravelGain = gain;
+    } else if (key === 'surface_grass') {
+      src.connect(gain);
+      gain.connect(surfFilter);
+      src.start();
+      this.grassSrc = src;
+      this.grassGain = gain;
+    }
   }
 
   public setEnabled(on: boolean): void {
     this.enabled = on;
     if (this.master && this.ctx) {
-      this.master.gain.setTargetAtTime(on ? 0.38 * this.masterVolume : 0, this.ctx.currentTime, 0.05);
+      this.master.gain.setTargetAtTime(on ? 0.42 * this.masterVolume : 0, this.ctx.currentTime, 0.05);
     }
   }
 
   public setMasterVolume(vol: number): void {
     this.masterVolume = Math.max(0, Math.min(1, vol));
     if (this.master && this.ctx && this.enabled) {
-      this.master.gain.setTargetAtTime(0.38 * this.masterVolume, this.ctx.currentTime, 0.05);
+      this.master.gain.setTargetAtTime(0.42 * this.masterVolume, this.ctx.currentTime, 0.05);
     }
   }
 
@@ -251,7 +438,10 @@ export class FarmAudio {
     speedNorm: number,
     throttle: number,
     hydroLoad: number,
-    squeezeLoad: number
+    squeezeLoad: number,
+    surface: SurfaceType = 'grass',
+    carriedLoadNorm = 0,
+    wheelsOnGround = 4
   ): void {
     if (
       !this.ctx ||
@@ -267,21 +457,110 @@ export class FarmAudio {
       return;
     }
     const t = this.ctx.currentTime;
-    const rpm = Math.min(1, Math.abs(speedNorm) * 0.65 + Math.abs(throttle) * 0.45 + hydroLoad * 0.22);
+    const absSpeed = Math.abs(speedNorm);
+    const absThrottle = Math.abs(throttle);
+    const loadNorm = Math.max(0, Math.min(1, carriedLoadNorm));
+    const engineLoad = Math.min(
+      1,
+      absThrottle * 0.62 + hydroLoad * 0.44 + loadNorm * 0.34 + squeezeLoad * 0.28
+    );
+    const rpm = Math.min(
+      1,
+      absSpeed * 0.58 + absThrottle * 0.36 + hydroLoad * 0.24 + loadNorm * 0.14
+    );
 
-    this.engineOsc.frequency.setTargetAtTime(42 + rpm * 48, t, 0.08);
-    this.engineSub.frequency.setTargetAtTime(21 + rpm * 24, t, 0.08);
-    this.engineFilter.frequency.setTargetAtTime(155 + rpm * 255, t, 0.08);
-    this.engineGain.gain.setTargetAtTime(0.13 + rpm * 0.09, t, 0.08);
+    const idleRate = 0.88 + rpm * 0.68;
+    const loadRate = 0.72 + rpm * 0.66 + engineLoad * 0.16;
+    const hasEngineSamples = this.dieselIdleSrc && this.dieselIdleGain && this.dieselLoadSrc && this.dieselLoadGain;
 
-    // Subtle turbo spool when pushing throttle
-    const turboAmt = Math.max(0, Math.abs(throttle) * 0.8 + Math.abs(speedNorm) * 0.4 - 0.35);
-    this.turboOsc.frequency.setTargetAtTime(860 + rpm * 850, t, 0.14);
-    this.turboGain.gain.setTargetAtTime(turboAmt * 0.018, t, 0.12);
+    if (hasEngineSamples && this.dieselIdleFilter && this.dieselLoadFilter) {
+      // Smoothly silence legacy oscillator fallback once sampled loops are live
+      this.engineGain.gain.setTargetAtTime(0, t, 0.12);
 
-    const hAmt = Math.min(1, hydroLoad + squeezeLoad * 0.9);
-    this.hydroOsc.frequency.setTargetAtTime(185 + hydroLoad * 95 + squeezeLoad * 180, t, 0.05);
-    this.hydroGain.gain.setTargetAtTime(hAmt * 0.085, t, 0.05);
+      this.dieselIdleSrc!.playbackRate.setTargetAtTime(idleRate, t, 0.07);
+      this.dieselLoadSrc!.playbackRate.setTargetAtTime(loadRate, t, 0.07);
+
+      const idleVol = 0.28 * (1 - engineLoad * 0.58);
+      const loadVol = 0.05 + engineLoad * 0.34 + rpm * 0.10;
+      this.dieselIdleGain!.gain.setTargetAtTime(idleVol, t, 0.08);
+      this.dieselLoadGain!.gain.setTargetAtTime(loadVol, t, 0.08);
+
+      this.dieselIdleFilter.frequency.setTargetAtTime(360 + rpm * 520, t, 0.08);
+      this.dieselLoadFilter.frequency.setTargetAtTime(420 + rpm * 780 + engineLoad * 560, t, 0.08);
+    } else {
+      this.engineOsc.frequency.setTargetAtTime(42 + rpm * 48, t, 0.08);
+      this.engineSub.frequency.setTargetAtTime(21 + rpm * 24, t, 0.08);
+      this.engineFilter.frequency.setTargetAtTime(155 + rpm * 255, t, 0.08);
+      this.engineGain.gain.setTargetAtTime(0.11 + rpm * 0.07, t, 0.08);
+    }
+
+    // Subtle Varipower turbocharger spool under heavy throttle / heavy load
+    const turboAmt = Math.max(0, engineLoad * 0.85 + absSpeed * 0.35 - 0.42);
+    this.turboOsc.frequency.setTargetAtTime(860 + rpm * 900 + loadNorm * 220, t, 0.14);
+    this.turboGain.gain.setTargetAtTime(turboAmt * 0.016, t, 0.12);
+
+    // Sampled load-dependent hydrostatic hydraulic pump
+    const hAmt = Math.min(1, hydroLoad + squeezeLoad * 0.92);
+    const hydroRate = 0.85 + hydroLoad * 0.36 + loadNorm * 0.26 + squeezeLoad * 0.32;
+    if (this.hydroSampleSrc && this.hydroSampleGain && this.hydroSampleFilter) {
+      this.hydroGain.gain.setTargetAtTime(0, t, 0.08);
+      this.hydroSampleSrc.playbackRate.setTargetAtTime(hydroRate, t, 0.05);
+      this.hydroSampleFilter.frequency.setTargetAtTime(
+        440 + hydroLoad * 380 + loadNorm * 320 + squeezeLoad * 440,
+        t,
+        0.06
+      );
+      this.hydroSampleGain.gain.setTargetAtTime(hAmt * (0.20 + loadNorm * 0.12), t, 0.05);
+    } else {
+      this.hydroOsc.frequency.setTargetAtTime(185 + hydroLoad * 95 + squeezeLoad * 180 + loadNorm * 65, t, 0.05);
+      this.hydroGain.gain.setTargetAtTime(hAmt * 0.075, t, 0.05);
+    }
+
+    // Distinct surface rolling audio (tarmac / gravel / grass) driven by ground contact & wheel speed
+    const grounded = wheelsOnGround >= 1 ? 1 : 0;
+    const speedKmh = absSpeed * 12 * 3.6;
+    const rollNorm = grounded * Math.max(0, Math.min(1, (speedKmh - 0.8) / 28));
+    let tarmacTarget = 0;
+    let gravelTarget = 0;
+    let grassTarget = 0;
+    if (rollNorm > 0.005) {
+      if (surface === 'asphalt') {
+        tarmacTarget = rollNorm * 0.28;
+      } else if (surface === 'gravel') {
+        gravelTarget = rollNorm * 0.34;
+      } else if (surface === 'grass') {
+        grassTarget = rollNorm * 0.26;
+      } else if (surface === 'mud') {
+        grassTarget = rollNorm * 0.18;
+        gravelTarget = rollNorm * 0.14;
+      }
+    }
+
+    if (this.surfaceFilter) {
+      this.surfaceFilter.frequency.setTargetAtTime(340 + rollNorm * 2850, t, 0.08);
+    }
+    if (this.tarmacSrc && this.tarmacGain) {
+      this.tarmacSrc.playbackRate.setTargetAtTime(0.68 + rollNorm * 0.72, t, 0.07);
+      this.tarmacGain.gain.setTargetAtTime(tarmacTarget, t, 0.08);
+    }
+    if (this.gravelSrc && this.gravelGain) {
+      this.gravelSrc.playbackRate.setTargetAtTime(0.78 + rollNorm * 0.62, t, 0.07);
+      this.gravelGain.gain.setTargetAtTime(gravelTarget, t, 0.08);
+    }
+    if (this.grassSrc && this.grassGain) {
+      this.grassSrc.playbackRate.setTargetAtTime(0.74 + rollNorm * 0.56, t, 0.07);
+      this.grassGain.gain.setTargetAtTime(grassTarget, t, 0.08);
+    }
+
+    this.telemetry.surface = surface;
+    this.telemetry.rpmNorm = +rpm.toFixed(3);
+    this.telemetry.engineLoad = +engineLoad.toFixed(3);
+    this.telemetry.idleRate = +idleRate.toFixed(3);
+    this.telemetry.loadRate = +loadRate.toFixed(3);
+    this.telemetry.hydroRate = +hydroRate.toFixed(3);
+    this.telemetry.surfaceGains.tarmac = +tarmacTarget.toFixed(3);
+    this.telemetry.surfaceGains.gravel = +gravelTarget.toFixed(3);
+    this.telemetry.surfaceGains.grass = +grassTarget.toFixed(3);
   }
 
   public playOverloadBeep(): void {

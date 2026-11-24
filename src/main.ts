@@ -26,6 +26,7 @@ import {
   getDrivableGroundY,
   getRealElevationMeters,
   getShorelineX,
+  getSurfaceType,
   initDgm1Heightmap,
   REAL_SPOTS,
   WATER_LEVEL
@@ -1946,11 +1947,16 @@ class ScorpionGame {
       this.evaluateZonesAndContracts();
       this.updateRackAndPrompts();
       this.updateHUD(dt);
+      const surface = getSurfaceType(this.tractor.position.x, this.tractor.position.z);
+      const carriedLoadNorm = Math.min(1, this.tractor.getCarriedMassKg() / 1600);
       this.audio.updateContinuous(
         this.tractor.speed / 12,
         input.throttle,
         this.tractor.hydroLoad,
-        this.tractor.squeezePressure
+        this.tractor.squeezePressure,
+        surface,
+        carriedLoadNorm,
+        this.tractor.wheelsOnGround
       );
       // Determine current Bavarian area for ambient audio (lake waves, woodland birds, farm cowbells, village)
       const px = this.tractor.position.x;
@@ -2040,6 +2046,8 @@ class ScorpionGame {
         return this.tractor.getCarriedMassKg();
       },
       releaseLoad: () => this.tractor.releaseAll(false),
+      getAudioState: () => this.audio.getAudioState(),
+      getSurfaceAt: (x: number, z: number) => getSurfaceType(x, z),
       getTelemetry: () => ({
         speedKmh: +(Math.abs(this.tractor.speed) * 3.6).toFixed(1),
         speedMs: +this.tractor.speed.toFixed(2),

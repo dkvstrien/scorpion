@@ -282,13 +282,143 @@ export function getTerrainNormal(x: number, z: number, target = new THREE.Vector
   return target;
 }
 
+interface IndexedRoadSeg {
+  x1: number;
+  z1: number;
+  x2: number;
+  z2: number;
+  halfWSq: number;
+  isGravel: boolean;
+}
+
+const ROAD_GRID_CELL = 100;
+let roadSpatialGrid: Map<string, IndexedRoadSeg[]> | null = null;
+
+function ensureRoadSpatialGrid(): Map<string, IndexedRoadSeg[]> {
+  if (roadSpatialGrid) return roadSpatialGrid;
+  const grid = new Map<string, IndexedRoadSeg[]>();
+  const addToCell = (cx: number, cz: number, seg: IndexedRoadSeg) => {
+    const key = `${cx},${cz}`;
+    let list = grid.get(key);
+    if (!list) {
+      list = [];
+      grid.set(key, list);
+    }
+    list.push(seg);
+  };
+
+  for (const r of OSM_DATA.roads) {
+    let halfW = 3.4;
+    let isGravel = false;
+    if (r.hw === 'secondary') {
+      halfW = 4.6;
+    } else if (r.hw === 'tertiary') {
+      halfW = 4.1;
+    } else if (r.hw === 'residential' || r.hw === 'unclassified' || r.hw === 'living_street') {
+      halfW = 3.5;
+    } else if (r.hw === 'track' || r.hw === 'service') {
+      halfW = 2.85;
+      isGravel = true;
+    } else {
+      halfW = 2.6;
+      isGravel = true;
+    }
+    const halfWSq = halfW * halfW;
+    const pad = halfW + 1;
+
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const [x1, z1] = r.pts[i];
+      const [x2, z2] = r.pts[i + 1];
+      const seg: IndexedRoadSeg = { x1, z1, x2, z2, halfWSq, isGravel };
+      const minCX = Math.floor((Math.min(x1, x2) - pad) / ROAD_GRID_CELL);
+      const maxCX = Math.floor((Math.max(x1, x2) + pad) / ROAD_GRID_CELL);
+      const minCZ = Math.floor((Math.min(z1, z2) - pad) / ROAD_GRID_CELL);
+      const maxCZ = Math.floor((Math.max(z1, z2) + pad) / ROAD_GRID_CELL);
+      for (let cx = minCX; cx <= maxCX; cx++) {
+        for (let cz = minCZ; cz <= maxCZ; cz++) {
+          addToCell(cx, cz, seg);
+        }
+      }
+    }
+  }
+  roadSpatialGrid = grid;
+  return grid;
+}
+
+function pointToSegDistSq(px: number, pz: number, s: IndexedRoadSeg): number {
+  const dx = s.x2 - s.x1;
+  const dz = s.z2 - s.z1;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq < 1e-4) {
+    const ex = px - s.x1;
+    const ez = pz - s.z1;
+    return ex * ex + ez * ez;
+  }
+  const t = Math.max(0, Math.min(1, ((px - s.x1) * dx + (pz - s.z1) * dz) / lenSq));
+  const cx = s.x1 + dx * t;
+  const cz = s.z1 + dz * t;
+  const ex = px - cx;
+  const ez = pz - cz;
+  return ex * ex + ez * ez;
+}
+
 export function getSurfaceType(x: number, z: number): SurfaceType {
-  const y = getTerrainHeight(x, z);
-  if (y < WATER_LEVEL + 0.2) return 'water';
-  if (Math.abs(x - FARM_YARD_CENTER.x) < 25 && Math.abs(z - FARM_YARD_CENTER.z) < 23) {
-    if (Math.abs(z - (FARM_YARD_CENTER.z - 4)) < 3.6) return 'mud';
+  // Sebald wooden pier deck over water
+  if (
+    x <= SEBALD_PIER.eastX + 4 &&
+    x >= SEBALD_PIER.westX - 1 &&
+    Math.abs(z - SEBALD_PIER.z) <= SEBALD_PIER.halfWidth
+  ) {
     return 'gravel';
   }
+
+  const y = getTerrainHeight(x, z);
+  if (y < WATER_LEVEL + 0.18) return 'water';
+
+  // Home Farm paved/gravel courtyard & east exit lane
+  if (
+    (Math.abs(x - FARM_YARD_CENTER.x) < 26 && Math.abs(z - FARM_YARD_CENTER.z) < 24) ||
+    (x >= -324 && x <= -274 && Math.abs(z - 922.0) < 7.5)
+  ) {
+    return 'gravel';
+  }
+
+  // Old Farmstead demolition site gravel pad
+  if (Math.abs(x - 165) < 33 && Math.abs(z - 622) < 33) {
+    return 'gravel';
+  }
+
+  // Real OSM road network (paved tarmac takes precedence over adjacent gravel tracks)
+  const grid = ensureRoadSpatialGrid();
+  const cx = Math.floor(x / ROAD_GRID_CELL);
+  const cz = Math.floor(z / ROAD_GRID_CELL);
+  const segs = grid.get(`${cx},${cz}`);
+  let hitGravelTrack = false;
+  if (segs) {
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (pointToSegDistSq(x, z, s) <= s.halfWSq) {
+        if (!s.isGravel) return 'asphalt';
+        hitGravelTrack = true;
+      }
+    }
+  }
+  if (hitGravelTrack) return 'gravel';
+
+  // Bavarian village gravel courtyards (church, Altwirt beer garden, Schloss court, Ried Co-op, EDEKA lot)
+  if (
+    Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 24 ||
+    Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 22 ||
+    Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 22 ||
+    Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 18 ||
+    Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 20
+  ) {
+    return 'gravel';
+  }
+
+  // Damp lakeshore gravel/mud margin
+  if (y < WATER_LEVEL + 1.05) return 'mud';
+
   return 'grass';
 }
 

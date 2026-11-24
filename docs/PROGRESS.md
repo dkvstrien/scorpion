@@ -457,3 +457,29 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
   - Empty `33.3 km/h` full-lock turn: **`5°` body lean**, `4/4` tires, upright (`.scratch/loop/18/03_empty_corner_lean.png`).
   - Off-throttle coasting curve (`km/h` at `0..5 s`): `30.3 → 21.4 → 12.2 → 5.4 → 2.4 → 1.1`.
   - Roadside open-country log grab: `[Space] Grab: Fallen Pine Log (900 kg)` → lifted **`900 kg`** on first press (`.scratch/loop/18/04_can_grab_highlight.png`, `.scratch/loop/18/05_grabbed_open_country_log.png`).
+
+---
+
+## Iteration 19 — Round 2: Layered Sampled Engine, Load-Dependent Hydraulics & Surface Tire Audio (2026-11-24)
+
+**Goal**: Address the Sound item from `.scratch/grades/round-1.md` by replacing pure oscillator engine/hydraulic loops with layered seamless `.wav` samples with load-dependent pitch, plus distinct rolling surface audio for tarmac, gravel, and grass.
+
+### Changes Made
+- **Audio sample assets** ([scripts/build-audio-samples.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/build-audio-samples.mjs), `public/audio/*.wav`):
+  - Generated 6 seamless looping `22,050 Hz` PCM `.wav` assets (`~494 KB` total; total `public/` = **`4.8 MB`**): `diesel_idle.wav` (4-cylinder Deutz chug + injection clatter), `diesel_load.wav` (heavy under-load exhaust bark), `hydraulic_pump.wav` (9-piston axial hydrostatic whine + fluid flow), `surface_tarmac.wav` (chevron tread hum + road hiss), `surface_gravel.wav` (pebble clicks & grit roll), and `surface_grass.wav` (turf blade brush & earth roll).
+- **Sampled audio engine** ([src/audio.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/audio.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Asynchronously fetches and decodes all 6 `.wav` loops into looping `AudioBufferSourceNode` chains, smoothly crossfading out the startup fallback oscillators once decoded.
+  - Crossfades `diesel_idle.wav` and `diesel_load.wav` by combined throttle, hydraulic demand, and carried cargo mass (`carriedLoadNorm`) with load-dependent `playbackRate` and resonant lowpass filter sweeps.
+  - Modulates `hydraulic_pump.wav` playback rate (`0.85–1.55`) and bandpass pressure frequency dynamically with boom motion, clamp squeeze, and carried mass.
+  - Crossfades `surface_tarmac.wav`, `surface_gravel.wav`, and `surface_grass.wav` smoothly based on live ground surface and wheel speed when grounded, with speed-dependent pitch.
+- **OSM Road & Courtyard Surface Detection** ([src/terrain.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/terrain.ts)):
+  - Added a `100 m` spatial hash grid over all `2,022` real OSM road segments in `getSurfaceType(x, z)` so paved roads (`secondary`/`tertiary`/`residential`) accurately report `'asphalt'`, farm tracks/yards/courtyards report `'gravel'`, lakeside shores report `'mud'`/`'water'`, and meadows report `'grass'` (also keeping chevron tire imprints off paved asphalt roads).
+
+### Verification & Screenshots (`.scratch/loop/19/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors. `public/` = **`4.8 MB`**.
+- Live telemetry verified (`getAudioState()`):
+  - All `6/6` `.wav` loops decoded (`ctxState: 'running'`).
+  - Home Farm courtyard drive: `surface: 'gravel'`, `surfaceGains: { tarmac: 0, gravel: 0.051, grass: 0 }`, `idleRate: 0.88 → 1.171`, `loadRate: 0.72 → 1.101` (`.scratch/loop/19/01_home_farm_gravel.png`).
+  - Heavy load (`2,200 kg`) hydraulic shift: `engineLoad: 0.588`, `hydroRate: 0.85 → 1.11` (`.scratch/loop/19/02_heavy_load_hydraulics.png`).
+  - Münsinger Straße drive: `surface: 'asphalt'`, `surfaceGains: { tarmac: 0.154, gravel: 0, grass: 0 }` (`.scratch/loop/19/03_tarmac_road.png`).
+  - Open meadow drive: `surface: 'grass'`, `surfaceGains: { tarmac: 0, gravel: 0, grass: 0.143 }` (`.scratch/loop/19/04_meadow_grass.png`).
