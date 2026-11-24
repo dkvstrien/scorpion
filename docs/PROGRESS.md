@@ -324,3 +324,41 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 
 ### Honest Scores Before → After
 `3/3/2/3/2/3/3/3/3/3` → `3/3/3/3/2/3/3/3/3/3` (World: recognisable 2→3; Look solid 2, pushing to honest 3 in Iter 14).
+
+---
+
+## Iteration 14 — Fix #5 (Part 2): Baroque Hero Landmarks, Multi-Lobe Organic Trees, Sculpted Alps Ridge & Water/Sky Polish (2026-11-24)
+
+**Goal**: Eliminate every remaining simple/primitive visual holdover across the 6 viewpoints — transform hero landmarks (St. Mariä Himmelfahrt, Schloss Ammerland, Gasthaus Zum Altwirt & Maibaum, Fischerei Sebald & Pier) from plain boxes into articulated Baroque Bavarian landmarks, replace single-sphere lollipop trees with multi-lobe shaded canopies, replace the giant mountain cones with a natural sculpted Alpine horizon ridge, add animated lake wave shimmer, and fix a breakable pasture fence found clipping the open-country road.
+
+### Changes Made
+- **Hero Landmarks Overhaul** ([src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts), [src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts)):
+  - **Pfarrkirche St. Mariä Himmelfahrt**: bespoke warm Bavarian Baroque lime-wash stucco texture, 3D sandstone plinth, 3D vertical Baroque pilasters (`Lisenen`), stepped eaves cornice, stone arch window surrounds & wrought-iron muntin bars, recessed arched oak double portal with pitched verdigris-copper porch canopy on twin stone columns, glowing circular Baroque rose window / oculus, pilastered tower with cornice belts & copper onion dome, and terracotta-capped Kirchhofmauer.
+  - **Schloss Ammerland (1685)**: bespoke 3-story Baroque palace facade texture with pedimented mullioned windows & rusticated limestone base, 3D cornice & roof dormer pediments, palace chimneys, articulated twin lakeside onion towers with stone plinths, cornice collars, arched tower windows, gilded orb+spire finials, and lakeside stone terrace wall.
+  - **Gasthaus Zum Altwirt & Münsing Maibaum**: switched to Lüftlmalerei fresco facade, 3D stone plinth, overhanging dark-timber eaves fascia, twin chimneys, carved balcony with red geranium flower boxes, Bavarian Weiß-Blau striped Biergarten parasols, and 4 pairs of traditional painted guild plaques (`Zunfttafeln`) along the Maibaum.
+  - **Fischerei Sebald & 58m Pier**: overhanging roof fascia, blue-and-white striped Brotzeitgarten awning, pier mooring bollards, stacked fish crates, lifebuoy, and upgraded sailboats with pointed bows, blue waterlines, and jib + mainsails.
+- **Organic Multi-Lobe Vegetation** ([src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts), [src/worldDetails.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/worldDetails.ts)):
+  - Replaced single-sphere destructible chestnut trees with branched trunks + 5-cluster multi-tone foliage crowns (shaded under-canopy, mid leaves, sunlit crest).
+  - Upgraded instanced broadleaf oaks/beeches and `Streuobstwiese` orchard trees to 3-lobe shaded crowns, and instanced Alpine spruces to a 3-tier vertical pine-needle color gradient.
+- **Distant Alps Ridge, Animated Water Shimmer & Twilight Polish** ([src/terrain.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/terrain.ts), [src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts), [src/farm.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/farm.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Replaced 6 giant `ConeGeometry` mountain pyramids with a continuous 2-layer ridged-multifractal Alpine horizon chain (Voralpen foothills + Karwendel/Wetterstein peaks) that fades softly into distance fog and tapers cleanly to zero at horizon edges.
+  - Added seamlessly tileable isotropic wave ripple bump texture scrolling gently across Starnberger See.
+  - Tuned Blue Hour (`dusk`) sky dome and fog to luminous cobalt twilight instead of near-black.
+- **Open-Country Fence Placement Fix** ([src/destruction.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/destruction.ts)):
+  - Moved two breakable wooden pasture fences that were clipping diagonally across the asphalt Landstraße at `05_open_country` cleanly onto the south meadow verge parallel to the road.
+
+### Verification & Weakest Things Observed (`.scratch/loop/14/`)
+- `npx tsc --noEmit && npm run build`: pass (`0` errors). `agweb console error`: `0` console errors. `public/` = **`4.1 MB`**.
+- All 11 screenshots inspected visually:
+  - `.scratch/loop/14/01_muensing_church.png` & `10_dusk_church.png`: St. Mariä Himmelfahrt now reads as a distinct Baroque Bavarian parish church with pilasters, copper porch canopy, glowing oculus, and articulated bell tower.
+  - `.scratch/loop/14/02_zum_altwirt.png`: Multi-lobe chestnut tree, blue-and-white striped Biergarten parasol, Lüftlmalerei Zum Altwirt facade, Maibaum with guild signs.
+  - `.scratch/loop/14/03_home_farm.png` & `11_morning_farm.png`: Wimpasing Home Farm yard framed by varied LoD2 farmhouses, 3D barn doors, chimneys, and compact `7.7%` HUD.
+  - `.scratch/loop/14/04_ammerland_street.png`, `06_schloss_ammerland_closeup.png`, & `09_sunset_ammerland.png`: Schloss Ammerland palace facade, dormer, twin copper onion domes with gold spires, smooth rippled lake, sailboats, 3-tone spruces, multi-lobe broadleaf tree, and soft serrated misty Alps horizon.
+  - `.scratch/loop/14/05_sebald_pier_lake.png`, `07_open_country.png`, `08_weipertshausen.png`: Clean road verge with pasture fences parallel to asphalt, varied village timber/plaster/solar architecture.
+- **Weakest things still visible**:
+  - LoD2 village buildings still use flat textured facade strips for windows (recessed shutters/frames are painted rather than 3D recessed openings, though now paired with 3D balconies, barn doors, overhangs, and chimneys).
+  - Pedestrians and parked village cars remain stylized low-poly block figures rather than high-poly articulated models.
+  - Subtle dark vector courtyard/garden ground patch next to Schloss Ammerland lawn could be slightly softer, and distant spruces still read as stylized 3-cone silhouettes up close.
+
+### Honest Scores Before → After
+`3/3/3/3/2/3/3/3/3/3` → `3/3/3/3/3/3/3/3/3/3` (Look 2→3; Fixes #1–#5 complete. Next: Iteration 15 full end-to-end scorecard regression audit, FPS/load/handling/demolition/fast-travel proof suite, and final `docs/FINAL_REPORT.md`).

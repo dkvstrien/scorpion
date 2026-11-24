@@ -9,7 +9,14 @@ import {
   SEBALD_PIER,
   WATER_LEVEL
 } from './terrain';
-import { createAsphaltTexture, createGravelRoadTexture, createVillageAsphaltTexture } from './textures';
+import {
+  createAsphaltTexture,
+  createBaroqueChurchTexture,
+  createBaroquePalaceTexture,
+  createBavarianParasolTexture,
+  createGravelRoadTexture,
+  createVillageAsphaltTexture
+} from './textures';
 import { buildBavarianWorldDetails } from './worldDetails';
 
 export interface DynamicVillageObj {
@@ -1115,21 +1122,27 @@ export class RealMuensingWorld {
   private buildHeroLandmarks(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
     const tileTex = createTileRoofTexture();
     const gableGeo = createBavarianGableRoofGeometry();
+    const parasolTex = createBavarianParasolTexture();
 
-    // === 1. PFARRKIRCHE ST. MARIÄ HIMMELFAHRT AT REAL GPS (830.8, 657.7) ===
+    // === 1. PFARRKIRCHE ST. MARIÄ HIMMELFAHRT AT REAL GPS ===
     {
       const cx = REAL_SPOTS.muensingChurch.x;
       const cz = REAL_SPOTS.muensingChurch.z;
       const gy = getTerrainHeight(cx, cz);
 
-      const stucco = new THREE.MeshStandardMaterial({ color: 0xf4f0e6, roughness: 0.84 });
-      const tileRed = new THREE.MeshStandardMaterial({ map: tileTex, color: 0xca5a3b, roughness: 0.78 });
-      const verdigrisCopper = new THREE.MeshStandardMaterial({ color: 0x335e50, roughness: 0.38, metalness: 0.48 });
-      const gold = new THREE.MeshStandardMaterial({ color: 0xe8bd42, roughness: 0.2, metalness: 0.9 });
+      const churchTex = createBaroqueChurchTexture();
+      churchTex.repeat.set(2, 1);
+      const stucco = new THREE.MeshStandardMaterial({ map: churchTex, color: 0xfbf5e8, roughness: 0.84 });
+      const trimCream = new THREE.MeshStandardMaterial({ color: 0xf7efe0, roughness: 0.78 });
+      const plinthStone = new THREE.MeshStandardMaterial({ color: 0xb9b09f, roughness: 0.92 });
+      const tileRed = new THREE.MeshStandardMaterial({ map: tileTex, color: 0xc55638, roughness: 0.78 });
+      const verdigrisCopper = new THREE.MeshStandardMaterial({ color: 0x356455, roughness: 0.36, metalness: 0.48 });
+      const gold = new THREE.MeshStandardMaterial({ color: 0xebbf42, roughness: 0.2, metalness: 0.9 });
       const oakMat = new THREE.MeshStandardMaterial({ color: 0x4d311c, roughness: 0.86 });
+      const ironMat = new THREE.MeshStandardMaterial({ color: 0x222628, roughness: 0.55, metalness: 0.6 });
       const louverMat = new THREE.MeshStandardMaterial({ color: 0x262928, roughness: 0.9 });
 
-      // Baroque Hall Nave (Saalbau)
+      // Baroque Hall Nave (Saalbau) + sandstone plinth + stepped Baroque eaves cornice
       const nave = new THREE.Mesh(new THREE.BoxGeometry(20, 9.6, 10.6), stucco);
       nave.position.set(cx, gy + 4.2, cz);
       nave.castShadow = true;
@@ -1137,53 +1150,168 @@ export class RealMuensingWorld {
       scene.add(nave);
       this.addStaticBox(world, groundMat, cx, gy + 4.8, cz, 20, 9.6, 10.6);
 
-      // Steep terracotta gable roof over nave
+      const navePlinth = new THREE.Mesh(new THREE.BoxGeometry(20.4, 1.35, 11.0), plinthStone);
+      navePlinth.position.set(cx, gy + 0.35, cz);
+      navePlinth.receiveShadow = true;
+      scene.add(navePlinth);
+
+      const naveCornice = new THREE.Mesh(new THREE.BoxGeometry(20.55, 0.46, 11.15), trimCream);
+      naveCornice.position.set(cx, gy + 8.88, cz);
+      naveCornice.castShadow = true;
+      scene.add(naveCornice);
+
+      // 3D Baroque Vertical Pilasters (Lisenen) articulating the North, South & West nave walls
+      for (const side of [-1, 1]) {
+        for (const px of [-9.7, -4.15, 0, 4.15, 9.7]) {
+          const pil = new THREE.Mesh(new THREE.BoxGeometry(0.46, 8.6, 0.22), trimCream);
+          pil.position.set(cx + px, gy + 4.65, cz + side * 5.36);
+          pil.castShadow = true;
+          scene.add(pil);
+        }
+      }
+      for (const pz of [-5.0, -2.2, 2.2, 5.0]) {
+        const wPil = new THREE.Mesh(new THREE.BoxGeometry(0.22, 8.6, 0.46), trimCream);
+        wPil.position.set(cx - 10.06, gy + 4.65, cz + pz);
+        scene.add(wPil);
+      }
+
+      // Steep terracotta gable roof over nave + timber gable bargeboard trim
       const naveRoof = new THREE.Mesh(gableGeo, tileRed);
-      naveRoof.position.set(cx, gy + 8.95, cz);
-      naveRoof.scale.set(20.6, 5.4, 11.2);
+      naveRoof.position.set(cx, gy + 9.0, cz);
+      naveRoof.scale.set(20.8, 5.5, 11.5);
       naveRoof.castShadow = true;
       scene.add(naveRoof);
 
-      // Indented octagonal late-Gothic East Choir Apse (exact match to 2023 photo!)
+      // Indented octagonal late-Gothic East Choir Apse with stone plinth & cornice ring
       const apse = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 8.8, 6), stucco);
       apse.position.set(cx + 11.2, gy + 3.9, cz);
       apse.castShadow = true;
       scene.add(apse);
-      const apseRoof = new THREE.Mesh(new THREE.ConeGeometry(4.9, 4.2, 6), tileRed);
-      apseRoof.position.set(cx + 11.2, gy + 10.3, cz);
+      const apsePlinth = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 4.65, 1.3, 6), plinthStone);
+      apsePlinth.position.set(cx + 11.2, gy + 0.35, cz);
+      scene.add(apsePlinth);
+      const apseCornice = new THREE.Mesh(new THREE.CylinderGeometry(4.75, 4.55, 0.4, 6), trimCream);
+      apseCornice.position.set(cx + 11.2, gy + 8.2, cz);
+      scene.add(apseCornice);
+      const apseRoof = new THREE.Mesh(new THREE.ConeGeometry(5.1, 4.3, 6), tileRed);
+      apseRoof.position.set(cx + 11.2, gy + 10.45, cz);
       apseRoof.castShadow = true;
       scene.add(apseRoof);
 
-      // Arched stained-glass nave windows + oak west portal & copper canopy
+      // Arched stained-glass nave windows with 3D Baroque stone arch surrounds, sills & dark wrought-iron mullions
       for (const side of [-1, 1]) {
-        for (const wx of [-6.2, -2.1, 2.1, 6.2]) {
-          const wMesh = new THREE.Mesh(new THREE.BoxGeometry(1.15, 3.3, 0.18), this.warmWindowMat);
-          wMesh.position.set(cx + wx, gy + 5.1, cz + side * 5.34);
+        for (const wx of [-6.9, -2.1, 2.1, 6.9]) {
+          // Cream Baroque outer frame & sill
+          const frame = new THREE.Mesh(new THREE.BoxGeometry(1.56, 3.62, 0.16), trimCream);
+          frame.position.set(cx + wx, gy + 5.1, cz + side * 5.33);
+          scene.add(frame);
+          const archFrame = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.78, 0.16, 14), trimCream);
+          archFrame.rotation.x = Math.PI / 2;
+          archFrame.position.set(cx + wx, gy + 6.82, cz + side * 5.33);
+          scene.add(archFrame);
+          const sill = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.22, 0.34), plinthStone);
+          sill.position.set(cx + wx, gy + 3.28, cz + side * 5.4);
+          scene.add(sill);
+
+          // Glowing stained-glass pane + vertical/horizontal lead muntin bars
+          const wMesh = new THREE.Mesh(new THREE.BoxGeometry(1.16, 3.3, 0.18), this.warmWindowMat);
+          wMesh.position.set(cx + wx, gy + 5.1, cz + side * 5.36);
           scene.add(wMesh);
           const arch = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.18, 12), this.warmWindowMat);
           arch.rotation.x = Math.PI / 2;
-          arch.position.set(cx + wx, gy + 6.75, cz + side * 5.34);
+          arch.position.set(cx + wx, gy + 6.75, cz + side * 5.36);
           scene.add(arch);
+          const vBar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 3.8, 0.2), ironMat);
+          vBar.position.set(cx + wx, gy + 5.35, cz + side * 5.37);
+          scene.add(vBar);
+          for (const hy of [4.2, 5.4, 6.5]) {
+            const hBar = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.06, 0.2), ironMat);
+            hBar.position.set(cx + wx, gy + hy, cz + side * 5.37);
+            scene.add(hBar);
+          }
         }
       }
-      const portal = new THREE.Mesh(new THREE.BoxGeometry(0.28, 3.8, 2.5), oakMat);
-      portal.position.set(cx - 10.05, gy + 1.9, cz);
-      scene.add(portal);
 
-      // Iconic Tall Southern Bell Tower (square shaft -> octagonal belfry -> plump dark-verdigris fluted Zwiebelturm!)
+      // Articulated West Portal: stone steps, carved arched oak double door, copper porch canopy on twin columns, Baroque oculus!
+      const step1 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.32, 3.8), plinthStone);
+      step1.position.set(cx - 10.85, gy + 0.05, cz);
+      scene.add(step1);
+      const portalFrame = new THREE.Mesh(new THREE.BoxGeometry(0.32, 3.9, 3.1), trimCream);
+      portalFrame.position.set(cx - 10.05, gy + 2.0, cz);
+      scene.add(portalFrame);
+      const portal = new THREE.Mesh(new THREE.BoxGeometry(0.34, 3.55, 2.35), oakMat);
+      portal.position.set(cx - 10.08, gy + 1.85, cz);
+      scene.add(portal);
+      const doorSplit = new THREE.Mesh(new THREE.BoxGeometry(0.38, 3.55, 0.08), ironMat);
+      doorSplit.position.set(cx - 10.1, gy + 1.85, cz);
+      scene.add(doorSplit);
+
+      // Pitched verdigris-copper entrance canopy supported on twin slender stone columns
+      const canopyRoof = new THREE.Mesh(gableGeo, verdigrisCopper);
+      canopyRoof.position.set(cx - 11.15, gy + 4.15, cz);
+      canopyRoof.rotation.y = Math.PI / 2;
+      canopyRoof.scale.set(3.8, 1.15, 2.5);
+      canopyRoof.castShadow = true;
+      scene.add(canopyRoof);
+      for (const colZ of [-1.55, 1.55]) {
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.17, 3.95, 10), plinthStone);
+        col.position.set(cx - 12.05, gy + 2.1, cz + colZ);
+        col.castShadow = true;
+        scene.add(col);
+      }
+
+      // Circular Baroque Oculus / Rose Window centered above the west portal
+      const oculusRing = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.2, 10, 22), trimCream);
+      oculusRing.rotation.y = Math.PI / 2;
+      oculusRing.position.set(cx - 10.06, gy + 6.85, cz);
+      scene.add(oculusRing);
+      const oculusGlass = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.18, 18), this.warmWindowMat);
+      oculusGlass.rotation.z = Math.PI / 2;
+      oculusGlass.position.set(cx - 10.06, gy + 6.85, cz);
+      scene.add(oculusGlass);
+      const oculusCross1 = new THREE.Mesh(new THREE.BoxGeometry(0.24, 2.05, 0.08), ironMat);
+      oculusCross1.position.set(cx - 10.08, gy + 6.85, cz);
+      scene.add(oculusCross1);
+      const oculusCross2 = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 2.05), ironMat);
+      oculusCross2.position.set(cx - 10.08, gy + 6.85, cz);
+      scene.add(oculusCross2);
+
+      // Iconic Tall Southern Bell Tower (articulated plinth -> pilastered shaft -> cornice -> octagonal belfry -> copper lantern -> Zwiebelturm!)
       const tx = cx + 5.5;
       const tz = cz + 6.6;
       const shaft = new THREE.Mesh(new THREE.BoxGeometry(5.2, 16.5, 5.2), stucco);
       shaft.position.set(tx, gy + 7.8, tz);
       shaft.castShadow = true;
+      shaft.receiveShadow = true;
       scene.add(shaft);
       this.addStaticBox(world, groundMat, tx, gy + 8.2, tz, 5.2, 16.5, 5.2);
 
-      // Octagonal white upper belfry with dark louvered arched sound-holes & clock dials!
+      const towerPlinth = new THREE.Mesh(new THREE.BoxGeometry(5.6, 1.6, 5.6), plinthStone);
+      towerPlinth.position.set(tx, gy + 0.45, tz);
+      scene.add(towerPlinth);
+      for (const cy of [8.6, 15.85]) {
+        const belt = new THREE.Mesh(new THREE.BoxGeometry(5.72, 0.44, 5.72), trimCream);
+        belt.position.set(tx, gy + cy, tz);
+        belt.castShadow = true;
+        scene.add(belt);
+      }
+      // Corner pilasters on square tower shaft
+      for (const sx of [-2.48, 2.48]) {
+        for (const sz of [-2.48, 2.48]) {
+          const cp = new THREE.Mesh(new THREE.BoxGeometry(0.45, 15.4, 0.45), trimCream);
+          cp.position.set(tx + sx, gy + 8.0, tz + sz);
+          scene.add(cp);
+        }
+      }
+
+      // Octagonal white upper belfry with cornice crown, stone-framed arched sound-holes & gold-rimmed clock dials
       const belfry = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 2.85, 9.2, 8), stucco);
       belfry.position.set(tx, gy + 20.5, tz);
       belfry.castShadow = true;
       scene.add(belfry);
+      const belfryCornice = new THREE.Mesh(new THREE.CylinderGeometry(3.12, 2.85, 0.48, 8), trimCream);
+      belfryCornice.position.set(tx, gy + 24.95, tz);
+      scene.add(belfryCornice);
 
       const clockMat = new THREE.MeshStandardMaterial({ map: createClockTexture(), roughness: 0.4 });
       for (const [ox, oz, ry] of [
@@ -1192,17 +1320,21 @@ export class RealMuensingWorld {
         [2.82, 0, Math.PI / 2],
         [-2.82, 0, -Math.PI / 2]
       ]) {
-        const face = new THREE.Mesh(new THREE.CircleGeometry(0.95, 18), clockMat);
+        const face = new THREE.Mesh(new THREE.CircleGeometry(0.98, 20), clockMat);
         face.position.set(tx + ox, gy + 18.2, tz + oz);
         face.rotation.y = ry;
         scene.add(face);
-        const louver = new THREE.Mesh(new THREE.BoxGeometry(0.85, 2.2, 0.16), louverMat);
-        louver.position.set(tx + ox * 0.96, gy + 21.8, tz + oz * 0.96);
+        const lFrame = new THREE.Mesh(new THREE.BoxGeometry(1.18, 2.55, 0.14), trimCream);
+        lFrame.position.set(tx + ox * 0.94, gy + 21.85, tz + oz * 0.94);
+        lFrame.rotation.y = ry;
+        scene.add(lFrame);
+        const louver = new THREE.Mesh(new THREE.BoxGeometry(0.86, 2.22, 0.18), louverMat);
+        louver.position.set(tx + ox * 0.96, gy + 21.85, tz + oz * 0.96);
         louver.rotation.y = ry;
         scene.add(louver);
       }
 
-      // Authentic plump fluted dark-verdigris copper onion dome (matching 2023 reference photo!)
+      // Authentic plump fluted dark-verdigris copper onion dome + copper collar
       const onionPts = [
         new THREE.Vector2(0.01, 7.6),
         new THREE.Vector2(0.28, 6.2),
@@ -1213,31 +1345,37 @@ export class RealMuensingWorld {
         new THREE.Vector2(2.65, 0)
       ];
       const onion = new THREE.Mesh(new THREE.LatheGeometry(onionPts, 16), verdigrisCopper);
-      onion.position.set(tx, gy + 25.0, tz);
+      onion.position.set(tx, gy + 25.15, tz);
       onion.castShadow = true;
       scene.add(onion);
 
-      // Shiny gold orb & cross finial
-      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), gold);
-      orb.position.set(tx, gy + 32.8, tz);
+      // Shiny gold orb & Baroque cross finial
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.46, 12, 10), gold);
+      orb.position.set(tx, gy + 32.95, tz);
       scene.add(orb);
-      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.7, 0.14), gold);
-      crossV.position.set(tx, gy + 34.0, tz);
+      const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.75, 0.14), gold);
+      crossV.position.set(tx, gy + 34.15, tz);
       scene.add(crossV);
-      const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.14, 0.14), gold);
-      crossH.position.set(tx, gy + 34.25, tz);
+      const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.14, 0.14), gold);
+      crossH.position.set(tx, gy + 34.4, tz);
       scene.add(crossH);
 
-      // Cream-plaster Kirchhofmauer (Churchyard Retaining Wall) tucked cleanly along the church edge (clear of Weipertshausener Str.!)
-      const wallMat = new THREE.MeshStandardMaterial({ color: 0xddd4c2, roughness: 0.92 });
-      const wallSeg = new THREE.Mesh(new THREE.BoxGeometry(19, 1.8, 0.58), wallMat);
+      // Warm-plaster Kirchhofmauer (Churchyard Retaining Wall) with terracotta saddle coping tiles & pilasters
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0xe6dcc9, roughness: 0.9 });
+      const wallSeg = new THREE.Mesh(new THREE.BoxGeometry(19, 1.85, 0.58), wallMat);
       wallSeg.position.set(cx + 1, gy + 0.6, cz + 8.9);
       wallSeg.castShadow = true;
       wallSeg.receiveShadow = true;
       scene.add(wallSeg);
-      const wallCap = new THREE.Mesh(new THREE.BoxGeometry(19.4, 0.2, 0.78), oakMat);
-      wallCap.position.set(cx + 1, gy + 1.56, cz + 8.9);
+      const wallCap = new THREE.Mesh(new THREE.BoxGeometry(19.4, 0.26, 0.86), tileRed);
+      wallCap.position.set(cx + 1, gy + 1.6, cz + 8.9);
+      wallCap.castShadow = true;
       scene.add(wallCap);
+      for (const wp of [-8.2, -2.4, 3.4, 9.2]) {
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.76, 2.05, 0.78), trimCream);
+        pillar.position.set(cx + wp, gy + 0.72, cz + 8.9);
+        scene.add(pillar);
+      }
     }
 
     // === 2. HERO GASTHAUS "ZUM ALTWIRT" INN, CHESTNUT BIERGARTEN & MÜNSING MAIBAUM ===
@@ -1247,12 +1385,16 @@ export class RealMuensingWorld {
       const gy = getTerrainHeight(ax, az);
 
       const innMat = new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture('landhaus'),
-        color: 0xfbe8c4,
+        map: createBavarianArchetypeTexture('lueftlmalerei'),
+        color: 0xfdf1d4,
         roughness: 0.84
       });
       const innRoofMat = new THREE.MeshStandardMaterial({ map: tileTex, color: 0xaa4428, roughness: 0.78 });
-      const darkWood = new THREE.MeshStandardMaterial({ color: 0x4c2f19, roughness: 0.88 });
+      const darkWood = new THREE.MeshStandardMaterial({ color: 0x4b2e18, roughness: 0.88 });
+      const plinthStone = new THREE.MeshStandardMaterial({ color: 0xaba292, roughness: 0.92 });
+      const flowerMat = new THREE.MeshStandardMaterial({ color: 0xc9312a, roughness: 0.82 });
+      const leafBoxMat = new THREE.MeshStandardMaterial({ color: 0x38662c, roughness: 0.88 });
+      const chimneyPlaster = new THREE.MeshStandardMaterial({ color: 0xe9e1d2, roughness: 0.88 });
 
       const innBody = new THREE.Mesh(new THREE.BoxGeometry(16.5, 7.6, 11.0), innMat);
       innBody.position.set(ax, gy + 3.2, az);
@@ -1261,18 +1403,59 @@ export class RealMuensingWorld {
       scene.add(innBody);
       this.addStaticBox(world, groundMat, ax, gy + 3.6, az, 16.5, 7.6, 11.0);
 
-      // Broad low-pitched Upper Bavarian overhanging gable roof!
+      // Ground stone plinth
+      const innPlinth = new THREE.Mesh(new THREE.BoxGeometry(16.85, 1.1, 11.35), plinthStone);
+      innPlinth.position.set(ax, gy + 0.25, az);
+      scene.add(innPlinth);
+
+      // Broad overhanging Upper Bavarian gable roof + dark timber fascia beam & twin chimneys
       const innRoof = new THREE.Mesh(gableGeo, innRoofMat);
       innRoof.position.set(ax, gy + 6.95, az);
-      innRoof.scale.set(17.5, 4.1, 12.2);
+      innRoof.scale.set(17.9, 4.2, 12.6);
       innRoof.castShadow = true;
       scene.add(innRoof);
 
-      // Carved dark-timber Bavarian front balcony
-      const balc = new THREE.Mesh(new THREE.BoxGeometry(7.2, 1.05, 1.45), darkWood);
-      balc.position.set(ax, gy + 4.3, az - 5.9);
-      balc.castShadow = true;
-      scene.add(balc);
+      const fascia = new THREE.Mesh(new THREE.BoxGeometry(17.8, 0.34, 12.5), darkWood);
+      fascia.position.set(ax, gy + 6.86, az);
+      scene.add(fascia);
+
+      for (const chx of [-4.2, 4.6]) {
+        const chim = new THREE.Mesh(new THREE.BoxGeometry(0.95, 2.4, 0.95), chimneyPlaster);
+        chim.position.set(ax + chx, gy + 10.6, az + 1.2);
+        chim.castShadow = true;
+        scene.add(chim);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.22, 1.18), innRoofMat);
+        cap.position.set(ax + chx, gy + 11.86, az + 1.2);
+        scene.add(cap);
+      }
+
+      // Carved dark-timber Bavarian balcony with deck, posts, rail & vibrant red geranium window boxes!
+      const balcDeck = new THREE.Mesh(new THREE.BoxGeometry(9.4, 0.22, 1.55), darkWood);
+      balcDeck.position.set(ax, gy + 3.72, az - 6.05);
+      balcDeck.castShadow = true;
+      scene.add(balcDeck);
+      const balcRail = new THREE.Mesh(new THREE.BoxGeometry(9.4, 0.92, 0.16), darkWood);
+      balcRail.position.set(ax, gy + 4.3, az - 6.72);
+      balcRail.castShadow = true;
+      scene.add(balcRail);
+      for (const bx of [-4.5, 4.5]) {
+        const sideRail = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.92, 1.5), darkWood);
+        sideRail.position.set(ax + bx, gy + 4.3, az - 6.05);
+        scene.add(sideRail);
+      }
+      for (const fx of [-3.4, -1.1, 1.1, 3.4]) {
+        const leaf = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.32, 0.42), leafBoxMat);
+        leaf.position.set(ax + fx, gy + 4.78, az - 6.82);
+        scene.add(leaf);
+        const bloom = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.24, 0.34), flowerMat);
+        bloom.position.set(ax + fx, gy + 4.98, az - 6.84);
+        scene.add(bloom);
+      }
+
+      // Tavern entrance oak door + warm glowing lantern beside it
+      const door = new THREE.Mesh(new THREE.BoxGeometry(2.1, 2.6, 0.2), darkWood);
+      door.position.set(ax, gy + 1.4, az - 5.56);
+      scene.add(door);
 
       const altTex = makeSignTexture(
         512,
@@ -1285,15 +1468,15 @@ export class RealMuensingWorld {
         '#a8db3e'
       );
       const signBoard = new THREE.Mesh(
-        new THREE.BoxGeometry(7.2, 1.55, 0.16),
+        new THREE.BoxGeometry(7.4, 1.55, 0.18),
         new THREE.MeshStandardMaterial({ map: altTex, roughness: 0.45 })
       );
-      signBoard.position.set(ax, gy + 6.0, az - 5.64);
+      signBoard.position.set(ax, gy + 6.0, az - 5.65);
       signBoard.rotation.y = Math.PI;
       scene.add(signBoard);
 
-      // Blue-and-white Bavarian Biergarten Parasols right outside Zum Altwirt!
-      const umbrellaMat = new THREE.MeshStandardMaterial({ color: 0x2679c2, roughness: 0.72 });
+      // Authentic Bavarian Weiß-Blau striped Biergarten Parasols outside Zum Altwirt!
+      const umbrellaMat = new THREE.MeshStandardMaterial({ map: parasolTex, roughness: 0.7 });
       const whitePole = new THREE.MeshStandardMaterial({ color: 0xeeeae0, roughness: 0.6 });
       for (const [ux, uz] of [
         [ax - 9.5, az - 6.5],
@@ -1301,16 +1484,16 @@ export class RealMuensingWorld {
         [ax + 2.5, az - 8.5]
       ]) {
         const uy = getTerrainHeight(ux, uz);
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.8, 8), whitePole);
-        pole.position.set(ux, uy + 1.4, uz);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.85, 8), whitePole);
+        pole.position.set(ux, uy + 1.42, uz);
         scene.add(pole);
-        const canopy = new THREE.Mesh(new THREE.ConeGeometry(2.1, 0.75, 8), umbrellaMat);
-        canopy.position.set(ux, uy + 2.75, uz);
+        const canopy = new THREE.Mesh(new THREE.ConeGeometry(2.2, 0.78, 12), umbrellaMat);
+        canopy.position.set(ux, uy + 2.8, uz);
         canopy.castShadow = true;
         scene.add(canopy);
       }
 
-      // Tall Blue-and-White Münsing Maibaum standing proudly on the village square between Church & Altwirt!
+      // Tall Blue-and-White Münsing Maibaum with painted Bavarian guild signs (Zunfttafeln) & spruce wreath!
       const mx = REAL_SPOTS.muensingChurch.x + 36;
       const mz = REAL_SPOTS.muensingChurch.z + 32;
       const my = getTerrainHeight(mx, mz);
@@ -1323,8 +1506,25 @@ export class RealMuensingWorld {
       pole.castShadow = true;
       g.add(pole);
 
+      // 4 pairs of traditional Bavarian craft/guild arms (Zunfttafeln) projecting along the Maibaum!
+      const guildColors = [0xd64531, 0x266eb5, 0xdca52a, 0x357a3c];
+      for (let gi = 0; gi < 4; gi++) {
+        const armY = 5.4 + gi * 2.05;
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.1, 0.1), darkWood);
+        arm.position.y = armY;
+        arm.rotation.y = gi * 0.85;
+        g.add(arm);
+        const signMat = new THREE.MeshStandardMaterial({ color: guildColors[gi], roughness: 0.6 });
+        for (const side of [-1.15, 1.15]) {
+          const plaque = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.08), signMat);
+          plaque.position.set(Math.cos(gi * 0.85) * side, armY + 0.32, -Math.sin(gi * 0.85) * side);
+          plaque.rotation.y = gi * 0.85;
+          g.add(plaque);
+        }
+      }
+
       const wreath = new THREE.Mesh(
-        new THREE.TorusGeometry(1.35, 0.28, 10, 18),
+        new THREE.TorusGeometry(1.38, 0.28, 10, 18),
         new THREE.MeshStandardMaterial({ color: 0x2d6630, roughness: 0.88 })
       );
       wreath.rotation.x = Math.PI / 2;
@@ -1332,7 +1532,7 @@ export class RealMuensingWorld {
       g.add(wreath);
 
       const crown = new THREE.Mesh(
-        new THREE.ConeGeometry(1.05, 2.6, 8),
+        new THREE.ConeGeometry(1.1, 2.7, 8),
         new THREE.MeshStandardMaterial({ color: 0x2d6630, roughness: 0.88 })
       );
       crown.position.y = 17.8;
@@ -1351,20 +1551,26 @@ export class RealMuensingWorld {
       });
     }
 
-    // === 3. SCHLOSS AMMERLAND AT REAL GPS (-743.6, 520.4) — AUTHENTIC 1685 PALACE WITH TWIN ONION TOWERS! ===
+    // === 3. SCHLOSS AMMERLAND — AUTHENTIC 1685 BAROQUE LAKESIDE PALACE WITH TWIN ONION TOWERS ===
     {
       const sx = REAL_SPOTS.schlossAmmerland.x;
       const sz = REAL_SPOTS.schlossAmmerland.z;
       const gy = Math.max(WATER_LEVEL + 1.2, getTerrainHeight(sx, sz));
 
+      const palaceTex = createBaroquePalaceTexture();
+      palaceTex.repeat.set(1.5, 1);
       const castlePlaster = new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture('landhaus'),
-        color: 0xf7e7c4,
+        map: palaceTex,
+        color: 0xfdf3db,
         roughness: 0.8
       });
-      const towerPlaster = new THREE.MeshStandardMaterial({ color: 0xf5e8cb, roughness: 0.82 });
+      const towerPlaster = new THREE.MeshStandardMaterial({ color: 0xf6e6be, roughness: 0.82 });
+      const trimCream = new THREE.MeshStandardMaterial({ color: 0xfaf2e1, roughness: 0.78 });
+      const plinthStone = new THREE.MeshStandardMaterial({ color: 0xc2b7a2, roughness: 0.9 });
       const tileRed = new THREE.MeshStandardMaterial({ map: tileTex, color: 0xb4482c, roughness: 0.78 });
       const verdigrisCopper = new THREE.MeshStandardMaterial({ color: 0x3b7660, roughness: 0.36, metalness: 0.48 });
+      const gold = new THREE.MeshStandardMaterial({ color: 0xebbf42, roughness: 0.22, metalness: 0.88 });
+      const winGlass = new THREE.MeshStandardMaterial({ color: 0x253749, roughness: 0.2, metalness: 0.45 });
 
       const keep = new THREE.Mesh(new THREE.BoxGeometry(15, 11.2, 22), castlePlaster);
       keep.position.set(sx, gy + 5.0, sz);
@@ -1373,34 +1579,103 @@ export class RealMuensingWorld {
       scene.add(keep);
       this.addStaticBox(world, groundMat, sx, gy + 5.4, sz, 15, 11.2, 22);
 
+      // Stone plinth & Baroque stepped cornice around palace keep
+      const kPlinth = new THREE.Mesh(new THREE.BoxGeometry(15.5, 1.3, 22.5), plinthStone);
+      kPlinth.position.set(sx, gy + 0.3, sz);
+      scene.add(kPlinth);
+      const kCornice = new THREE.Mesh(new THREE.BoxGeometry(15.7, 0.5, 22.7), trimCream);
+      kCornice.position.set(sx, gy + 10.45, sz);
+      scene.add(kCornice);
+
       const roof = new THREE.Mesh(gableGeo, tileRed);
-      roof.position.set(sx, gy + 10.55, sz);
+      roof.position.set(sx, gy + 10.6, sz);
       roof.rotation.y = Math.PI / 2;
-      roof.scale.set(22.6, 4.6, 15.6);
+      roof.scale.set(23.0, 4.8, 16.0);
       roof.castShadow = true;
       scene.add(roof);
 
+      // Central Baroque Roof Dormer Pediment on both East (road) and West (lake) facades + twin palace chimneys
+      for (const side of [-1, 1]) {
+        const dormer = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.9, 5.0), towerPlaster);
+        dormer.position.set(sx + side * 6.5, gy + 11.9, sz);
+        dormer.castShadow = true;
+        scene.add(dormer);
+        const dormerRoof = new THREE.Mesh(gableGeo, tileRed);
+        dormerRoof.position.set(sx + side * 6.5, gy + 13.3, sz);
+        dormerRoof.scale.set(3.1, 1.5, 5.5);
+        scene.add(dormerRoof);
+        const dormerWin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.7, 1.25), winGlass);
+        dormerWin.position.set(sx + side * 7.82, gy + 11.95, sz);
+        scene.add(dormerWin);
+      }
+      for (const czOff of [-5.8, 5.8]) {
+        const chim = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.5, 1.1), trimCream);
+        chim.position.set(sx, gy + 15.2, sz + czOff);
+        scene.add(chim);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.25, 1.35), tileRed);
+        cap.position.set(sx, gy + 16.5, sz + czOff);
+        scene.add(cap);
+      }
+
       // Authentic TWO prominent copper onion-domed lakeside towers (Zwiebeltürme) of Caspar Feichtmayr's 1685 Schloss Ammerland!
       const castleOnionPts = [
-        new THREE.Vector2(0.01, 5.2),
-        new THREE.Vector2(0.24, 4.2),
-        new THREE.Vector2(0.95, 3.4),
-        new THREE.Vector2(2.2, 2.3),
-        new THREE.Vector2(2.35, 1.0),
-        new THREE.Vector2(1.85, 0)
+        new THREE.Vector2(0.01, 5.3),
+        new THREE.Vector2(0.24, 4.3),
+        new THREE.Vector2(0.95, 3.5),
+        new THREE.Vector2(2.22, 2.35),
+        new THREE.Vector2(2.4, 1.0),
+        new THREE.Vector2(1.9, 0)
       ];
       const castleOnionGeo = new THREE.LatheGeometry(castleOnionPts, 16);
       for (const oz of [-10.2, 10.2]) {
-        const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.85, 2.0, 14.5, 12), towerPlaster);
-        tower.position.set(sx - 6.8, gy + 6.8, sz + oz);
+        const tx = sx - 6.8;
+        const tz = sz + oz;
+        const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.88, 2.04, 14.5, 10), towerPlaster);
+        tower.position.set(tx, gy + 6.8, tz);
         tower.castShadow = true;
         scene.add(tower);
 
+        // Stone plinth & Baroque horizontal cornice collars around each tower
+        const tPlinth = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.28, 1.5, 10), plinthStone);
+        tPlinth.position.set(tx, gy + 0.4, tz);
+        scene.add(tPlinth);
+        for (const collarY of [6.8, 10.8, 13.9]) {
+          const collar = new THREE.Mesh(new THREE.CylinderGeometry(2.24, 2.1, 0.38, 10), trimCream);
+          collar.position.set(tx, gy + collarY, tz);
+          scene.add(collar);
+        }
+
+        // Tall narrow Baroque tower windows facing West, North/South & East
+        for (let a = 0; a < 4; a++) {
+          const ang = (a / 4) * Math.PI * 2;
+          const tw = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.65, 0.16), winGlass);
+          tw.position.set(tx + Math.sin(ang) * 1.94, gy + 12.35, tz + Math.cos(ang) * 1.94);
+          tw.rotation.y = ang;
+          scene.add(tw);
+        }
+
         const cap = new THREE.Mesh(castleOnionGeo, verdigrisCopper);
-        cap.position.set(sx - 6.8, gy + 14.0, sz + oz);
+        cap.position.set(tx, gy + 14.05, tz);
         cap.castShadow = true;
         scene.add(cap);
+
+        // Gilded orb & finial spire crowning each twin tower
+        const tOrb = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), gold);
+        tOrb.position.set(tx, gy + 19.45, tz);
+        scene.add(tOrb);
+        const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.08, 1.35, 6), gold);
+        spire.position.set(tx, gy + 20.3, tz);
+        scene.add(spire);
       }
+
+      // Stone lakeside garden terrace wall west of palace
+      const parkWall = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.35, 28), plinthStone);
+      parkWall.position.set(sx - 10.6, gy + 0.4, sz);
+      parkWall.castShadow = true;
+      scene.add(parkWall);
+      const parkCap = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.22, 28.4), trimCream);
+      parkCap.position.set(sx - 10.6, gy + 1.15, sz);
+      scene.add(parkCap);
 
       const stex = makeSignTexture(384, 96, '#2e241b', '#e5be49', 'SCHLOSS AMMERLAND', 'STARNBERGER SEE · 1685', '#faf4dc');
       const sboard = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.2, 0.12), new THREE.MeshStandardMaterial({ map: stex }));
@@ -1415,6 +1690,10 @@ export class RealMuensingWorld {
       const pz = REAL_SPOTS.sebaldPier.z;
       const deckY = WATER_LEVEL + 0.72;
       const timber = new THREE.MeshStandardMaterial({ color: 0x6f4d2e, roughness: 0.9 });
+      const darkTimber = new THREE.MeshStandardMaterial({ color: 0x4a311a, roughness: 0.9 });
+      const awningMat = new THREE.MeshStandardMaterial({ map: parasolTex, roughness: 0.72, side: THREE.DoubleSide });
+      const crateMat = new THREE.MeshStandardMaterial({ color: 0x9b764a, roughness: 0.9 });
+      const buoyMat = new THREE.MeshStandardMaterial({ color: 0xd93a28, roughness: 0.55 });
 
       // Rustic weathered brown-timber lakeside fishhouse & boat rental shop north of pier!
       const shopX = px - 2;
@@ -1432,9 +1711,20 @@ export class RealMuensingWorld {
 
       const shopRoof = new THREE.Mesh(gableGeo, new THREE.MeshStandardMaterial({ map: tileTex, color: 0xa84127, roughness: 0.8 }));
       shopRoof.position.set(shopX, shopY + 4.45, shopZ);
-      shopRoof.scale.set(12.2, 2.8, 8.4);
+      shopRoof.scale.set(12.6, 2.9, 8.8);
       shopRoof.castShadow = true;
       scene.add(shopRoof);
+
+      const shopFascia = new THREE.Mesh(new THREE.BoxGeometry(12.5, 0.28, 8.7), darkTimber);
+      shopFascia.position.set(shopX, shopY + 4.4, shopZ);
+      scene.add(shopFascia);
+
+      // Bavarian blue-and-white Brotzeitgarten awning shading the lakeside shop front
+      const awning = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.12, 2.6), awningMat);
+      awning.position.set(shopX, shopY + 2.75, shopZ + 4.95);
+      awning.rotation.x = 0.28;
+      awning.castShadow = true;
+      scene.add(awning);
 
       const sTex = makeSignTexture(
         420,
@@ -1450,7 +1740,7 @@ export class RealMuensingWorld {
         new THREE.BoxGeometry(5.6, 1.35, 0.1),
         new THREE.MeshStandardMaterial({ map: sTex, roughness: 0.5 })
       );
-      sign.position.set(shopX, shopY + 3.5, shopZ + 3.9);
+      sign.position.set(shopX, shopY + 3.6, shopZ + 3.9);
       scene.add(sign);
 
       // 58m Long Drivable Wooden Pier (Steg) jutting straight out over emerald Starnberger See!
@@ -1468,11 +1758,30 @@ export class RealMuensingWorld {
           const pile = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 4.4, 8), timber);
           pile.position.set(x, deckY - 1.0, pz + oz);
           scene.add(pile);
+          // Raised mooring bollards along pier edge
+          const bollard = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.72, 8), darkTimber);
+          bollard.position.set(x, deckY + 0.5, pz + oz);
+          bollard.castShadow = true;
+          scene.add(bollard);
         }
       }
 
-      // Gently bobbing white sailboats & wooden rowboats moored off Fischerei Sebald & Schloss Ammerland!
-      const hullMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.35 });
+      // Stacked wooden fish crates & red lifebuoy ring at the pier head
+      const crate1 = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.58, 0.72), crateMat);
+      crate1.position.set(SEBALD_PIER.westX + 3.0, deckY + 0.44, pz - 1.6);
+      crate1.castShadow = true;
+      scene.add(crate1);
+      const crate2 = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.48, 0.66), crateMat);
+      crate2.position.set(SEBALD_PIER.westX + 3.15, deckY + 0.96, pz - 1.55);
+      crate2.rotation.y = 0.28;
+      scene.add(crate2);
+      const lifebuoy = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.12, 8, 16), buoyMat);
+      lifebuoy.position.set(SEBALD_PIER.westX + 1.2, deckY + 0.85, pz + SEBALD_PIER.halfWidth - 0.32);
+      scene.add(lifebuoy);
+
+      // Gently bobbing white sailboats (with blue waterline trim, jib + mainsail) moored off Fischerei Sebald & Schloss Ammerland!
+      const hullMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.32 });
+      const stripeMat = new THREE.MeshStandardMaterial({ color: 0x1b5c96, roughness: 0.4 });
       const sailMat = new THREE.MeshStandardMaterial({ color: 0xfffdf6, roughness: 0.65, side: THREE.DoubleSide });
       const boatCoords: [number, number, number][] = [
         [SEBALD_PIER.westX - 18, pz - 24, 0.35],
@@ -1484,20 +1793,39 @@ export class RealMuensingWorld {
       ];
       boatCoords.forEach(([bx, bz, rot], idx) => {
         const boat = new THREE.Group();
-        const hull = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.84, 5.2), hullMat);
+        const hull = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.78, 4.4), hullMat);
         hull.position.y = 0.24;
         hull.castShadow = true;
         boat.add(hull);
-        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 7.0, 8), timber);
-        mast.position.y = 3.7;
+        // Tapered pointed bow + blue lake waterline stripe
+        const bow = new THREE.Mesh(new THREE.ConeGeometry(1.02, 1.85, 4), hullMat);
+        bow.rotation.x = -Math.PI / 2;
+        bow.rotation.z = Math.PI / 4;
+        bow.scale.set(1.0, 1.0, 0.56);
+        bow.position.set(0, 0.24, -3.0);
+        boat.add(bow);
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.16, 4.44), stripeMat);
+        stripe.position.y = 0.08;
+        boat.add(stripe);
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.068, 7.2, 8), timber);
+        mast.position.y = 3.75;
         boat.add(mast);
-        const sailGeo = new THREE.BufferGeometry();
-        sailGeo.setAttribute(
+        // Mainsail + forward triangular jib sail
+        const mainSailGeo = new THREE.BufferGeometry();
+        mainSailGeo.setAttribute(
           'position',
-          new THREE.BufferAttribute(new Float32Array([0, 0.9, 0, 0, 6.8, 0, 0, 1.2, 3.0]), 3)
+          new THREE.BufferAttribute(new Float32Array([0, 0.95, 0.1, 0, 6.95, 0.1, 0, 1.25, 3.0]), 3)
         );
-        sailGeo.computeVertexNormals();
-        boat.add(new THREE.Mesh(sailGeo, sailMat));
+        mainSailGeo.computeVertexNormals();
+        boat.add(new THREE.Mesh(mainSailGeo, sailMat));
+        const jibSailGeo = new THREE.BufferGeometry();
+        jibSailGeo.setAttribute(
+          'position',
+          new THREE.BufferAttribute(new Float32Array([0, 1.05, -0.1, 0, 6.1, -0.1, 0, 1.1, -2.5]), 3)
+        );
+        jibSailGeo.computeVertexNormals();
+        boat.add(new THREE.Mesh(jibSailGeo, sailMat));
+
         boat.position.set(bx, WATER_LEVEL + 0.06, bz);
         boat.rotation.y = rot;
         scene.add(boat);
@@ -1571,13 +1899,13 @@ export class RealMuensingWorld {
     const col = new THREE.Color();
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x543822, roughness: 0.95 });
 
-    // Instanced 3-Tiered Alpine Spruces (trunk + 3 stacked evergreen bough tiers!)
+    // Instanced 3-Tiered Alpine Spruces with rich vertical needle color depth (deep shaded base -> bright alpine tip!)
     if (spruces.length > 0) {
-      const sTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.24, 0.42, 3.6, 6), trunkMat, spruces.length);
-      const boughMat = new THREE.MeshStandardMaterial({ color: 0x2f5a2c, roughness: 0.92 });
-      const tier1 = new THREE.InstancedMesh(new THREE.ConeGeometry(2.7, 4.0, 7), boughMat, spruces.length);
-      const tier2 = new THREE.InstancedMesh(new THREE.ConeGeometry(2.1, 3.8, 7), boughMat, spruces.length);
-      const tier3 = new THREE.InstancedMesh(new THREE.ConeGeometry(1.4, 3.4, 7), boughMat, spruces.length);
+      const sTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.42, 3.8, 6), trunkMat, spruces.length);
+      const boughMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92 });
+      const tier1 = new THREE.InstancedMesh(new THREE.ConeGeometry(2.75, 4.1, 7), boughMat, spruces.length);
+      const tier2 = new THREE.InstancedMesh(new THREE.ConeGeometry(2.12, 3.8, 7), boughMat, spruces.length);
+      const tier3 = new THREE.InstancedMesh(new THREE.ConeGeometry(1.42, 3.4, 7), boughMat, spruces.length);
       tier1.castShadow = true;
       tier2.castShadow = true;
 
@@ -1594,17 +1922,21 @@ export class RealMuensingWorld {
         dummy.updateMatrix();
         tier1.setMatrixAt(idx, dummy.matrix);
 
+        dummy.rotation.set(0, idx * 1.3 + 0.45, 0);
         dummy.position.set(t.x, gy + 6.4 * t.s, t.z);
         dummy.updateMatrix();
         tier2.setMatrixAt(idx, dummy.matrix);
 
+        dummy.rotation.set(0, idx * 1.3 + 0.9, 0);
         dummy.position.set(t.x, gy + 8.6 * t.s, t.z);
         dummy.updateMatrix();
         tier3.setMatrixAt(idx, dummy.matrix);
 
-        col.setHex(idx % 3 === 0 ? 0x264b24 : idx % 3 === 1 ? 0x305d2c : 0x3a6a33);
+        col.setHex(idx % 3 === 0 ? 0x1e3f1e : idx % 3 === 1 ? 0x254b23 : 0x2c5628);
         tier1.setColorAt(idx, col);
+        col.setHex(idx % 3 === 0 ? 0x285225 : idx % 3 === 1 ? 0x31602c : 0x396b32);
         tier2.setColorAt(idx, col);
+        col.setHex(idx % 3 === 0 ? 0x356830 : idx % 3 === 1 ? 0x3f7537 : 0x49813d);
         tier3.setColorAt(idx, col);
       });
 
@@ -1618,45 +1950,63 @@ export class RealMuensingWorld {
       scene.add(sTrunk, tier1, tier2, tier3);
     }
 
-    // Instanced Broadleaf Bavarian Oaks, Lindens & Chestnuts (trunk + organic twin foliage clusters!)
+    // Instanced Broadleaf Bavarian Oaks, Lindens & Chestnuts (tapered trunk + 3-lobe shaded organic crowns!)
     if (oaks.length > 0) {
-      const oTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.48, 3.8, 6), trunkMat, oaks.length);
-      const leafMat = new THREE.MeshStandardMaterial({ color: 0x4f7d36, roughness: 0.88 });
-      const canopyMain = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(2.8, 1), leafMat, oaks.length);
-      const canopySide = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(2.0, 1), leafMat, oaks.length);
+      const oTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.28, 0.5, 4.0, 6), trunkMat, oaks.length);
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88 });
+      const canopyMain = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(2.55, 1), leafMat, oaks.length);
+      const canopySide = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1.95, 1), leafMat, oaks.length);
+      const canopyTop = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1.75, 1), leafMat, oaks.length);
       canopyMain.castShadow = true;
+      canopySide.castShadow = true;
 
       oaks.forEach((t, idx) => {
         const gy = getTerrainHeight(t.x, t.z);
-        dummy.rotation.set(0, idx * 2.1, 0);
+        const ang = idx * 1.75;
+        dummy.rotation.set(((idx % 3) - 1) * 0.04, idx * 2.1, 0);
         dummy.scale.setScalar(t.s);
 
-        dummy.position.set(t.x, gy + 1.8 * t.s, t.z);
+        dummy.position.set(t.x, gy + 1.85 * t.s, t.z);
         dummy.updateMatrix();
         oTrunk.setMatrixAt(idx, dummy.matrix);
 
-        dummy.position.set(t.x, gy + 5.1 * t.s, t.z);
-        dummy.scale.set(t.s * 1.15, t.s * 0.92, t.s * 1.1);
+        // Shaded lower-main broadleaf lobe
+        dummy.position.set(t.x + Math.cos(ang) * 0.45 * t.s, gy + 4.75 * t.s, t.z + Math.sin(ang) * 0.45 * t.s);
+        dummy.rotation.set(0.08, ang, 0.06);
+        dummy.scale.set(t.s * 1.18, t.s * 0.86, t.s * 1.1);
         dummy.updateMatrix();
         canopyMain.setMatrixAt(idx, dummy.matrix);
 
-        const ang = idx * 1.7;
-        dummy.position.set(t.x + Math.cos(ang) * 1.5 * t.s, gy + 4.4 * t.s, t.z + Math.sin(ang) * 1.5 * t.s);
-        dummy.scale.setScalar(t.s * 0.95);
+        // Asymmetric branching side lobe
+        dummy.position.set(t.x - Math.cos(ang + 0.4) * 1.55 * t.s, gy + 4.35 * t.s, t.z - Math.sin(ang + 0.4) * 1.55 * t.s);
+        dummy.rotation.set(-0.1, ang + 1.3, 0.12);
+        dummy.scale.set(t.s * 1.12, t.s * 0.84, t.s * 1.05);
         dummy.updateMatrix();
         canopySide.setMatrixAt(idx, dummy.matrix);
 
-        col.setHex(idx % 4 === 0 ? 0x4b7a33 : idx % 4 === 1 ? 0x5c8c3a : idx % 4 === 2 ? 0x3f6e2f : 0x6c963e);
+        // Sunlit upper crown crest lobe
+        dummy.position.set(t.x + Math.cos(ang + 1.9) * 0.72 * t.s, gy + 6.05 * t.s, t.z + Math.sin(ang + 1.9) * 0.72 * t.s);
+        dummy.rotation.set(0.05, ang + 2.4, -0.08);
+        dummy.scale.set(t.s * 1.08, t.s * 0.82, t.s * 1.04);
+        dummy.updateMatrix();
+        canopyTop.setMatrixAt(idx, dummy.matrix);
+
+        col.setHex(idx % 4 === 0 ? 0x3b6629 : idx % 4 === 1 ? 0x45742f : idx % 4 === 2 ? 0x345c26 : 0x4d7b33);
         canopyMain.setColorAt(idx, col);
+        col.setHex(idx % 4 === 0 ? 0x4b7b33 : idx % 4 === 1 ? 0x588a38 : idx % 4 === 2 ? 0x41702e : 0x62903c);
         canopySide.setColorAt(idx, col);
+        col.setHex(idx % 4 === 0 ? 0x60923d : idx % 4 === 1 ? 0x6ea043 : idx % 4 === 2 ? 0x548537 : 0x79a646);
+        canopyTop.setColorAt(idx, col);
       });
 
       oTrunk.instanceMatrix.needsUpdate = true;
       canopyMain.instanceMatrix.needsUpdate = true;
       canopySide.instanceMatrix.needsUpdate = true;
+      canopyTop.instanceMatrix.needsUpdate = true;
       if (canopyMain.instanceColor) canopyMain.instanceColor.needsUpdate = true;
       if (canopySide.instanceColor) canopySide.instanceColor.needsUpdate = true;
-      scene.add(oTrunk, canopyMain, canopySide);
+      if (canopyTop.instanceColor) canopyTop.instanceColor.needsUpdate = true;
+      scene.add(oTrunk, canopyMain, canopySide, canopyTop);
     }
   }
 
@@ -1831,8 +2181,10 @@ export class RealMuensingWorld {
   }
 
   private buildDestructibleTreesAndLamps(): void {
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4028, roughness: 0.95 });
-    const leafBright = new THREE.MeshStandardMaterial({ color: 0x4b7e39, roughness: 0.88 });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x583c24, roughness: 0.95 });
+    const leafDark = new THREE.MeshStandardMaterial({ color: 0x3a672a, roughness: 0.9 });
+    const leafMid = new THREE.MeshStandardMaterial({ color: 0x4d8035, roughness: 0.87 });
+    const leafSun = new THREE.MeshStandardMaterial({ color: 0x689a42, roughness: 0.84 });
     const ironMat = new THREE.MeshStandardMaterial({ color: 0x262b2e, roughness: 0.5, metalness: 0.65 });
 
     const treeSpots: [number, number][] = [
@@ -1844,18 +2196,47 @@ export class RealMuensingWorld {
       [REAL_SPOTS.wimpasing.x - 42, REAL_SPOTS.wimpasing.z + 20],
       [FARM_YARD_CENTER.x - 29, FARM_YARD_CENTER.z + 22]
     ];
-    for (const [tx, tz] of treeSpots) {
+    // Handcrafted multi-cluster Bavarian Chestnut & Linden canopies (branched trunk + 5 layered foliage lobes!)
+    const lobeGeo = new THREE.DodecahedronGeometry(1.0, 1);
+    treeSpots.forEach(([tx, tz], ti) => {
       const ty = getTerrainHeight(tx, tz);
       const g = new THREE.Group();
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 3.0, 8), trunkMat);
-      trunk.position.y = 1.5;
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.48, 3.2, 8), trunkMat);
+      trunk.position.y = 1.6;
       trunk.castShadow = true;
       g.add(trunk);
-      const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(2.5, 1), leafBright);
-      crown.position.y = 4.3;
-      crown.castShadow = true;
-      g.add(crown);
+
+      // 3 angled upper structural branches fanning out into the chestnut crown
+      for (let bi = 0; bi < 3; bi++) {
+        const bAng = ti * 1.1 + bi * ((Math.PI * 2) / 3);
+        const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.18, 1.85, 6), trunkMat);
+        branch.position.set(Math.cos(bAng) * 0.55, 3.35, Math.sin(bAng) * 0.55);
+        branch.rotation.z = -Math.cos(bAng) * 0.55;
+        branch.rotation.x = Math.sin(bAng) * 0.55;
+        branch.castShadow = true;
+        g.add(branch);
+      }
+
+      // 5 organic shaded foliage lobes (deep lower canopy -> lush mid lobes -> sunlit upper crest)
+      const lobes: [number, number, number, number, number, number, THREE.Material][] = [
+        [0.0, 4.35, 0.0, 2.05, 1.48, 1.95, leafDark],
+        [1.35, 4.15, 0.55, 1.62, 1.25, 1.55, leafMid],
+        [-1.25, 4.25, -0.75, 1.68, 1.3, 1.52, leafMid],
+        [-0.35, 4.45, 1.3, 1.5, 1.22, 1.48, leafDark],
+        [0.25, 5.45, -0.15, 1.65, 1.28, 1.58, leafSun]
+      ];
+      for (const [lx, ly, lz, sx, sy, sz, mat] of lobes) {
+        const lobe = new THREE.Mesh(lobeGeo, mat);
+        lobe.position.set(lx, ly, lz);
+        lobe.scale.set(sx, sy, sz);
+        lobe.rotation.set(lx * 0.3, ly + ti, lz * 0.3);
+        lobe.castShadow = true;
+        lobe.receiveShadow = true;
+        g.add(lobe);
+      }
+
       g.position.set(tx, ty - 0.1, tz);
+      g.rotation.y = ti * 1.4;
       this.scene.add(g);
       this.destructibles.push({
         kind: 'tree',
@@ -1866,7 +2247,7 @@ export class RealMuensingWorld {
         radius: 1.1,
         height: 6.2
       });
-    }
+    });
 
     const lampSpots: [number, number][] = [
       [REAL_SPOTS.muensingChurch.x + 16, REAL_SPOTS.muensingChurch.z + 22],

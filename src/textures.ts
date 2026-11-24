@@ -661,3 +661,193 @@ export function createSkyEnvTexture(mode: 'morning' | 'afternoon' | 'sunset' | '
   tex.mapping = THREE.EquirectangularReflectionMapping;
   return tex;
 }
+
+export function createWaterRippleBumpTexture(): THREE.CanvasTexture {
+  // Seamlessly tileable isotropic Alpine lake ripple heightmap (soft organic shimmer, zero scanline stripes!)
+  const w = 256;
+  const h = 256;
+  const [c, ctx] = makeCanvas(w, h);
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+  const tau = Math.PI * 2;
+  for (let y = 0; y < h; y++) {
+    const ny = y / h;
+    for (let x = 0; x < w; x++) {
+      const nx = x / w;
+      const v =
+        Math.sin((nx * 3 + ny * 2) * tau) * 0.24 +
+        Math.sin((nx * 4 - ny * 5 + 0.3) * tau) * 0.22 +
+        Math.sin((nx * 7 + ny * 6 + 0.8) * tau) * 0.16 +
+        Math.cos((nx * 11 - ny * 9) * tau) * 0.12 +
+        Math.sin((nx * 13 + ny * 12 + 0.5) * tau) * 0.09;
+      const g = Math.max(0, Math.min(255, Math.round(128 + v * 120)));
+      const idx = (y * w + x) * 4;
+      data[idx] = g;
+      data[idx + 1] = g;
+      data[idx + 2] = g;
+      data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(28, 44);
+  return tex;
+}
+
+export function createBaroqueChurchTexture(): THREE.CanvasTexture {
+  // Warm Upper Bavarian cream-ochre lime-plaster stucco with subtle Baroque recess bays & sandstone base
+  const [c, ctx] = makeCanvas(512, 512);
+  ctx.fillStyle = '#f3ebda';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Subtle vertical lime-wash warmth gradient (slightly warmer near eaves, cooler weathered base)
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, 'rgba(232, 214, 178, 0.35)');
+  grad.addColorStop(0.55, 'rgba(246, 240, 226, 0.05)');
+  grad.addColorStop(0.88, 'rgba(182, 172, 152, 0.28)');
+  grad.addColorStop(1, 'rgba(148, 138, 120, 0.48)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Faint Baroque recessed plaster panel borders
+  ctx.strokeStyle = 'rgba(188, 172, 142, 0.45)';
+  ctx.lineWidth = 4;
+  for (let x = 18; x < 512; x += 128) {
+    ctx.strokeRect(x, 34, 92, 392);
+    ctx.strokeStyle = 'rgba(255, 252, 244, 0.55)';
+    ctx.strokeRect(x + 4, 38, 84, 384);
+    ctx.strokeStyle = 'rgba(188, 172, 142, 0.45)';
+  }
+
+  // Natural hand-troweled Bavarian stucco grain
+  for (let i = 0; i < 4200; i++) {
+    const shade = 212 + Math.floor(Math.random() * 34);
+    ctx.fillStyle = `rgba(${shade}, ${shade - 8}, ${shade - 22}, 0.22)`;
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 3, 3);
+  }
+
+  // Pale sandstone plinth band along bottom edge
+  ctx.fillStyle = '#c5bca9';
+  ctx.fillRect(0, 456, 512, 56);
+  ctx.fillStyle = '#a89f8d';
+  ctx.fillRect(0, 452, 512, 6);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+export function createBaroquePalaceTexture(): THREE.CanvasTexture {
+  // Authentic 1685 Schloss Ammerland warm ochre-cream Baroque palace facade (3 stories of pedimented windows)
+  const [c, ctx] = makeCanvas(512, 512);
+  ctx.fillStyle = '#f3dfae';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Subtle plaster mottling
+  for (let i = 0; i < 3600; i++) {
+    const v = 218 + Math.floor(Math.random() * 30);
+    ctx.fillStyle = `rgba(${v}, ${v - 20}, ${v - 54}, 0.22)`;
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 3, 3);
+  }
+
+  // Rusticated pale-stone ground floor band
+  ctx.fillStyle = '#d9ccb2';
+  ctx.fillRect(0, 366, 512, 146);
+  ctx.strokeStyle = 'rgba(130, 118, 98, 0.35)';
+  ctx.lineWidth = 2;
+  for (let y = 370; y < 512; y += 28) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(512, y);
+    ctx.stroke();
+  }
+
+  // Horizontal Baroque stringcourse cornice lines separating stories
+  ctx.fillStyle = '#fbf4e3';
+  ctx.fillRect(0, 358, 512, 10);
+  ctx.fillRect(0, 198, 512, 8);
+  ctx.fillRect(0, 16, 512, 12);
+  ctx.fillStyle = 'rgba(130, 104, 62, 0.35)';
+  ctx.fillRect(0, 368, 512, 4);
+  ctx.fillRect(0, 206, 512, 4);
+
+  // Pale cream Baroque vertical pilaster strips between window bays
+  for (let x = 0; x < 512; x += 128) {
+    ctx.fillStyle = 'rgba(252, 245, 228, 0.55)';
+    ctx.fillRect(x, 28, 16, 330);
+    ctx.fillRect(x + 112, 28, 16, 330);
+  }
+
+  // 3 stories x 4 bays of tall Baroque palace windows with white surrounds, pediments & mullions
+  const rows = [
+    { y: 58, h: 102, ped: true },
+    { y: 224, h: 108, ped: true },
+    { y: 392, h: 92, ped: false }
+  ];
+  for (const r of rows) {
+    for (let col = 0; col < 4; col++) {
+      const wx = col * 128 + 38;
+      const ww = 52;
+      // White Baroque frame surround
+      ctx.fillStyle = '#faf5e8';
+      ctx.fillRect(wx - 7, r.y - 7, ww + 14, r.h + 14);
+      // Decorative gable/arched pediment cap on upper stories
+      if (r.ped) {
+        ctx.fillStyle = '#f5ecd8';
+        ctx.beginPath();
+        ctx.moveTo(wx - 11, r.y - 7);
+        ctx.lineTo(wx + ww / 2, r.y - 22);
+        ctx.lineTo(wx + ww + 11, r.y - 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(140, 118, 84, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      // Deep reflective palace window glass
+      const gGrad = ctx.createLinearGradient(wx, r.y, wx, r.y + r.h);
+      gGrad.addColorStop(0, '#2c3d4f');
+      gGrad.addColorStop(0.5, '#3b5166');
+      gGrad.addColorStop(1, '#202d3a');
+      ctx.fillStyle = gGrad;
+      ctx.fillRect(wx, r.y, ww, r.h);
+      // White wooden cross-mullions
+      ctx.fillStyle = '#f4efe2';
+      ctx.fillRect(wx + ww / 2 - 2, r.y, 4, r.h);
+      ctx.fillRect(wx, r.y + r.h * 0.36, ww, 3);
+      ctx.fillRect(wx, r.y + r.h * 0.68, ww, 3);
+      // Stone window sill
+      ctx.fillStyle = '#d4c9b4';
+      ctx.fillRect(wx - 10, r.y + r.h + 6, ww + 20, 6);
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+export function createBavarianParasolTexture(): THREE.CanvasTexture {
+  // Classic Bavarian Weiß-Blau striped Biergarten parasol & lakeside awning texture
+  const [c, ctx] = makeCanvas(256, 256);
+  const stripes = 8;
+  const sw = 256 / stripes;
+  for (let i = 0; i < stripes; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#1d6fb8' : '#f4f2ea';
+    ctx.fillRect(i * sw, 0, sw + 1, 256);
+  }
+  // Subtle scalloped valance border along bottom edge
+  ctx.fillStyle = 'rgba(18, 52, 88, 0.25)';
+  ctx.fillRect(0, 234, 256, 22);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}

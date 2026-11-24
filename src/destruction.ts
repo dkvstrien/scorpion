@@ -286,8 +286,8 @@ export class DestructionManager {
       [FARM_YARD_CENTER.x - 24, FARM_YARD_CENTER.z + 24, 0.05],
       [FARM_YARD_CENTER.x - 16, FARM_YARD_CENTER.z + 28, 0.05],
       [FARM_YARD_CENTER.x - 6, FARM_YARD_CENTER.z + 28, -0.05],
-      [451, 965, -1.1],
-      [461, 969, -1.1],
+      [456, 977, 0.45],
+      [466, 973, 0.45],
       [REAL_SPOTS.ried.x + 18, REAL_SPOTS.ried.z + 24, 0.4],
       [482, -1165, 0.12],
       [-965, 790, Math.PI / 2]

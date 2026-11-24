@@ -486,33 +486,64 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
     [438, 945, 0.95],
     [495, 922, 1.0]
   ];
-  const fTrunkGeo = new THREE.CylinderGeometry(0.14, 0.22, 2.2, 6);
+  const fTrunkGeo = new THREE.CylinderGeometry(0.14, 0.24, 2.3, 6);
   const fTrunkMat = new THREE.MeshStandardMaterial({ color: 0x563c24, roughness: 0.94 });
-  const fCrownGeo = new THREE.DodecahedronGeometry(2.0, 1);
-  const fCrownMat = new THREE.MeshStandardMaterial({ roughness: 0.86 });
+  const fCrownMainGeo = new THREE.DodecahedronGeometry(1.75, 1);
+  const fCrownSideGeo = new THREE.DodecahedronGeometry(1.25, 1);
+  const fCrownTopGeo = new THREE.DodecahedronGeometry(1.15, 1);
+  const fCrownMat = new THREE.MeshStandardMaterial({ roughness: 0.87 });
   const fTrunks = new THREE.InstancedMesh(fTrunkGeo, fTrunkMat, orchardSpots.length);
-  const fCrowns = new THREE.InstancedMesh(fCrownGeo, fCrownMat, orchardSpots.length);
+  const fCrownsMain = new THREE.InstancedMesh(fCrownMainGeo, fCrownMat, orchardSpots.length);
+  const fCrownsSide = new THREE.InstancedMesh(fCrownSideGeo, fCrownMat, orchardSpots.length);
+  const fCrownsTop = new THREE.InstancedMesh(fCrownTopGeo, fCrownMat, orchardSpots.length);
   fTrunks.castShadow = true;
-  fCrowns.castShadow = true;
+  fCrownsMain.castShadow = true;
+  fCrownsSide.castShadow = true;
   orchardSpots.forEach(([ox, oz, sc], idx) => {
     const gy = getTerrainHeight(ox, oz);
+    const tilt = ((idx % 3) - 1) * 0.06;
+    const ang = idx * 1.9;
     dummy.position.set(ox, gy + 1.05 * sc, oz);
-    dummy.rotation.set(0, idx * 1.1, 0);
+    dummy.rotation.set(tilt, idx * 1.1, -tilt * 0.7);
     dummy.scale.set(sc, sc, sc);
     dummy.updateMatrix();
     fTrunks.setMatrixAt(idx, dummy.matrix);
 
-    dummy.position.set(ox, gy + 2.95 * sc, oz);
-    dummy.scale.set(sc * 1.18, sc * 0.92, sc * 1.12);
+    // Shaded lower-main lobe
+    dummy.position.set(ox + Math.cos(ang) * 0.35 * sc, gy + 2.75 * sc, oz + Math.sin(ang) * 0.35 * sc);
+    dummy.rotation.set(0.1, ang, 0.08);
+    dummy.scale.set(sc * 1.18, sc * 0.86, sc * 1.12);
     dummy.updateMatrix();
-    fCrowns.setMatrixAt(idx, dummy.matrix);
-    col.setHex(idx % 3 === 0 ? 0x5c8c38 : idx % 3 === 1 ? 0x6c993c : 0x4f7f32);
-    fCrowns.setColorAt(idx, col);
+    fCrownsMain.setMatrixAt(idx, dummy.matrix);
+    col.setHex(idx % 3 === 0 ? 0x4b782e : idx % 3 === 1 ? 0x568433 : 0x446f2b);
+    fCrownsMain.setColorAt(idx, col);
+
+    // Side branching foliage lobe
+    dummy.position.set(ox - Math.cos(ang + 0.5) * 0.95 * sc, gy + 2.55 * sc, oz - Math.sin(ang + 0.5) * 0.95 * sc);
+    dummy.rotation.set(-0.08, ang + 1.4, 0.12);
+    dummy.scale.set(sc * 1.1, sc * 0.82, sc * 1.05);
+    dummy.updateMatrix();
+    fCrownsSide.setMatrixAt(idx, dummy.matrix);
+    col.setHex(idx % 3 === 0 ? 0x5c8d37 : idx % 3 === 1 ? 0x67973c : 0x538232);
+    fCrownsSide.setColorAt(idx, col);
+
+    // Sunlit upper crown tuft
+    dummy.position.set(ox + Math.cos(ang + 1.8) * 0.45 * sc, gy + 3.55 * sc, oz + Math.sin(ang + 1.8) * 0.45 * sc);
+    dummy.rotation.set(0.05, ang + 2.6, -0.06);
+    dummy.scale.set(sc * 1.05, sc * 0.8, sc * 1.0);
+    dummy.updateMatrix();
+    fCrownsTop.setMatrixAt(idx, dummy.matrix);
+    col.setHex(idx % 3 === 0 ? 0x6fa142 : idx % 3 === 1 ? 0x7aad48 : 0x63943c);
+    fCrownsTop.setColorAt(idx, col);
   });
   fTrunks.instanceMatrix.needsUpdate = true;
-  fCrowns.instanceMatrix.needsUpdate = true;
-  if (fCrowns.instanceColor) fCrowns.instanceColor.needsUpdate = true;
-  scene.add(fTrunks, fCrowns);
+  fCrownsMain.instanceMatrix.needsUpdate = true;
+  fCrownsSide.instanceMatrix.needsUpdate = true;
+  fCrownsTop.instanceMatrix.needsUpdate = true;
+  if (fCrownsMain.instanceColor) fCrownsMain.instanceColor.needsUpdate = true;
+  if (fCrownsSide.instanceColor) fCrownsSide.instanceColor.needsUpdate = true;
+  if (fCrownsTop.instanceColor) fCrownsTop.instanceColor.needsUpdate = true;
+  scene.add(fTrunks, fCrownsMain, fCrownsSide, fCrownsTop);
 
   // === 7. ROADSIDE MEADOW GRASS & BAVARIAN WILDFLOWER TUFTS ===
   const tufts: { x: number; z: number; s: number; hex: number }[] = [];

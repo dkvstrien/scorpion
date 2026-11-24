@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import muensingRaw from './data/muensingData.json';
+import { createWaterRippleBumpTexture } from './textures';
 
 export interface MuensingOSMData {
   meta: {
@@ -398,42 +399,150 @@ export function buildRealMuensingTerrain(
   body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
   world.addBody(body);
 
-  // Shimmering Alpine Emerald-Blue Starnberger See water plane
+  // Shimmering Alpine Emerald-Blue Starnberger See water plane with subtle animated ripples
+  const waterRipple = createWaterRippleBumpTexture();
   const waterGeo = new THREE.PlaneGeometry(2400, 3800, 32, 32);
   waterGeo.rotateX(-Math.PI / 2);
   const waterMat = new THREE.MeshStandardMaterial({
-    color: 0x1d686c,
-    roughness: 0.12,
-    metalness: 0.54,
+    color: 0x1b6673,
+    roughness: 0.15,
+    metalness: 0.42,
+    bumpMap: waterRipple,
+    bumpScale: 0.13,
     transparent: true,
-    opacity: 0.84
+    opacity: 0.88
   });
   const waterMesh = new THREE.Mesh(waterGeo, waterMat);
   waterMesh.position.set(-2250, WATER_LEVEL, 0);
   waterMesh.receiveShadow = true;
+  waterMesh.userData.rippleTex = waterRipple;
   scene.add(waterMesh);
 
-  // Panoramic Bavarian Alps (Karwendel & Zugspitze) far on the southern horizon
-  const alpRock = new THREE.MeshStandardMaterial({ color: 0x5c738c, roughness: 0.94, flatShading: true });
-  const alpSnow = new THREE.MeshStandardMaterial({ color: 0xeef5fb, roughness: 0.85, flatShading: true });
-  const alpPeaks: [number, number, number, number][] = [
-    [-2100, 2450, 380, 440],
-    [-1250, 2600, 420, 520],
-    [-350, 2700, 460, 590],
-    [550, 2650, 430, 550],
-    [1450, 2550, 400, 490],
-    [2250, 2450, 380, 430]
-  ];
-  for (const [ax, az, ar, ah] of alpPeaks) {
-    const peak = new THREE.Mesh(new THREE.ConeGeometry(ar, ah, 6), alpRock);
-    peak.position.set(ax, ah * 0.5 - 16, az);
-    peak.rotation.y = ax * 0.01;
-    scene.add(peak);
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(ar * 0.38, ah * 0.38, 6), alpSnow);
-    cap.position.set(ax, ah * 0.81 - 16, az);
-    cap.rotation.y = ax * 0.01;
-    scene.add(cap);
-  }
+  // Panoramic 2-Layer Sculpted Bavarian Alps (Voralpen foothills + Karwendel / Wetterstein / Zugspitze crest)
+  // Softly hazed along the southern horizon so silhouettes feel genuinely Alpine rather than giant cones!
+  const buildAlpineRidgeBand = (opts: {
+    zCenter: number;
+    xMin: number;
+    xMax: number;
+    segs: number;
+    baseY: number;
+    minH: number;
+    maxH: number;
+    seed: number;
+    baseColor: number;
+    midColor: number;
+    peakColor: number;
+    snowThreshold: number;
+  }): THREE.Mesh => {
+    const { zCenter, xMin, xMax, segs, baseY, minH, maxH, seed, baseColor, midColor, peakColor, snowThreshold } = opts;
+    const rows = 4; // 0: base, 1: lower slope, 2: upper rock face, 3: serrated summit ridge
+    const posArr: number[] = [];
+    const colArr: number[] = [];
+    const idxArr: number[] = [];
+
+    const cBase = new THREE.Color(baseColor);
+    const cMid = new THREE.Color(midColor);
+    const cPeak = new THREE.Color(peakColor);
+    const cTmp = new THREE.Color();
+
+    const ridgeProfile = (u: number): number => {
+      // Ridged multifractal Alpine crags (Wetterstein/Zugspitze SW, Benediktenwand S, Karwendel SE)
+      const r1 = 1.0 - Math.abs(Math.sin(u * Math.PI * 4.5 + seed));
+      const r2 = 1.0 - Math.abs(Math.sin(u * Math.PI * 11.2 + seed * 2.1));
+      const r3 = 1.0 - Math.abs(Math.sin(u * Math.PI * 23.0 + seed * 3.7));
+      const r4 = 1.0 - Math.abs(Math.sin(u * Math.PI * 41.0 + seed * 1.4));
+      const ridged = r1 * 0.46 + r2 * r2 * 0.30 + r3 * r3 * 0.16 + r4 * 0.08;
+      // Smooth fade right down to zero at the far east/west ends so there are never abrupt side walls!
+      const edgeFade = Math.pow(Math.sin(Math.min(1, Math.max(0, u)) * Math.PI), 0.72);
+      const raw = Math.max(0.0, Math.min(1.0, ridged)) * edgeFade;
+      return minH * edgeFade + raw * (maxH - minH * 0.6);
+    };
+
+    for (let r = 0; r < rows; r++) {
+      const rf = r / (rows - 1); // 0 -> 1 from skirt to crest
+      for (let i = 0; i <= segs; i++) {
+        const u = i / segs;
+        const x = xMin + (xMax - xMin) * u;
+        const crestH = ridgeProfile(u);
+        const zJitter = Math.sin(u * Math.PI * 11.0 + seed + r * 0.8) * 65;
+        // Sloped mountain face leaning back from foothills (zCenter - 190) up to summit crest (zCenter)
+        const z = zCenter - (1 - rf) * 210 + zJitter;
+        const y = baseY + Math.pow(rf, 1.15) * crestH;
+        posArr.push(x, y, z);
+
+        const normH = (y - baseY) / maxH;
+        if (normH > snowThreshold && r === rows - 1) {
+          cTmp.copy(cMid).lerp(cPeak, Math.min(1, (normH - snowThreshold) / (1 - snowThreshold) * 0.92 + 0.15));
+        } else if (rf > 0.52) {
+          cTmp.copy(cBase).lerp(cMid, (rf - 0.52) / 0.48);
+        } else {
+          cTmp.copy(cBase);
+        }
+        colArr.push(cTmp.r, cTmp.g, cTmp.b);
+      }
+    }
+
+    const stride = segs + 1;
+    for (let r = 0; r < rows - 1; r++) {
+      for (let i = 0; i < segs; i++) {
+        const a = r * stride + i;
+        const b = a + 1;
+        const c = (r + 1) * stride + i;
+        const d = c + 1;
+        idxArr.push(a, c, b, b, c, d);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colArr, 3));
+    geo.setIndex(idxArr);
+    geo.computeVertexNormals();
+
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.96,
+      metalness: 0.0,
+      flatShading: true,
+      side: THREE.DoubleSide
+    });
+    return new THREE.Mesh(geo, mat);
+  };
+
+  // Layer 1: Voralpen wooded foothills
+  scene.add(
+    buildAlpineRidgeBand({
+      zCenter: 2240,
+      xMin: -2550,
+      xMax: 2550,
+      segs: 84,
+      baseY: -12,
+      minH: 72,
+      maxH: 155,
+      seed: 0.8,
+      baseColor: 0x4c685c,
+      midColor: 0x5c7584,
+      peakColor: 0x8ea3b5,
+      snowThreshold: 0.95
+    })
+  );
+  // Layer 2: Wetterstein / Zugspitze & Karwendel high limestone Alps crest
+  scene.add(
+    buildAlpineRidgeBand({
+      zCenter: 2520,
+      xMin: -2750,
+      xMax: 2750,
+      segs: 108,
+      baseY: -12,
+      minH: 138,
+      maxH: 258,
+      seed: 2.35,
+      baseColor: 0x5d768e,
+      midColor: 0x768fa8,
+      peakColor: 0xdce7f2,
+      snowThreshold: 0.62
+    })
+  );
 
   return { mesh: group, body, waterMesh };
 }

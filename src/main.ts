@@ -630,15 +630,15 @@ class ScorpionGame {
       },
       dusk: {
         label: '🌙 Blue Hour',
-        sky: 0x1c2e4a,
-        fog: 0x243652,
-        fogNear: 240,
-        fogFar: 1450,
-        sunCol: 0x8bb6e8,
-        sunInt: 0.45,
+        sky: 0x22395c,
+        fog: 0x2d466d,
+        fogNear: 260,
+        fogFar: 1550,
+        sunCol: 0x99c4f2,
+        sunInt: 0.56,
         sunOff: [-65, 45, -45],
-        hemiSky: 0x456594,
-        hemiInt: 0.42,
+        hemiSky: 0x5c82b8,
+        hemiInt: 0.58,
         nightAmt: 1.0,
         autoLights: true
       },
@@ -667,7 +667,7 @@ class ScorpionGame {
     this.hemiLight.intensity = cfg.hemiInt;
     if (this.skyDomeMat) {
       this.skyDomeMat.uniforms.uTopColor.value.setHex(
-        tod === 'afternoon' ? 0x4c89c8 : tod === 'sunset' ? 0x5c4a76 : tod === 'dusk' ? 0x101c33 : 0x8bb2cc
+        tod === 'afternoon' ? 0x4c89c8 : tod === 'sunset' ? 0x5c4a76 : tod === 'dusk' ? 0x182c4e : 0x8bb2cc
       );
       this.skyDomeMat.uniforms.uHorizonColor.value.setHex(cfg.fog);
       this.skyDomeMat.uniforms.uSunColor.value.setHex(cfg.sunCol);

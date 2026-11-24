@@ -675,6 +675,11 @@ export class FarmEnvironment {
   }
 
   public update(dt: number, elapsed: number): void {
+    const ripple = this.lakeWaterMesh?.userData?.rippleTex as THREE.Texture | undefined;
+    if (ripple) {
+      ripple.offset.x = (elapsed * 0.014) % 1;
+      ripple.offset.y = (elapsed * 0.009) % 1;
+    }
     for (const d of this.ducks) {
       d.angle += dt * d.speed;
       d.group.position.set(
