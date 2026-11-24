@@ -39,3 +39,35 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 `Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=1, Sound=3, Content=1, Finish=1, Stability=2`
 
 **Next**: Iteration 4 — Priority B (Exact CLAAS Scorpion 741 Varipower handling & stability physics + automated telemetry benchmark).
+
+---
+
+## Iteration 4 — Priority B: CLAAS Scorpion 741 Varipower Handling & Stability (2026-11-24)
+
+**Goal**: Dial in real 2022 CLAAS Scorpion 741 Varipower physics (`7,640 kg`, `40 km/h` max across `15 / 30 / 40 km/h` gears, calm normal driving & wall bumps, genuine tipping only from boom height, load moment, or slope) without touching visual meshes yet.
+
+### Changes Made
+- [src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts) (physics section only):
+  - Set `chassisBody.mass = 7640` kg with rebalanced 4-wheel spring-damper + anti-roll bar (`kSpringFront=148000`, `kSpringRear=209000`, `cDamp=32500`, `kAntiRoll=58000`).
+  - Added 3 real Varipower drive ranges (`snail` `15 km/h`, `turtle` `30 km/h`, `hare` `40 km/h`, cycle via `G` or clickable HUD badge; `Shift` engages Hare, `Alt` engages creep) with progressive 136 hp hydrostatic torque taper.
+  - Added calm walking-pace static wall-bump damping (`collide` listener + `restitution: 0.0` in [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)) and progressive speed-dependent steering & 4WS rear-axle taper.
+  - Fixed high-CoG centrifugal roll torque to act purely around the longitudinal roll axis (`fwdWorld`) so elevated boom turning never creates counter-yaw and genuinely tips at top speed when the boom is raised high.
+- [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts), [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css):
+  - Fixed HUD speedometer conversion to exact metric `m/s × 3.6 = km/h`.
+  - Added Varipower gear pill (`Snail 15 / Turtle 30 / Hare 40 [G]`) and Green (`<0.50`) / Yellow (`0.50–0.80`) / Red (`>0.80`) Tip-O-Meter traffic-light indicator.
+
+### Measured Physics Evidence (`.scratch/loop/4/`, automated `agent-browser` benchmark)
+| Metric | Target (HANDOFF.md) | Measured Result |
+|---|---|---|
+| Operating Mass | `7,640 kg` | **`7,640 kg`** |
+| Snail / Turtle / Hare Top Speed | `15 / 30 / 40 km/h` | **`15.1 / 30.2 / 40.2 km/h`** |
+| `0 → 30 km/h` Acceleration | Realistic heavy diesel | **`4.04–4.12 s`** |
+| Full-lock turn at `25 km/h` (empty, boom down) | Lift `0` wheels (`4/4`) | **`4/4` wheels**, `2°` max roll, `tipped: false` |
+| Walking-pace (`6.3 km/h`) static stone wall bump | Stay on `4/4` wheels | **`4/4` wheels**, `0°` roll, `3°` pitch, `tipped: false` |
+| Boom high (`1.08 rad, 3.6 m`) + `36 km/h` full-lock turn | Genuine rollover | Inside wheels lift at **`10°`**, rolls to **`65°+`**, **`tipped: true`** (`.scratch/loop/4/07_boom_up_turn.png`) |
+| Heavy load (`2,200 kg`) extended `3.6 m` | Rear wheels lift & tip forward | Rear wheels lift at **`16°`** (`2/4` tires), pitches to **`32°`**, `loadMoment=1.25` Red (`.scratch/loop/4/08_heavy_load_ext.png`) |
+
+### Scorecard Update
+`Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=1, Finish=1, Stability=2`
+
+**Next**: Iteration 5 — Priority C (Split visual mesh code out of `src/tractor.ts` into `src/scorpionModel.ts` and rebuild the 2022 CLAAS Scorpion 741 Varipower Platform 2 / K33 model accurately!).

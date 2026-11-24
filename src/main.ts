@@ -5,7 +5,15 @@ import { FarmAudio } from './audio';
 import { ParticleSystem } from './particles';
 import { FarmEnvironment } from './farm';
 import { FarmProp, PropManager, ZoneKey } from './props';
-import { AttachmentType, buildAttachmentMesh, ClaasScorpion, TOOL_META, TractorInput } from './tractor';
+import {
+  AttachmentType,
+  buildAttachmentMesh,
+  ClaasScorpion,
+  TOOL_META,
+  TractorInput,
+  VARIPOWER_GEARS,
+  VaripowerGear
+} from './tractor';
 import { RealMuensingWorld } from './realWorld';
 import { TireTrackSystem } from './tracks';
 import { MiniMapMarker, MuensingMiniMap } from './minimap';
@@ -119,8 +127,10 @@ class ScorpionGame {
 
   private speedEl = document.getElementById('speed-val')!;
   private elevEl = document.getElementById('elev-val')!;
+  private tipHorizonEl = document.getElementById('tip-horizon')!;
   private tipDotEl = document.getElementById('tip-dot')!;
   private tiltReadoutEl = document.getElementById('tilt-readout')!;
+  private gearBadge = document.getElementById('gear-badge')!;
   private wheelsBadge = document.getElementById('wheels-badge')!;
 
   private gaugeLift = document.getElementById('gauge-lift')!;
@@ -141,6 +151,7 @@ class ScorpionGame {
 
   private lastTime = performance.now();
   private elapsed = 0;
+  private syntheticInput: Partial<TractorInput> | null = null;
   private latestInput: TractorInput = {
     throttle: 0,
     steer: 0,
@@ -200,8 +211,8 @@ class ScorpionGame {
     );
     this.world.addContactMaterial(
       new CANNON.ContactMaterial(groundMat, tractorMat, {
-        friction: 0.55,
-        restitution: 0.05
+        friction: 0.22,
+        restitution: 0.0
       })
     );
     this.world.addContactMaterial(
@@ -670,6 +681,10 @@ class ScorpionGame {
     };
     document.getElementById('btn-winch')!.addEventListener('click', doWinch);
     document.getElementById('btn-banner-winch')!.addEventListener('click', doWinch);
+    this.gearBadge.addEventListener('click', () => {
+      const g = this.tractor.cycleGear();
+      this.showToast(`Varipower Gear: ${VARIPOWER_GEARS[g].label} km/h`);
+    });
 
     // Real-World OSM GPS Fast Travel buttons (all placed cleanly on wide paved OSM roads with scenic framing!)
     const fastTravel = (x: number, z: number, heading: number, toast: string) => {
@@ -718,6 +733,9 @@ class ScorpionGame {
         this.audio.playHorn();
         const scared = this.realWorld.scarePedestriansNear(this.tractor.position, 24);
         this.showToast(scared > 0 ? `HONK! Startled ${scared} villager(s)!` : 'HONK HONK!');
+      } else if (e.code === 'KeyG') {
+        const g = this.tractor.cycleGear();
+        this.showToast(`Varipower Gear: ${VARIPOWER_GEARS[g].label} km/h`);
       } else if (e.code === 'KeyX') {
         this.cycleSteerUI();
       } else if (e.code === 'KeyV') {
@@ -879,6 +897,19 @@ class ScorpionGame {
     }
 
     this.creepBadge.classList.toggle('hidden', !creep);
+
+    if (this.syntheticInput) {
+      return {
+        throttle: this.syntheticInput.throttle ?? 0,
+        steer: this.syntheticInput.steer ?? 0,
+        boost: this.syntheticInput.boost ?? false,
+        creep: this.syntheticInput.creep ?? false,
+        boomLift: this.syntheticInput.boomLift ?? 0,
+        boomExtend: this.syntheticInput.boomExtend ?? 0,
+        headTilt: this.syntheticInput.headTilt ?? 0,
+        actionHeld: this.syntheticInput.actionHeld ?? false
+      };
+    }
 
     return {
       throttle: THREE.MathUtils.clamp(throttle, -1, 1),
@@ -1067,17 +1098,28 @@ class ScorpionGame {
   }
 
   private updateHUD(dt: number): void {
-    // Speedometer, Real Altitude (m ü. NN), and Live 2D Tip-O-Meter!
-    const kmh = Math.round(Math.abs(this.tractor.speed) * 3.2);
+    // Speedometer (exact metric m/s -> km/h), Real Altitude (m ü. NN), Varipower Gear & Live Traffic-Light Tip-O-Meter!
+    const kmh = Math.round(Math.abs(this.tractor.speed) * 3.6);
     const elevM = Math.round(getRealElevationMeters(this.tractor.position.x, this.tractor.position.z));
     this.speedEl.textContent = String(kmh);
     this.elevEl.textContent = String(elevM);
+
+    const activeGear = this.tractor.getActiveGear(this.latestInput);
+    this.gearBadge.textContent = `${VARIPOWER_GEARS[activeGear].label} [G]`;
+    this.gearBadge.classList.toggle('pill-hot', activeGear === 'hare');
+    this.gearBadge.classList.toggle('pill-green', activeGear !== 'hare');
 
     const dotX = THREE.MathUtils.clamp((this.tractor.rollDeg / 38) * 16, -16, 16);
     const dotY = THREE.MathUtils.clamp((-this.tractor.pitchDeg / 38) * 16, -16, 16);
     this.tipDotEl.style.transform = `translate(${dotX.toFixed(1)}px, ${dotY.toFixed(1)}px)`;
     const maxTilt = Math.max(Math.abs(this.tractor.rollDeg), Math.abs(this.tractor.pitchDeg));
     this.tiltReadoutEl.textContent = `${maxTilt}°`;
+
+    // Tip-O-Meter traffic light: Green = safe (<0.50), Yellow = limit (0.50-0.80), Red = over (>0.80)
+    const lm = this.tractor.loadMoment;
+    this.tipHorizonEl.classList.toggle('tip-safe', lm < 0.5);
+    this.tipHorizonEl.classList.toggle('tip-warn', lm >= 0.5 && lm <= 0.8);
+    this.tipHorizonEl.classList.toggle('tip-danger', lm > 0.8);
 
     this.wheelsBadge.textContent = `${this.tractor.wheelsOnGround}/4 Tires`;
     this.wheelsBadge.classList.toggle('pill-hot', this.tractor.wheelsOnGround <= 2);
@@ -1352,9 +1394,40 @@ class ScorpionGame {
         return true;
       },
       setTime: (tod: TimeOfDay) => this.applyTimeOfDay(tod),
+      setGear: (g: VaripowerGear) => {
+        this.tractor.gear = g;
+      },
+      setBoom: (pitch: number, ext: number) => {
+        this.tractor.boomPitch = pitch;
+        this.tractor.boomExt = ext;
+      },
+      setInput: (inp: Partial<TractorInput> | null) => {
+        this.syntheticInput = inp;
+      },
+      teleport: (x: number, z: number, heading: number) => {
+        this.tractor.teleportTo(x, z, heading);
+        this.snapCameraToTractor();
+      },
+      loadHeavySilage: () => {
+        // Pick up a wrapped silage bale + a second heavy bale/crate onto the forks/grabber for real load-moment testing
+        this.tractor.freePlayMode = true;
+        this.tractor.equipTool('grabber', false);
+        const heavy = this.propMgr.props.filter((p) => p.kind === 'silage_wrapped' || p.kind === 'crate').slice(0, 2);
+        this.tractor.heldProps = [];
+        for (const p of heavy) {
+          p.heldByTractor = true;
+          this.tractor.heldProps.push(p);
+        }
+        return this.tractor.getCarriedMassKg();
+      },
+      releaseLoad: () => this.tractor.releaseAll(false),
       getTelemetry: () => ({
-        speedKmh: Math.round(Math.abs(this.tractor.speed) * 3.6),
+        speedKmh: +(Math.abs(this.tractor.speed) * 3.6).toFixed(1),
         speedMs: +this.tractor.speed.toFixed(2),
+        gear: this.tractor.gear,
+        massKg: this.tractor.chassisBody.mass,
+        carriedKg: this.tractor.getCarriedMassKg(),
+        loadMoment: +this.tractor.loadMoment.toFixed(2),
         wheels: this.tractor.wheelsOnGround,
         rollDeg: this.tractor.rollDeg,
         pitchDeg: this.tractor.pitchDeg,

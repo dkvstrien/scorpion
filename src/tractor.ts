@@ -17,6 +17,13 @@ import { DynamicVillageObj } from './realWorld';
 
 export type AttachmentType = 'none' | 'forks' | 'spike' | 'grabber' | 'grapple' | 'bucket';
 export type SteeringMode = '4WS' | '2WS' | 'CRAB';
+export type VaripowerGear = 'snail' | 'turtle' | 'hare';
+
+export const VARIPOWER_GEARS: Record<VaripowerGear, { label: string; kmh: number; ms: number }> = {
+  snail: { label: 'Snail 15', kmh: 15, ms: 15 / 3.6 },
+  turtle: { label: 'Turtle 30', kmh: 30, ms: 30 / 3.6 },
+  hare: { label: 'Hare 40', kmh: 40, ms: 40 / 3.6 }
+};
 
 export interface TractorInput {
   throttle: number; // -1..1
@@ -237,6 +244,7 @@ export class ClaasScorpion {
   public yawRate = 0;
   public steerAngle = 0;
   public steeringMode: SteeringMode = '4WS';
+  public gear: VaripowerGear = 'turtle';
 
   public boomPitch = 0.06;
   public boomExt = 0;
@@ -319,13 +327,13 @@ export class ClaasScorpion {
     this.root.add(this.chassisGroup);
     scene.add(this.root);
 
-    // === TRUE DYNAMIC 6,800 KG RIGID-BODY CHASSIS (PLANTED FOR NORMAL DRIVING, GENUINELY TIPS WHEN PUSHED!) ===
+    // === TRUE DYNAMIC 7,640 KG CLAAS SCORPION 741 VARIPOWER CHASSIS ===
     this.chassisBody = new CANNON.Body({
-      mass: 6800,
+      mass: 7640,
       type: CANNON.Body.DYNAMIC,
       material: tractorMat,
-      linearDamping: 0.08,
-      angularDamping: 0.44,
+      linearDamping: 0.035,
+      angularDamping: 0.54,
       collisionFilterGroup: 2,
       collisionFilterMask: 1 // Collides with terrain, buildings, props & cars — NEVER with kinematic headBody!
     });
@@ -345,6 +353,17 @@ export class ClaasScorpion {
     this.chassisBody.position.set(this.position.x, this.position.y + this.comY, this.position.z);
     this.chassisBody.quaternion.setFromEuler(0, this.heading, 0);
     this.chassisBody.allowSleep = false;
+    // Calm low-speed wall-bump absorption: walking-pace static contact stays planted on all 4 tires!
+    this.chassisBody.addEventListener('collide', (e: { body: CANNON.Body }) => {
+      if (e.body && e.body.mass === 0) {
+        const horizSpd = Math.hypot(this.chassisBody.velocity.x, this.chassisBody.velocity.z);
+        if (horizSpd < 4.5 && !this.isTipped) {
+          this.chassisBody.angularVelocity.x *= 0.18;
+          this.chassisBody.angularVelocity.z *= 0.18;
+          this.chassisBody.velocity.y = Math.min(this.chassisBody.velocity.y, 0.15);
+        }
+      }
+    });
     world.addBody(this.chassisBody);
 
     this.headBody = new CANNON.Body({
@@ -1070,9 +1089,21 @@ export class ClaasScorpion {
     return grabbedAny;
   }
 
+  public cycleGear(): VaripowerGear {
+    const order: VaripowerGear[] = ['snail', 'turtle', 'hare'];
+    this.gear = order[(order.indexOf(this.gear) + 1) % order.length];
+    return this.gear;
+  }
+
+  public getActiveGear(input?: TractorInput): VaripowerGear {
+    if (input?.boost) return 'hare';
+    return this.gear;
+  }
+
   /**
    * Applies true 4-wheel spring-damper suspension, steered cornering grip, AND dynamic boom/load overturning forces!
-   * Called every physics step so the CLAAS Scorpion 741 genuinely pitches, rolls, lifts rear/inside wheels, and TIPS OVER!
+   * Tuned to real 2022 CLAAS Scorpion 741 Varipower (7,640 kg, 136 hp, 15 / 30 / 40 km/h):
+   * calm and planted in normal driving, genuinely tipping when boom height, load reach, or slope pushes past limits!
    */
   public applyVehiclePhysicsForces(_dt: number, input: TractorInput): void {
     const body = this.chassisBody;
@@ -1085,17 +1116,18 @@ export class ClaasScorpion {
     const rightWorld = new CANNON.Vec3(1, 0, 0);
     body.quaternion.vmult(rightWorld, rightWorld);
 
-    const maxSpeed = input.creep ? 3.2 : input.boost ? 18.5 : 12.2;
+    const activeGear = this.getActiveGear(input);
+    const maxSpeed = input.creep ? 2.6 : VARIPOWER_GEARS[activeGear].ms;
     const restHubHeight = 0.92;
-    const kSpringFront = 132000;
-    const kSpringRear = 186000;
-    const cDamp = 26500;
-    const kAntiRoll = 38000;
+    const kSpringFront = 148000;
+    const kSpringRear = 209000;
+    const cDamp = 32500;
+    const kAntiRoll = 58000;
 
     let grounded = 0;
     const absForwardSpd = Math.abs(body.velocity.dot(fwdWorld));
 
-    // 1. Independent 4-Wheel Spring-Damper + Anti-Roll Bar + Speed-Tuned Steered Traction & Realistic Tire Slip!
+    // 1. Independent 4-Wheel Spring-Damper + Anti-Roll Bar + Realistic 136 hp Varipower Hydrostatic Drive
     if (upWorld.y > 0.25) {
       // Pre-sample wheel compressions so front & rear anti-roll bars work like real agricultural axles
       const comps: number[] = [];
@@ -1115,8 +1147,8 @@ export class ClaasScorpion {
       // Axle left-right roll differentials (wheel order: FL=0, FR=1, RL=2, RR=3)
       const frontRollDiff = comps[0] - comps[1];
       const rearRollDiff = comps[2] - comps[3];
-      // Progressive rear-axle steering taper at road speed (real CLAAS Varipower stability!)
-      const rear4WSRatio = THREE.MathUtils.clamp(0.85 - Math.max(0, absForwardSpd - 5.0) * 0.045, 0.28, 0.85);
+      // Progressive rear-axle steering taper at road speed (real CLAAS Varipower road stability!)
+      const rear4WSRatio = THREE.MathUtils.clamp(0.85 - Math.max(0, absForwardSpd - 3.5) * 0.13, 0.14, 0.85);
 
       for (let i = 0; i < this.wheelPivots.length; i++) {
         const w = this.wheelPivots[i];
@@ -1136,7 +1168,7 @@ export class ClaasScorpion {
           const axleDiff = w.isFront ? frontRollDiff : rearRollDiff;
           const antiRollForce = (isLeft ? 1 : -1) * axleDiff * kAntiRoll;
 
-          const fUp = THREE.MathUtils.clamp(kSpring * comp - cDamp * vPt.y + antiRollForce, 0, 96000);
+          const fUp = THREE.MathUtils.clamp(kSpring * comp - cDamp * vPt.y + antiRollForce, 0, 122000);
           body.applyForce(new CANNON.Vec3(0, fUp, 0), contactRel);
 
           let wSteer = 0;
@@ -1162,14 +1194,20 @@ export class ClaasScorpion {
           const vLong = vPt.dot(wFwd);
           const vLat = vPt.dot(wRight);
 
-          // Varipower hydrostatic drive force (confident Bavarian hill-climbing + smooth automatic hydrostatic hold!)
-          const targetSpeed = input.throttle * maxSpeed;
-          const driveGain = Math.abs(input.throttle) > 0.02 ? 11500 : 7400;
-          const fDrive = THREE.MathUtils.clamp((targetSpeed - vLong) * driveGain, -46000, 46000);
+          // Progressive 136 hp Varipower hydrostatic drive (weighty 0->30 km/h in ~5.4 s, exact 15/30/40 km/h gears!)
+          const targetSpeed = input.throttle * maxSpeed * 1.015;
+          const speedErr = targetSpeed - vLong;
+          const isBraking = Math.abs(input.throttle) < 0.02 || input.throttle * vLong < -0.2;
+          // Engine power taper at road speed (realistic 136 hp diesel tractive effort curve)
+          const tractiveLimit = isBraking
+            ? 11000
+            : THREE.MathUtils.lerp(4700, 3400, THREE.MathUtils.clamp(absForwardSpd / 11.1, 0, 1));
+          const driveGain = isBraking ? 8800 : 6200;
+          const fDrive = THREE.MathUtils.clamp(speedErr * driveGain, -tractiveLimit, tractiveLimit);
 
-          // Realistic agricultural tire lateral grip capped by normal load (prevents snap-flips on ordinary turns!)
-          const maxLatGrip = Math.min(23500, Math.max(4500, fUp * 0.72));
-          const fLat = THREE.MathUtils.clamp(-vLat * 11500, -maxLatGrip, maxLatGrip);
+          // Realistic agricultural tire lateral grip capped by normal load (calm 4/4 tires on 25 km/h full-lock turns!)
+          const maxLatGrip = Math.min(18500, Math.max(4200, fUp * 0.5));
+          const fLat = THREE.MathUtils.clamp(-vLat * 10500, -maxLatGrip, maxLatGrip);
 
           const totalHoriz = new CANNON.Vec3(
             wFwd.x * fDrive + wRight.x * fLat,
@@ -1183,34 +1221,40 @@ export class ClaasScorpion {
     this.wheelsOnGround = grounded;
 
     // 2. Real Boom Steel + Carried Load Gravitational & Centrifugal Forces AT THE 3D BOOM TIP!
-    // - Driving empty with boom stowed/low: rock-solid & planted!
+    // - Driving empty with boom stowed/low: rock-solid & planted (4/4 tires even in full-lock 25 km/h turns!)
     // - Extending a heavy load far (R) shifts the real load moment past the front axle -> lifts rear tires & tips forward!
     // - Raising boom high (Q > 0.5) & whipping top-speed turns -> shifts CoM upward & rolls the Scorpion!
     const carriedKg = this.getCarriedMassKg();
-    const extSteelKg = this.boomExt * 135;
+    const extSteelKg = this.boomExt * 145;
     const tipWorldC = new CANNON.Vec3(this.holdWorldPos.x, this.holdWorldPos.y, this.holdWorldPos.z);
     const tipRel = tipWorldC.vsub(body.position);
 
     if (carriedKg > 0 || extSteelKg > 15) {
       // Smoothly ramp load moment with reach so retracted loads stay controllable while full extension genuinely tips!
-      const reachLeverage = 1.05 + (this.boomExt / 3.6) * 0.52;
+      const reachLeverage = 1.1 + (this.boomExt / 3.6) * 0.65;
       const fLoadY = -(carriedKg * reachLeverage + extSteelKg) * 16.5;
       body.applyForce(new CANNON.Vec3(0, fLoadY, 0), tipRel);
     }
 
-    // High-CoG centrifugal roll torque ONLY when boom is genuinely raised high (> 0.46 rad) OR carrying a heavy load!
-    // Keeps normal stowed driving rock-solid (~3-6° lean) while top-speed high-boom turns visibly lift inside tires & roll!
-    const highBoomFactor = THREE.MathUtils.clamp((this.boomPitch - 0.45) / 0.58, 0, 1);
-    const highBoomKg = highBoomFactor * (2350 + this.boomExt * 1150);
-    const effectiveWhipKg = carriedKg * (0.75 + highBoomFactor * 1.15) + highBoomKg;
+    // High-CoG centrifugal roll torque ONLY when boom is genuinely raised high (> 0.48 rad) OR carrying a heavy load!
+    // Applied purely around the longitudinal roll axis (elevated CoG) so it NEVER fights steering yaw!
+    const highBoomFactor = THREE.MathUtils.clamp((this.boomPitch - 0.48) / 0.52, 0, 1);
+    const highBoomKg = highBoomFactor * (4200 + this.boomExt * 1800);
+    const effectiveWhipKg = carriedKg * (0.85 + highBoomFactor * 1.25) + highBoomKg;
     if (effectiveWhipKg > 50 && grounded >= 1) {
       const yawOmega = body.angularVelocity.y;
       const forwardSpd = body.velocity.dot(fwdWorld);
-      const latAccel = forwardSpd * yawOmega + yawOmega * Math.abs(yawOmega) * (1.8 + this.boomExt * 0.9);
-      const rollPush = THREE.MathUtils.clamp(effectiveWhipKg * latAccel * 1.45, -96000, 96000);
-      body.applyForce(
-        new CANNON.Vec3(rightWorld.x * rollPush, 0, rightWorld.z * rollPush),
-        tipRel
+      const latAccel = forwardSpd * yawOmega;
+      // Centrifugal roll moment = m_elevated * a_lat * h_elevated (applied purely as roll torque around fwdWorld!)
+      const elevatedH = Math.max(1.2, tipRel.y);
+      const rollMoment = THREE.MathUtils.clamp(
+        effectiveWhipKg * latAccel * elevatedH * 3.8,
+        -380000,
+        380000
+      );
+      body.torque.vadd(
+        new CANNON.Vec3(fwdWorld.x * rollMoment, fwdWorld.y * rollMoment, fwdWorld.z * rollMoment),
+        body.torque
       );
     }
 
@@ -1262,11 +1306,11 @@ export class ClaasScorpion {
     props: FarmProp[],
     villageObjs: DynamicVillageObj[]
   ): void {
-    // 1. Speed-Sensitive Steer Angle (nimble in yard, planted & stable at road speed!) & Telescopic Boom Hydraulics
+    // 1. Speed-Sensitive Steer Angle (nimble in yard, calm & planted at road speed!) & Telescopic Boom Hydraulics
     const absSpd = Math.abs(this.speed);
-    const speedSteerScale = THREE.MathUtils.clamp(1.0 - Math.max(0, absSpd - 3.5) / 19.0, 0.34, 1.0);
-    const targetSteer = input.steer * (input.creep ? 0.44 : 0.58) * speedSteerScale;
-    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, dt * 8.5);
+    const speedSteerScale = THREE.MathUtils.clamp(1.0 - Math.max(0, absSpd - 2.8) / 11.5, 0.25, 1.0);
+    const targetSteer = input.steer * (input.creep ? 0.44 : 0.56) * speedSteerScale;
+    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, dt * 7.2);
 
     const fine = input.creep ? 0.45 : 1.0;
     this.prevHeadTilt = this.headTilt;

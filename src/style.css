@@ -1056,6 +1056,32 @@ kbd {
   color: #d9e4d9;
 }
 
+/* Tip-O-Meter Traffic-Light States (Green = Safe, Yellow = Limit, Red = Over) */
+.tip-horizon.tip-safe {
+  border-color: #82d932;
+  box-shadow: 0 0 10px rgba(130, 217, 50, 0.28);
+}
+.tip-horizon.tip-safe .tip-dot {
+  background: #a5ee42;
+}
+.tip-horizon.tip-warn {
+  border-color: #f5c22c;
+  box-shadow: 0 0 12px rgba(245, 194, 44, 0.45);
+}
+.tip-horizon.tip-warn .tip-dot {
+  background: #ffd23f;
+}
+.tip-horizon.tip-danger {
+  border-color: #e84a22;
+  box-shadow: 0 0 14px rgba(232, 74, 34, 0.65);
+}
+.tip-horizon.tip-danger .tip-dot {
+  background: #ff5630;
+}
+.pill.clickable {
+  cursor: pointer;
+}
+
 @media (max-width: 900px) {
   .mode-picker,
   .controls-grid {
