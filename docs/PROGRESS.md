@@ -411,3 +411,21 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 ### Verification & Screenshots (`.scratch/loop/16/`)
 - `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
 - Screenshots inspected: `.scratch/loop/16/01_home_farm_cobble.png`, `.scratch/loop/16/02_muensing_church_clean.png`, `.scratch/loop/16/03_schloss_ammerland_clean.png`, `.scratch/loop/16/04_demo_site_architectural.png`, `.scratch/loop/16/05_church_dusk_lit.png`, `.scratch/loop/16/06_schloss_dusk_lit.png`, `.scratch/loop/16/07_church_sunset_lit.png`, `.scratch/loop/16/08_open_country_fields.png`.
+
+---
+
+## Iteration 17 — Round 2: Open-Countryside Rural Density Every ~150 m (2026-11-24)
+
+**Goal**: Address all World Density items from `.scratch/grades/round-1.md` across Münsinger Straße (`x 220–1150`) and the Wimpasing–Ried–Weipertshausen corridors so open farmland reads cultivated and lively rather than empty green slopes.
+
+### Changes Made
+- Upgraded [src/worldDetails.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/worldDetails.ts) with an automatic paved-road clearance check (`distToPavedRoad`) plus rich rural features batched with `InstancedMesh`:
+  - **Planted 3D crop strips**: golden wheat/barley strips and dense green Bavarian maize rows with golden tassel crowns bordering Münsinger Straße, Ried, and Weipertshausen.
+  - **Continuous field-edge hedgerows (`Hecken`) & woodland-edge undergrowth** tracing field boundaries and OSM forest borders.
+  - **7 wooden Bavarian hay huts (`Heustadl`)** with stone bases, pitched overhanging roofs, haylofts, and stacked hay bales every ~180 m.
+  - **6 cattle pastures** with timber feeding racks (`Heuraufen`), water troughs, and **26 grazing Bavarian Fleckvieh cows**.
+  - **6 parked vintage farm tractors** (with hitched hay wagons at alternating field gates) and **11 wayside shrines (`Marterl`)** along crests and bends.
+
+### Verification & Screenshots (`.scratch/loop/17/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Screenshots inspected: `.scratch/loop/17/01_muensinger_str_463.png`, `.scratch/loop/17/02_muensinger_str_575.png`, `.scratch/loop/17/03_muensinger_str_760.png`, `.scratch/loop/17/04_muensinger_str_325.png`, `.scratch/loop/17/05_weipert_corridor.png`.

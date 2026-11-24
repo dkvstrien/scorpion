@@ -8,6 +8,7 @@ import {
   SEBALD_PIER,
   WATER_LEVEL
 } from './terrain';
+import { createBarnWoodTexture, createHayTexture } from './textures';
 
 function makeHaltestelleTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -43,6 +44,29 @@ function makeHaltestelleTexture(): THREE.CanvasTexture {
 export function buildBavarianWorldDetails(scene: THREE.Scene): void {
   const dummy = new THREE.Object3D();
   const col = new THREE.Color();
+
+  // Collect all paved road segments so open-country crops, hedgerows, cows, huts & parked tractors never encroach on asphalt!
+  const pavedSegs: [number, number, number, number][] = [];
+  for (const r of OSM_DATA.roads) {
+    if (r.hw === 'track' || r.hw === 'service') continue;
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      pavedSegs.push([r.pts[i][0], r.pts[i][1], r.pts[i + 1][0], r.pts[i + 1][1]]);
+    }
+  }
+  const distToPavedRoad = (px: number, pz: number): number => {
+    let bestSq = Infinity;
+    for (const [ax, az, bx, bz] of pavedSegs) {
+      const dx = bx - ax;
+      const dz = bz - az;
+      const lenSq = dx * dx + dz * dz;
+      const t = lenSq > 1e-4 ? Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / lenSq)) : 0;
+      const cx = ax + dx * t - px;
+      const cz = az + dz * t - pz;
+      const dSq = cx * cx + cz * cz;
+      if (dSq < bestSq) bestSq = dSq;
+    }
+    return Math.sqrt(bestSq);
+  };
 
   // === 1. POWER & TELEPHONE POLES WITH SAGGING CATENARY WIRES ALONG MAIN RURAL ROADS ===
   const poleSpots: { x: number; z: number; nx: number; nz: number }[] = [];
@@ -277,12 +301,18 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
   const hSignMat = new THREE.MeshStandardMaterial({ map: makeHaltestelleTexture(), roughness: 0.4 });
   const postYellow = new THREE.MeshStandardMaterial({ color: 0xf4c214, roughness: 0.42 });
 
-  // Wayside Shrines (Marterl / Feldkreuz) along open country crossroads!
+  // Wayside Shrines (Marterl / Feldkreuz) along open country crossroads & hill crests!
   const marterlSpots: [number, number, number][] = [
-    [454, 954, 0.3], // Right beside Open Country Münsinger Straße viewpoint!
+    [454, 954, 0.3], // Open Country Münsinger Straße viewpoint
+    [255, 922, 0.15], // East of Wimpasing crest
+    [640, 956, -0.25], // Mid Münsinger Straße meadow crest
     [920, 825, -0.4],
-    [-210, 620, 0.8],
+    [1065, 976, 0.5], // West Münsing hill entrance
+    [-210, 620, 0.8], // Wimpasing–Ried lane
+    [-125, 340, -0.3], // North of Ried
+    [290, -180, 0.4], // Mid Weipertshausener Straße
     [420, -450, 0.1],
+    [472, -840, -0.35],
     [486, -1165, -0.2]
   ];
   for (const [mx, mz, rot] of marterlSpots) {
@@ -590,4 +620,430 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
     if (tuftInst.instanceColor) tuftInst.instanceColor.needsUpdate = true;
     scene.add(tuftInst);
   }
+
+  // === 8. OPEN-COUNTRY BAVARIAN CROP STRIPS (GOLDEN WHEAT & TALL MAIZE ROWS!) ===
+  // Placed cleanly beside Münsinger Straße, Ried & Weipertshausen so fields read lush and cultivated every ~150 m!
+  const wheatPos: { x: number; z: number; s: number }[] = [];
+  const maizePos: { x: number; z: number; s: number }[] = [];
+
+  const addCropBlock = (
+    target: { x: number; z: number; s: number }[],
+    x0: number,
+    z0: number,
+    rows: number,
+    cols: number,
+    stepX: number,
+    stepZ: number,
+    rot = 0
+  ) => {
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const lx = (c - cols * 0.5) * stepX + ((r * 7 + c * 3) % 3) * 0.25;
+        const lz = (r - rows * 0.5) * stepZ + ((r * 5 + c * 11) % 3) * 0.25;
+        const wx = x0 + lx * cos - lz * sin;
+        const wz = z0 + lx * sin + lz * cos;
+        if (getTerrainHeight(wx, wz) < WATER_LEVEL + 1.2) continue;
+        if (distToPavedRoad(wx, wz) < 10.5) continue;
+        target.push({ x: wx, z: wz, s: 0.85 + ((r * 13 + c * 7) % 5) * 0.08 });
+      }
+    }
+  };
+
+  // Golden Wheat / Barley Strips flanking Münsinger Straße & Ried–Weipertshausen
+  addCropBlock(wheatPos, 545, 912, 8, 22, 3.6, 3.2, -0.18);
+  addCropBlock(wheatPos, 355, 1022, 7, 18, 3.8, 3.4, 0.1);
+  addCropBlock(wheatPos, 1015, 932, 7, 18, 3.6, 3.2, 0.06);
+  addCropBlock(wheatPos, 35, 295, 7, 16, 3.8, 3.4, -0.1);
+  addCropBlock(wheatPos, 610, -915, 7, 16, 3.8, 3.4, 0.08);
+
+  // Tall Bavarian Green Maize (Silomais) Strips with golden tassels!
+  addCropBlock(maizePos, 325, 918, 7, 16, 3.2, 3.0, -0.14);
+  addCropBlock(maizePos, 775, 922, 8, 20, 3.2, 3.0, 0.08);
+  addCropBlock(maizePos, 645, 1022, 7, 18, 3.2, 3.0, -0.06);
+  addCropBlock(maizePos, 365, -415, 7, 15, 3.4, 3.0, 0.14);
+  addCropBlock(maizePos, -90, 565, 6, 14, 3.4, 3.0, -0.2);
+
+  if (wheatPos.length > 0) {
+    const wheatGeo = new THREE.BoxGeometry(2.1, 0.68, 2.3);
+    const wheatMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.94 });
+    const wheatInst = new THREE.InstancedMesh(wheatGeo, wheatMat, wheatPos.length);
+    wheatPos.forEach((p, idx) => {
+      const gy = getTerrainHeight(p.x, p.z);
+      dummy.position.set(p.x, gy + 0.3 * p.s, p.z);
+      dummy.rotation.set(((idx % 3) - 1) * 0.04, ((idx % 5) - 2) * 0.14, ((idx % 5) - 2) * 0.04);
+      dummy.scale.set(p.s * 1.15, p.s * 0.95, p.s * 1.15);
+      dummy.updateMatrix();
+      wheatInst.setMatrixAt(idx, dummy.matrix);
+      col.setHex(idx % 3 === 0 ? 0xd2b34e : idx % 3 === 1 ? 0xc2a141 : 0xdec25d);
+      wheatInst.setColorAt(idx, col);
+    });
+    wheatInst.instanceMatrix.needsUpdate = true;
+    if (wheatInst.instanceColor) wheatInst.instanceColor.needsUpdate = true;
+    scene.add(wheatInst);
+  }
+
+  if (maizePos.length > 0) {
+    // Dense planted Bavarian maize rows (rectangular leafy crop rows + golden tassel crowns — never spaced cones!)
+    const stalkGeo = new THREE.BoxGeometry(1.15, 1.55, 2.55);
+    const stalkMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91 });
+    const tasselGeo = new THREE.BoxGeometry(0.95, 0.24, 2.35);
+    const tasselMat = new THREE.MeshStandardMaterial({ color: 0xd4b654, roughness: 0.92 });
+    const stalkInst = new THREE.InstancedMesh(stalkGeo, stalkMat, maizePos.length);
+    const tasselInst = new THREE.InstancedMesh(tasselGeo, tasselMat, maizePos.length);
+    maizePos.forEach((p, idx) => {
+      const gy = getTerrainHeight(p.x, p.z);
+      dummy.position.set(p.x, gy + 0.72 * p.s, p.z);
+      dummy.rotation.set(0, 0.08 + ((idx % 3) - 1) * 0.04, ((idx % 3) - 1) * 0.03);
+      dummy.scale.set(p.s, p.s, p.s);
+      dummy.updateMatrix();
+      stalkInst.setMatrixAt(idx, dummy.matrix);
+      col.setHex(idx % 3 === 0 ? 0x43722a : idx % 3 === 1 ? 0x508232 : 0x3a6525);
+      stalkInst.setColorAt(idx, col);
+
+      dummy.position.set(p.x, gy + 1.56 * p.s, p.z);
+      dummy.scale.set(p.s, p.s, p.s);
+      dummy.updateMatrix();
+      tasselInst.setMatrixAt(idx, dummy.matrix);
+    });
+    stalkInst.instanceMatrix.needsUpdate = true;
+    tasselInst.instanceMatrix.needsUpdate = true;
+    if (stalkInst.instanceColor) stalkInst.instanceColor.needsUpdate = true;
+    scene.add(stalkInst, tasselInst);
+  }
+
+  // === 9. CONTINUOUS FIELD-EDGE HEDGEROWS (HECKEN) & WOODLAND EDGE UNDERGROWTH ===
+  const hedgeLobes: { x: number; z: number; sx: number; sy: number; sz: number; hex: number }[] = [];
+  const hedgerowLines: [number, number, number, number][] = [
+    // Field edges flanking Münsinger Straße (x = 220..1150)
+    [230, 885, 425, 875],
+    [455, 868, 668, 862],
+    [688, 878, 905, 872],
+    [930, 895, 1135, 908],
+    [285, 995, 495, 992],
+    [545, 992, 765, 992],
+    [805, 998, 1035, 1005],
+    [445, 760, 445, 925],
+    [682, 770, 682, 945],
+    [920, 780, 922, 955],
+    // Wimpasing -> Ried -> Weipertshausen field borders
+    [-165, 615, 75, 608],
+    [-130, 355, 145, 345],
+    [220, -335, 435, -330],
+    [305, -770, 465, -765],
+    [545, -830, 745, -825]
+  ];
+  for (const [x1, z1, x2, z2] of hedgerowLines) {
+    const len = Math.hypot(x2 - x1, z2 - z1);
+    const count = Math.max(4, Math.floor(len / 5.5));
+    for (let i = 0; i <= count; i++) {
+      const t = i / count;
+      const hx = x1 + (x2 - x1) * t + Math.sin(i * 2.3) * 0.9;
+      const hz = z1 + (z2 - z1) * t + Math.cos(i * 1.9) * 0.9;
+      if (getTerrainHeight(hx, hz) < WATER_LEVEL + 1.0) continue;
+      if (distToPavedRoad(hx, hz) < 9.5) continue;
+      const sc = 1.0 + ((i * 7) % 5) * 0.22;
+      hedgeLobes.push({
+        x: hx,
+        z: hz,
+        sx: sc * 1.9,
+        sy: sc * 1.25,
+        sz: sc * 1.7,
+        hex: i % 4 === 0 ? 0x355f27 : i % 4 === 1 ? 0x43702f : i % 4 === 2 ? 0x4f7d34 : 0x3c682b
+      });
+    }
+  }
+  // Woodland edge saplings & bushes ringing OSM forest borders
+  for (const f of OSM_DATA.forests) {
+    const hw = f.w * 0.48;
+    const hd = f.d * 0.48;
+    for (let side = 0; side < 4; side++) {
+      for (let k = 0; k < 5; k++) {
+        const u = (k + 0.5) / 5 - 0.5;
+        const ex = side < 2 ? f.x + u * f.w * 0.85 : f.x + (side === 2 ? hw : -hw);
+        const ez = side >= 2 ? f.z + u * f.d * 0.85 : f.z + (side === 0 ? hd : -hd);
+        if (ex < getShorelineX(ez) + 10) continue;
+        if (getTerrainHeight(ex, ez) < WATER_LEVEL + 1.0) continue;
+        hedgeLobes.push({
+          x: ex,
+          z: ez,
+          sx: 2.2,
+          sy: 1.6,
+          sz: 2.1,
+          hex: k % 2 === 0 ? 0x2f5824 : 0x3d692c
+        });
+      }
+    }
+  }
+  if (hedgeLobes.length > 0) {
+    const hGeo = new THREE.DodecahedronGeometry(1.1, 1);
+    const hMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.91 });
+    const hInst = new THREE.InstancedMesh(hGeo, hMat, hedgeLobes.length);
+    hInst.castShadow = true;
+    hedgeLobes.forEach((h, idx) => {
+      const gy = getTerrainHeight(h.x, h.z);
+      dummy.position.set(h.x, gy + h.sy * 0.58, h.z);
+      dummy.rotation.set(0.08, idx * 1.35, -0.05);
+      dummy.scale.set(h.sx, h.sy, h.sz);
+      dummy.updateMatrix();
+      hInst.setMatrixAt(idx, dummy.matrix);
+      col.setHex(h.hex);
+      hInst.setColorAt(idx, col);
+    });
+    hInst.instanceMatrix.needsUpdate = true;
+    if (hInst.instanceColor) hInst.instanceColor.needsUpdate = true;
+    scene.add(hInst);
+  }
+
+  // === 10. BAVARIAN HAY HUTS (HEUSTADL), CATTLE FEEDING RACKS & GRAZING FLECKVIEH COWS ===
+  const hutWoodMat = new THREE.MeshStandardMaterial({ map: createBarnWoodTexture(), color: 0x8f6642, roughness: 0.93 });
+  const hutRoofMat = new THREE.MeshStandardMaterial({ color: 0x6f432b, roughness: 0.86 });
+  const realHayMat = new THREE.MeshStandardMaterial({ map: createHayTexture(), roughness: 0.94 });
+  const stoneCornerMat = new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: 0.94 });
+  const troughMat = new THREE.MeshStandardMaterial({ color: 0x7e8a92, roughness: 0.45, metalness: 0.45 });
+  const waterMat = new THREE.MeshStandardMaterial({ color: 0x3b7a8c, roughness: 0.18 });
+
+  // 7 Wooden Bavarian Field Hay Huts (Heustadl) placed along open-country pastures every ~180 m!
+  const hayHutSpots: [number, number, number][] = [
+    [390, 932, 0.25], // Open country Münsinger Straße west
+    [595, 978, -0.35], // Open country Münsinger Straße mid
+    [855, 922, 0.18], // Open country Münsinger Straße east
+    [1110, 952, -0.22], // Approach to Münsing
+    [-85, 535, 0.6], // Wimpasing–Ried meadow
+    [335, -280, -0.15], // Weipertshausener Straße south
+    [435, -890, 0.2] // Weipertshausener Straße north
+  ];
+  for (const [hx, hz, rot] of hayHutSpots) {
+    if (distToPavedRoad(hx, hz) < 11.0) continue;
+    const gy = getTerrainHeight(hx, hz);
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.BoxGeometry(5.8, 0.48, 4.4), stoneCornerMat);
+    base.position.y = 0.24;
+    g.add(base);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(5.5, 3.1, 4.1), hutWoodMat);
+    body.position.y = 1.95;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    g.add(body);
+    // Double barn door & golden hay peeking from upper hayloft opening
+    const door = new THREE.Mesh(new THREE.BoxGeometry(1.9, 2.2, 0.12), darkWood);
+    door.position.set(0, 1.45, 2.08);
+    g.add(door);
+    const loftHay = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.72, 0.24), realHayMat);
+    loftHay.position.set(1.6, 2.75, 2.05);
+    g.add(loftHay);
+    // Overhanging pitched timber roof
+    const roofL = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.18, 2.85), hutRoofMat);
+    roofL.position.set(0, 4.02, -1.15);
+    roofL.rotation.x = -0.38;
+    roofL.castShadow = true;
+    g.add(roofL);
+    const roofR = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.18, 2.85), hutRoofMat);
+    roofR.position.set(0, 4.02, 1.15);
+    roofR.rotation.x = 0.38;
+    roofR.castShadow = true;
+    g.add(roofR);
+    // Pair of hay bales resting beside the hut
+    const b1 = new THREE.Mesh(baleGeo, realHayMat);
+    b1.position.set(3.8, 0.78, 0.5);
+    b1.castShadow = true;
+    g.add(b1);
+    const b2 = new THREE.Mesh(baleGeo, realHayMat);
+    b2.position.set(3.8, 0.78, -0.9);
+    g.add(b2);
+
+    g.position.set(hx, gy - 0.08, hz);
+    g.rotation.y = rot;
+    scene.add(g);
+  }
+
+  // Cattle Feeding Racks (Heuraufen) & Water Troughs + Grazing Bavarian Fleckvieh Dairy Cows!
+  const cowWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf6f3ea, roughness: 0.85 });
+  const cowPatchMat = new THREE.MeshStandardMaterial({ color: 0x8e4c24, roughness: 0.88 });
+  const cowDarkMat = new THREE.MeshStandardMaterial({ color: 0x3b2618, roughness: 0.9 });
+  const cowPinkMat = new THREE.MeshStandardMaterial({ color: 0xe6a89c, roughness: 0.82 });
+
+  const makeFleckviehCow = (seed: number): THREE.Group => {
+    const cg = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.86, 1.85), cowWhiteMat);
+    torso.position.y = 1.18;
+    torso.castShadow = true;
+    cg.add(torso);
+    // Warm chestnut-brown Bavarian Fleckvieh saddle & flank patches
+    const patch1 = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.56, 0.78), cowPatchMat);
+    patch1.position.set(0, 1.28, -0.15 + (seed % 2) * 0.25);
+    cg.add(patch1);
+    const patch2 = new THREE.Mesh(new THREE.BoxGeometry(0.91, 0.42, 0.48), cowPatchMat);
+    patch2.position.set(0, 1.12, 0.55);
+    cg.add(patch2);
+    // Grazing head (tilted slightly down toward grass on even cows, looking up on odd cows)
+    const grazing = seed % 2 === 0;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.46, 0.62), cowWhiteMat);
+    head.position.set(0, grazing ? 0.78 : 1.38, -1.16);
+    head.rotation.x = grazing ? 0.52 : 0.05;
+    cg.add(head);
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.24, 0.16), cowPinkMat);
+    snout.position.set(0, grazing ? 0.6 : 1.3, -1.48);
+    cg.add(snout);
+    for (const ex of [-0.32, 0.32]) {
+      const ear = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.12), cowPatchMat);
+      ear.position.set(ex, grazing ? 0.92 : 1.54, -1.04);
+      cg.add(ear);
+    }
+    // 4 sturdy legs
+    for (const lx of [-0.3, 0.3]) {
+      for (const lz of [-0.66, 0.66]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.82, 0.18), cowWhiteMat);
+        leg.position.set(lx, 0.41, lz);
+        cg.add(leg);
+        const hoof = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.12, 0.19), cowDarkMat);
+        hoof.position.set(lx, 0.06, lz);
+        cg.add(hoof);
+      }
+    }
+    return cg;
+  };
+
+  const pastures: { x: number; z: number; cows: number }[] = [
+    { x: 520, z: 985, cows: 5 }, // Directly beside Münsinger Straße open country!
+    { x: 705, z: 928, cows: 5 }, // North pasture along Münsinger Straße
+    { x: 965, z: 1015, cows: 4 }, // South pasture approaching Münsing
+    { x: -120, z: 665, cows: 4 }, // Wimpasing–Ried meadow pasture
+    { x: 405, z: -690, cows: 4 }, // Weipertshausener Straße pasture
+    { x: 275, z: 960, cows: 4 } // East of Wimpasing slope pasture
+  ];
+
+  pastures.forEach((p, pi) => {
+    // Feeding rack (Heuraufe) + galvanized water trough at each pasture
+    if (distToPavedRoad(p.x, p.z) < 10.5) return;
+    const ry = getTerrainHeight(p.x, p.z);
+    const rack = new THREE.Group();
+    for (const sx of [-1.2, 1.2]) {
+      for (const sz of [-0.7, 0.7]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.2, 0.12), darkWood);
+        leg.position.set(sx, 1.1, sz);
+        rack.add(leg);
+      }
+    }
+    const hayFill = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.95, 1.15), realHayMat);
+    hayFill.position.y = 1.05;
+    hayFill.castShadow = true;
+    rack.add(hayFill);
+    const rackRoof = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.14, 2.0), hutRoofMat);
+    rackRoof.position.y = 2.28;
+    rackRoof.castShadow = true;
+    rack.add(rackRoof);
+    const trough = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.62, 0.86), troughMat);
+    trough.position.set(3.4, 0.31, 0.4);
+    rack.add(trough);
+    const water = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.08, 0.72), waterMat);
+    water.position.set(3.4, 0.58, 0.4);
+    rack.add(water);
+    rack.position.set(p.x, ry - 0.05, p.z);
+    rack.rotation.y = pi * 0.6;
+    scene.add(rack);
+
+    // Grazing Bavarian Fleckvieh herd around the feeding rack
+    for (let c = 0; c < p.cows; c++) {
+      const ang = (c / p.cows) * Math.PI * 2 + pi * 0.9;
+      const dist = 6.5 + (c % 3) * 4.5;
+      const cx = p.x + Math.cos(ang) * dist;
+      const cz = p.z + Math.sin(ang) * dist;
+      if (distToPavedRoad(cx, cz) < 8.5) continue;
+      const cy = getTerrainHeight(cx, cz);
+      const cow = makeFleckviehCow(pi * 7 + c);
+      cow.position.set(cx, cy - 0.04, cz);
+      cow.rotation.y = ang + 1.2;
+      scene.add(cow);
+    }
+  });
+
+  // === 11. PARKED VINTAGE BAVARIAN FARM TRACTORS & TRAILERS AT FIELD GATES ===
+  const tractorColors = [0x2a6d33, 0xc23526, 0x26628c, 0x3b7a38, 0xb83824]; // Fendt green, IHC red, Eicher blue
+  const parkedTractors: [number, number, number][] = [
+    [308, 944, 0.6], // Field gate east of Wimpasing
+    [495, 920, -0.8], // Open-country Münsinger Straße wheat field gate!
+    [640, 998, -1.2], // Mid Münsinger Straße meadow gate!
+    [945, 954, 0.4], // East Münsinger Straße approach
+    [-192, 472, 1.2], // Ried south field gate
+    [455, -525, -0.3] // Weipertshausener Straße meadow gate
+  ];
+  const cabGlassMat = new THREE.MeshStandardMaterial({ color: 0x223340, roughness: 0.15, metalness: 0.45 });
+  const rimYellowMat = new THREE.MeshStandardMaterial({ color: 0xd93a28, roughness: 0.4 });
+  const trailerWoodMat = new THREE.MeshStandardMaterial({ color: 0x6f5534, roughness: 0.9 });
+
+  parkedTractors.forEach(([tx, tz, rot], ti) => {
+    if (distToPavedRoad(tx, tz) < 10.5) return;
+    const gy = getTerrainHeight(tx, tz);
+    const tg = new THREE.Group();
+    const bodyPaint = new THREE.MeshStandardMaterial({
+      color: tractorColors[ti % tractorColors.length],
+      roughness: 0.42,
+      metalness: 0.25
+    });
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.72, 3.1), metalGrey);
+    chassis.position.y = 0.85;
+    chassis.castShadow = true;
+    tg.add(chassis);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.92, 1.95), bodyPaint);
+    hood.position.set(0, 1.48, -0.52);
+    hood.castShadow = true;
+    tg.add(hood);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(1.38, 1.25, 1.28), cabGlassMat);
+    cab.position.set(0, 1.92, 0.85);
+    cab.castShadow = true;
+    tg.add(cab);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.14, 1.42), cowWhiteMat);
+    roof.position.set(0, 2.58, 0.85);
+    tg.add(roof);
+    const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 1.25, 6), metalGrey);
+    exhaust.position.set(0.45, 2.25, -0.65);
+    tg.add(exhaust);
+
+    // Big rear agricultural lug tires + smaller front steered tires
+    for (const sx of [-0.92, 0.92]) {
+      const rTire = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.78, 0.42, 12), tireMat);
+      rTire.rotation.z = Math.PI / 2;
+      rTire.position.set(sx, 0.78, 0.92);
+      rTire.castShadow = true;
+      tg.add(rTire);
+      const rRim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.45, 10), rimYellowMat);
+      rRim.rotation.z = Math.PI / 2;
+      rRim.position.set(sx, 0.78, 0.92);
+      tg.add(rRim);
+
+      const fTire = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.3, 10), tireMat);
+      fTire.rotation.z = Math.PI / 2;
+      fTire.position.set(sx * 0.88, 0.52, -1.05);
+      tg.add(fTire);
+      const fRim = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.33, 8), rimYellowMat);
+      fRim.rotation.z = Math.PI / 2;
+      fRim.position.set(sx * 0.88, 0.52, -1.05);
+      tg.add(fRim);
+    }
+
+    // Parked hay wagon hitched behind alternating field-gate tractors
+    if (ti % 2 === 0) {
+      const bed = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.95, 4.2), trailerWoodMat);
+      bed.position.set(0, 1.25, 4.4);
+      bed.castShadow = true;
+      tg.add(bed);
+      const loadHay = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.65, 3.8), realHayMat);
+      loadHay.position.set(0, 1.92, 4.4);
+      tg.add(loadHay);
+      for (const sx of [-1.05, 1.05]) {
+        for (const tzOff of [3.2, 5.4]) {
+          const w = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.26, 10), tireMat);
+          w.rotation.z = Math.PI / 2;
+          w.position.set(sx, 0.44, tzOff);
+          tg.add(w);
+        }
+      }
+    }
+
+    tg.position.set(tx, gy - 0.04, tz);
+    tg.rotation.y = rot;
+    scene.add(tg);
+  });
 }
