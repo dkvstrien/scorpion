@@ -347,7 +347,7 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
 
   // Yellow Deutsche Post letterboxes & village bins
   const postboxSpots: [number, number][] = [
-    [1362, 1002],
+    [1364, 994],
     [1444, 1028],
     [-976, 708],
     [-281, 918],

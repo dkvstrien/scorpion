@@ -264,3 +264,32 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 
 ### Honest Scores Before → After
 `3/2/2/3/2/3/3/3/2/2` → `3/3/2/3/2/3/3/3/3/2` (First 5 min 2→3, Finish 2→3; Fix #3 complete).
+
+---
+
+## Iteration 12 — Fix #4: Dry, Flat, Road-Aligned Fast Travel Everywhere & 10 m Physics Heightfield (2026-11-24)
+
+**Goal**: Fix "Sebald & Schloss" fast travel (which previously spawned intersecting a building collider at `-978.4, 702.3` and ejected the Scorpion toward the water's edge on lifted wheels) and audit every fast-travel point so all 5 land stationary on flat, dry ground facing straight down a road with `4/4` tires and minimal tilt/tip-risk.
+
+### Root Cause Found
+1. `#btn-tp-lake` teleported to `(-978.4, 702.3)` which overlapped LoD2 building collider `[-971.3, 699.2, 13.8×11.2]`, launching the Scorpion at `44 km/h` down the hillside toward the lake (`.scratch/loop/12/00_sebald_BEFORE.png`).
+2. Cannon-es `Heightfield` used `hfStep = 20.0 m`, causing narrow lakeside hillside roads like Nördliche Seestraße to inherit steep false cross-slopes from the adjacent hill (`3/4` tires, `0.68` loadMoment).
+3. The Old Farmstead Demolition Site sat on a `9.2°` natural meadow slope.
+
+### Changes Made
+- Upgraded Cannon-es `Heightfield` resolution from `20 m` to `10 m` in [src/terrain.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/terrain.ts) to match the road-graded `DGM1` grid `1:1`, plus added a gentle flat terrace around the Old Farmstead demolition site `(165, 622)`.
+- Relocated `#btn-tp-lake` (`Sebald & Schloss`) to flat, dry paved Nördliche Seestraße `(-998.0, 825.0, heading=2.94)` and aligned `#btn-tp-village` (`Münsing Altwirt`) dead-center on the main paved Münsing village street `(1370.0, 1004.5, heading=-1.79)` in [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts).
+- Shifted the Münsing postbox off the road lane onto the sidewalk in [src/worldDetails.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/worldDetails.ts), shifted two open-country breakable fences off the asphalt shoulder in [src/destruction.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/destruction.ts), and added `white-space: nowrap` on `.bank-val` in [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css).
+
+### Verification & Weakest Things Observed (`.scratch/loop/12/`)
+- `npx tsc --noEmit && npm run build`: pass (`0` errors). `agweb console error`: `0` console errors.
+- Live 2-second settle telemetry for ALL 5 fast-travel buttons:
+  - `Home Farm` (`01_tp_home_farm.png`): **`0 km/h`**, **`4/4` tires**, `0°/0°`, `loadMoment=0.00`
+  - `Sebald & Schloss` (`02_tp_sebald_schloss.png`): **`0 km/h`**, **`4/4` tires**, `-1°/-1°`, `loadMoment=0.03`
+  - `Münsing Altwirt` (`03_tp_muensing_altwirt.png`): **`0 km/h`**, **`4/4` tires**, `0°/-1°`, `loadMoment=0.03`
+  - `Weipertshausen` (`04_tp_weipertshausen.png`): **`0 km/h`**, **`4/4` tires**, `0°/-1°`, `loadMoment=0.03`
+  - `Old Farmstead (Demo)` (`05_tp_demo_site.png`): **`0 km/h`**, **`4/4` tires**, `0°/0°`, `loadMoment=0.00`
+- **Weakest things still visible**: Buildings still read as uniform boxes with identical painted windows and flat flush eaves; distant Alps cones in `02_tp_sebald_schloss.png` look like giant low-poly triangles; hero landmarks (St. Mariä Himmelfahrt plain white box, Schloss Ammerland) and lollipop trees need richer silhouette and variety (Fix #5 next!).
+
+### Honest Scores Before → After
+`3/3/2/3/2/3/3/3/3/2` → `3/3/2/3/2/3/3/3/3/3` (Stability 2→3; Fixes #1–#4 all complete).

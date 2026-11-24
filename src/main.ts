@@ -888,12 +888,12 @@ class ScorpionGame {
       fastTravel(FARM_SPAWN.x, FARM_SPAWN.z, FARM_SPAWN.heading, 'Wimpasing Home Farm');
     });
     document.getElementById('btn-tp-lake')!.addEventListener('click', () => {
-      // Right on Nördliche Seestraße facing west straight down Fischerei Sebald Pier over Starnberger See!
-      fastTravel(-978.4, REAL_SPOTS.sebaldPier.z, Math.PI / 2, 'Fischerei Sebald & Schloss Ammerland (Starnberger See)');
+      // Dead-center on flat paved Nördliche Seestraße (0.4° slope, 0 colliders, 58m inland) facing south past Schloss Ammerland & lake!
+      fastTravel(-998.0, 825.0, 2.94, 'Ammerland — Sebald & Schloss (Starnberger See)');
     });
     document.getElementById('btn-tp-village')!.addEventListener('click', () => {
-      // Right on Am Kirchberg / Weipertshausener Straße facing St. Mariä Himmelfahrt, Maibaum & Zum Altwirt!
-      fastTravel(1352.0, 992.5, -Math.PI / 2 + 0.12, 'Münsing — St. Mariä Himmelfahrt & Gasthaus Zum Altwirt');
+      // Dead-center on main paved Münsing village road facing east past St. Mariä Himmelfahrt, Maibaum & Zum Altwirt!
+      fastTravel(1370.0, 1004.5, -1.79, 'Münsing — St. Mariä Himmelfahrt & Gasthaus Zum Altwirt');
     });
     document.getElementById('btn-tp-weipert')!.addEventListener('click', () => {
       // Right on Weipertshausen main street heading north into the hamlet!

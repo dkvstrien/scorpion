@@ -117,6 +117,7 @@ let dgmCols = OSM_DATA.heightmap.cols;
 let dgmRows = OSM_DATA.heightmap.rows;
 
 export let FARM_GROUND_Y = 25.0;
+export let DEMO_GROUND_Y = 56.0;
 
 /**
  * Loads the pre-baked 10m-resolution road-graded Bavaria DGM1 LiDAR heightmap (~12ms local fetch)
@@ -144,6 +145,7 @@ export async function initDgm1Heightmap(): Promise<void> {
     console.warn('DGM1 binary fallback to JSON preview grid:', err);
   }
   FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_YARD_CENTER.x, FARM_YARD_CENTER.z) - LAKE_ELEV_M);
+  DEMO_GROUND_Y = Math.max(1.2, getRealElevationMeters(165, 622) - LAKE_ELEV_M);
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -208,8 +210,9 @@ export function getRealElevationMeters(x: number, z: number): number {
   return (e00 * (1 - fx) + e10 * fx) * (1 - fz) + (e01 * (1 - fx) + e11 * fx) * fz;
 }
 
-// Initialize fallback FARM_GROUND_Y before async binary finishes
+// Initialize fallback FARM_GROUND_Y / DEMO_GROUND_Y before async binary finishes
 FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_YARD_CENTER.x, FARM_YARD_CENTER.z) - LAKE_ELEV_M);
+DEMO_GROUND_Y = Math.max(1.2, getRealElevationMeters(165, 622) - LAKE_ELEV_M);
 
 /**
  * True 1:1 vertical world Y (meters above Starnberger See 584.2 m ü.NN) directly from road-graded Bavaria DGM1 LiDAR!
@@ -231,6 +234,14 @@ export function getTerrainHeight(x: number, z: number): number {
   if (fdx < 30 && fdz < 27) {
     const farmFlat = (1 - smoothstep(22, 30, fdx)) * (1 - smoothstep(19, 27, fdz));
     y = y * (1 - farmFlat) + FARM_GROUND_Y * farmFlat;
+  }
+
+  // Level terrace for the Old Gravel Pit Farmstead demolition site (165, 622) so walls & fast-travel landing sit flat
+  const ddx = Math.abs(x - 165);
+  const ddz = Math.abs(z - 622);
+  if (ddx < 40 && ddz < 42) {
+    const demoFlat = (1 - smoothstep(26, 40, ddx)) * (1 - smoothstep(28, 42, ddz));
+    y = y * (1 - demoFlat) + DEMO_GROUND_Y * demoFlat;
   }
 
   return y;
@@ -364,10 +375,10 @@ export function buildRealMuensingTerrain(
   }
   scene.add(group);
 
-  // Cannon-es Heightfield matching the road-graded DGM1 LiDAR terrain (20m physics cells)
+  // Cannon-es Heightfield matching the 10m road-graded DGM1 LiDAR terrain 1:1 (eliminates false hillside cross-slopes on roads!)
   const width = WORLD_MAX_X - WORLD_MIN_X;
   const depth = WORLD_MAX_Z - WORLD_MIN_Z;
-  const hfStep = 20.0;
+  const hfStep = 10.0;
   const hfCols = Math.ceil(width / hfStep);
   const hfRows = Math.ceil(depth / hfStep);
   const matrix: number[][] = [];

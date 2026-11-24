@@ -208,6 +208,7 @@ body,
   font-family: 'Fredoka', sans-serif;
   color: #a6f249;
   font-size: 0.92rem;
+  white-space: nowrap;
 }
 
 .contract-selector {
