@@ -128,3 +128,25 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 `Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=3, Finish=1, Stability=2`
 
 **Next**: Iteration 7 — Priority E (Free-play destruction: breakable fences/gates/bale stacks/woodpiles/walls/sheds/trees/lamps/signs with pre-split physics debris, dust/sound/camera shake, and a self-contained Old Gravel Pit demolition site at 60 fps).
+
+---
+
+## Iteration 7 — Priority E: Free-Play Breakables & Old Farmstead Demolition Site (2026-11-24)
+
+**Goal**: Make roadside fences, gates, hay stacks, woodpiles, low stone walls, field sheds, and road signs break into pre-split rigid-body debris chunks (with dust, crunch audio, and camera shake), plus add one self-contained demolition site at the meadow edge — all at 60 fps with zero GTA scoring mechanics.
+
+### Changes Made
+- Created [src/destruction.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/destruction.ts) (`DestructionManager`) and wired into [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts) and [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html):
+  - **27 world-wide breakables** across Wimpasing, Ried, Ammerland, Münsing, and Weipertshausen: wooden pasture fences, timber gates, hay bale pyramids, cordwood piles, stone garden walls, field timber sheds, and yellow road signs.
+  - **Self-contained "Old Gravel Pit Farmstead" Demolition Site** (`18` breakable pieces at `(165, 620)` in the open meadow NE of Wimpasing): brick-and-timber barn with 6 breakable brick wall panels + 4 linked terracotta roof slabs that collapse when supporting walls break, 2 timber sheds, freestanding brick wall, hay pyramid, cordwood stack, entry gate, and perimeter fences.
+  - Pre-split rigid-body debris chunks (hard-capped at `48` active physics bodies, smoothly despawning after `14 s`) + dust bursts, impact/crush audio, and damped camera shake.
+  - Added Free Play fast-travel button (`Old Farmstead (Demo)`) and one-click `↻ Reset Demo Site` button.
+
+### Verification & Evidence (`.scratch/loop/7/`)
+- `npx tsc --noEmit && npm run build`: clean pass (`0` errors).
+- Live demolition test (`agent-browser`, 0 console errors): plowed through the gate and brick barn walls at `32–34 km/h`, shattered brick walls & collapsed roof slabs into flying debris (`demo_01_before.png`, `demo_02_smashing.png`) at **`61 fps`**, then verified `resetDemoSite()` cleanly restored `0/18` broken.
+
+### Scorecard Update
+`Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=3, Finish=1, Stability=2`
+
+**Next**: Iteration 8 — Finish & Final Polish (Pause menu on `Esc`, Settings for Graphics Quality / Master Volume / Ambience / Controls, Credits screen with OpenData Bayern & Bayerische Vermessungsverwaltung attribution, crisp First-5-Minutes onboarding, full stability stress test, final 6-viewpoint audit, and `docs/FINAL_REPORT.md`).

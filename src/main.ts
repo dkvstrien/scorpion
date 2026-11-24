@@ -15,6 +15,7 @@ import {
   VaripowerGear
 } from './tractor';
 import { RealMuensingWorld } from './realWorld';
+import { DEMO_SITE_CENTER, DestructionManager } from './destruction';
 import { TireTrackSystem } from './tracks';
 import { MiniMapMarker, MuensingMiniMap } from './minimap';
 import { createSkyEnvTexture } from './textures';
@@ -59,6 +60,7 @@ class ScorpionGame {
   private tracks: TireTrackSystem;
   private farm: FarmEnvironment;
   private realWorld: RealMuensingWorld;
+  private destruction: DestructionManager;
   private propMgr: PropManager;
   private tractor: ClaasScorpion;
   private minimap: MuensingMiniMap;
@@ -93,6 +95,7 @@ class ScorpionGame {
   private lastMouseY = 0;
   private smoothCamPos = new THREE.Vector3(FARM_CENTER.x, 12, FARM_CENTER.z + 28);
   private smoothLookAt = new THREE.Vector3(FARM_CENTER.x, 3, FARM_CENTER.z + 10);
+  private camShake = 0;
 
   // DOM Elements
   private startOverlay = document.getElementById('start-overlay')!;
@@ -245,6 +248,22 @@ class ScorpionGame {
         this.audio.playImpact(8, 'water');
         this.particles.spawnSplash(pos);
         this.showToast(`SPLASH! ${label} fell into Starnberger See!`);
+      }
+    });
+
+    let lastBreakToastAt = 0;
+    this.destruction = new DestructionManager(this.scene, this.world, propMat, {
+      onBreak: (label, pos, soundMat, colors, shake) => {
+        this.audio.playImpact(9.5, soundMat);
+        if (soundMat === 'metal') this.audio.playCrush(true);
+        this.particles.spawnCrush(pos, colors);
+        this.particles.spawnDust(pos);
+        this.camShake = Math.min(0.65, this.camShake + shake);
+        const now = performance.now();
+        if (this.mode === 'freeplay' && now - lastBreakToastAt > 1200) {
+          lastBreakToastAt = now;
+          this.showToast(`SMASHED: ${label}!`);
+        }
       }
     });
 
@@ -766,6 +785,18 @@ class ScorpionGame {
     document.getElementById('btn-tp-weipert')!.addEventListener('click', () => {
       // Right on Weipertshausen main street heading north into the hamlet!
       fastTravel(496.0, -1189.0, 0.12, 'Weipertshausen — Weipertshausener Straße');
+    });
+    document.getElementById('btn-tp-demo')!.addEventListener('click', () => {
+      fastTravel(
+        DEMO_SITE_CENTER.x,
+        DEMO_SITE_CENTER.z + 25,
+        0,
+        'Old Gravel Pit Farmstead — Breakable Demolition Site!'
+      );
+    });
+    document.getElementById('btn-reset-demo')!.addEventListener('click', () => {
+      this.destruction.resetDemolitionSite();
+      this.showToast('Demolition Site rebuilt — ready for another run!');
     });
 
     window.addEventListener('keydown', (e) => {
@@ -1358,6 +1389,12 @@ class ScorpionGame {
     this.smoothCamPos.lerp(desiredPos, Math.min(1, dt * 6.5));
     this.smoothLookAt.lerp(desiredLook, Math.min(1, dt * 8));
     this.camera.position.copy(this.smoothCamPos);
+    if (this.camShake > 0.005) {
+      this.camera.position.x += (Math.random() - 0.5) * this.camShake;
+      this.camera.position.y += (Math.random() - 0.5) * this.camShake * 0.7;
+      this.camera.position.z += (Math.random() - 0.5) * this.camShake;
+      this.camShake = Math.max(0, this.camShake - dt * 1.85);
+    }
     this.camera.lookAt(this.smoothLookAt);
   }
 
@@ -1404,6 +1441,13 @@ class ScorpionGame {
     this.realWorld.update(
       dt,
       this.elapsed,
+      this.tractor.position,
+      this.tractor.speed,
+      this.tractor.getHoldWorldPos(),
+      this.tractor.getTipSpeed()
+    );
+    this.destruction.update(
+      dt,
       this.tractor.position,
       this.tractor.speed,
       this.tractor.getHoldWorldPos(),
@@ -1485,6 +1529,14 @@ class ScorpionGame {
       setTime: (tod: TimeOfDay) => this.applyTimeOfDay(tod),
       selectContract: (id: ContractId) => this.selectContract(id, true),
       listContracts: () => BAVARIAN_CONTRACTS.map((c) => ({ id: c.id, title: c.title, village: c.village, payout: c.payoutEUR })),
+      goToDemoSite: () => {
+        this.setMode('freeplay');
+        this.tractor.teleportTo(DEMO_SITE_CENTER.x, DEMO_SITE_CENTER.z + 25, 0);
+        this.camYawOffset = 0.14;
+        this.snapCameraToTractor();
+      },
+      resetDemoSite: () => this.destruction.resetDemolitionSite(),
+      getDestructionStats: () => this.destruction.getBrokenCount(),
       setGear: (g: VaripowerGear) => {
         this.tractor.gear = g;
       },
