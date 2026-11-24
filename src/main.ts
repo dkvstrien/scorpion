@@ -14,6 +14,7 @@ import {
   FARM_CENTER,
   getDrivableGroundY,
   getRealElevationMeters,
+  initDgm1Heightmap,
   REAL_SPOTS,
   WATER_LEVEL
 } from './terrain';
@@ -162,7 +163,7 @@ class ScorpionGame {
     this.pmrem.compileEquirectangularShader();
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 3200);
+    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 4800);
     this.camera.position.set(FARM_CENTER.x + 8, 12, FARM_CENTER.z + 28);
 
     this.setupLightingAndSky();
@@ -628,15 +629,15 @@ class ScorpionGame {
     });
     document.getElementById('btn-tp-lake')!.addEventListener('click', () => {
       // Right on Nördliche Seestraße facing west straight down Fischerei Sebald Pier over Starnberger See!
-      fastTravel(-694.0, REAL_SPOTS.sebaldPier.z, Math.PI / 2, 'Fischerei Sebald & Schloss Ammerland (Starnberger See)');
+      fastTravel(-978.4, REAL_SPOTS.sebaldPier.z, Math.PI / 2, 'Fischerei Sebald & Schloss Ammerland (Starnberger See)');
     });
     document.getElementById('btn-tp-village')!.addEventListener('click', () => {
-      // Right on paved Weipertshausener Straße facing east into Münsing: St. Mariä Himmelfahrt, Maibaum & Zum Altwirt!
-      fastTravel(804.0, 666.0, -Math.PI / 2 + 0.14, 'Münsing — Gasthaus Zum Altwirt & St. Mariä Himmelfahrt');
+      // Right on Am Kirchberg / Weipertshausener Straße facing St. Mariä Himmelfahrt, Maibaum & Zum Altwirt!
+      fastTravel(1352.0, 992.5, -Math.PI / 2 + 0.12, 'Münsing — St. Mariä Himmelfahrt & Gasthaus Zum Altwirt');
     });
     document.getElementById('btn-tp-weipert')!.addEventListener('click', () => {
-      // Right on paved Weipertshausener Straße heading north into Weipertshausen!
-      fastTravel(298.0, -773.0, 0.12, 'Weipertshausen — Weipertshausener Straße');
+      // Right on Weipertshausen main street heading north into the hamlet!
+      fastTravel(496.0, -1189.0, 0.12, 'Weipertshausen — Weipertshausener Straße');
     });
 
     window.addEventListener('keydown', (e) => {
@@ -839,21 +840,21 @@ class ScorpionGame {
 
   private getCurrentLocationName(): string {
     const { x, z } = this.tractor.position;
-    if (Math.hypot(x - REAL_SPOTS.sebaldPier.x, z - REAL_SPOTS.sebaldPier.z) < 68)
+    if (Math.hypot(x - REAL_SPOTS.sebaldPier.x, z - REAL_SPOTS.sebaldPier.z) < 90)
       return '⛵ Fischerei Sebald · Starnberger See';
-    if (Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 75)
+    if (Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 105)
       return '🏰 Schloss Ammerland · Starnberger See';
-    if (Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 68)
+    if (Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 88)
       return '⛪ Münsing — St. Mariä Himmelfahrt';
-    if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 88)
+    if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 115)
       return '🍺 Münsing — Gasthaus Zum Altwirt';
-    if (Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 65) return '🛒 Münsing — EDEKA Graf';
-    if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 155)
+    if (Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 85) return '🛒 Münsing — EDEKA Graf';
+    if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 220)
       return '🌲 Weipertshausen';
-    if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 95) return '🌾 Ried';
-    if (Math.abs(x - FARM_CENTER.x) < 48 && Math.abs(z - FARM_CENTER.z) < 46) return '🚜 Wimpasing Home Farm';
-    if (Math.hypot(x - REAL_SPOTS.wimpasing.x, z - REAL_SPOTS.wimpasing.z) < 115) return '🏘️ Wimpasing';
-    if (x > 160 && x < 740) return '⛰️ Münsinger Straße Climb';
+    if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 130) return '🌾 Ried';
+    if (Math.abs(x - FARM_CENTER.x) < 55 && Math.abs(z - FARM_CENTER.z) < 52) return '🚜 Wimpasing Home Farm';
+    if (Math.hypot(x - REAL_SPOTS.wimpasing.x, z - REAL_SPOTS.wimpasing.z) < 165) return '🏘️ Wimpasing';
+    if (x > 160 && x < 1200) return '⛰️ Münsinger Straße (Open Country)';
     return '🏔️ Starnberger See Valley';
   }
 
@@ -1259,6 +1260,45 @@ class ScorpionGame {
     this.updateCamera(dt);
     this.renderer.render(this.scene, this.camera);
   };
+
+  /**
+   * Invisible test harness for fixed-viewpoint screenshots & repeatable physics telemetry checks.
+   */
+  public installTestHarness(): void {
+    const viewpoints: Record<string, { x: number; z: number; heading: number; yawOff?: number }> = {
+      '01_muensing_church': { x: 1352.0, z: 992.5, heading: -Math.PI / 2 + 0.08, yawOff: 0.14 },
+      '02_zum_altwirt': { x: 1435.8, z: 1055.9, heading: -0.45, yawOff: 0.15 },
+      '03_wimpasing_farm': { x: FARM_CENTER.x - 2, z: FARM_CENTER.z + 14.5, heading: 0.18, yawOff: 0.22 },
+      '04_ammerland_schloss': { x: -999.3, z: 832.1, heading: Math.PI / 2 + 0.18, yawOff: 0.16 },
+      '05_open_country': { x: 462.9, z: 965.0, heading: -1.12, yawOff: 0.14 },
+      '06_weipertshausen': { x: 496.0, z: -1189.0, heading: 0.14, yawOff: 0.16 }
+    };
+    (window as unknown as Record<string, unknown>).__scorpionHarness = {
+      goToViewpoint: (id: string) => {
+        const vp = viewpoints[id];
+        if (!vp) return false;
+        this.tractor.teleportTo(vp.x, vp.z, vp.heading);
+        this.camYawOffset = vp.yawOff ?? 0.18;
+        this.snapCameraToTractor();
+        return true;
+      },
+      setTime: (tod: TimeOfDay) => this.applyTimeOfDay(tod),
+      getTelemetry: () => ({
+        speedKmh: Math.round(Math.abs(this.tractor.speed) * 3.6),
+        speedMs: +this.tractor.speed.toFixed(2),
+        wheels: this.tractor.wheelsOnGround,
+        rollDeg: this.tractor.rollDeg,
+        pitchDeg: this.tractor.pitchDeg,
+        isTipped: this.tractor.isTipped,
+        elevM: Math.round(getRealElevationMeters(this.tractor.position.x, this.tractor.position.z)),
+        x: Math.round(this.tractor.position.x),
+        z: Math.round(this.tractor.position.z)
+      })
+    };
+  }
 }
 
-new ScorpionGame();
+initDgm1Heightmap().then(() => {
+  const game = new ScorpionGame();
+  game.installTestHarness();
+});

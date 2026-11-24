@@ -116,7 +116,7 @@ export class MuensingMiniMap {
     drawLabel('Wimpasing', REAL_SPOTS.wimpasing.x, REAL_SPOTS.wimpasing.z, '#f6faf0', 0, 11);
     drawLabel('Münsing', REAL_SPOTS.muensingAltwirt.x, REAL_SPOTS.muensingAltwirt.z, '#ffe785', -6, -6);
     drawLabel('Ammerland', REAL_SPOTS.schlossAmmerland.x, REAL_SPOTS.schlossAmmerland.z, '#9ee5ff', 14, 11);
-    drawLabel('SEE', -1030, -40, '#9ee5ff', 0, 0);
+    drawLabel('SEE', -1550, -60, '#9ee5ff', 0, 0);
   }
 
   public render(
