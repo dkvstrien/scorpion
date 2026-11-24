@@ -393,17 +393,25 @@ class ScorpionGame {
 
     let lastBreakToastAt = 0;
     this.destruction = new DestructionManager(this.scene, this.world, propMat, {
-      onBreak: (label, pos, soundMat, colors, shake) => {
+      onBreak: (label, pos, soundMat, colors, shake, impact) => {
         this.audio.playImpact(9.5, soundMat);
         if (soundMat === 'metal') this.audio.playCrush(true);
         this.particles.spawnCrush(pos, colors);
         this.particles.spawnDust(pos);
-        this.camShake = Math.min(0.65, this.camShake + shake);
+        this.camShake = Math.min(0.75, this.camShake + shake);
+        if (impact) {
+          this.tractor.applyStructureImpact(impact.speedKeepFrac, impact.pitchKick);
+        }
         const now = performance.now();
         if (this.mode === 'freeplay' && now - lastBreakToastAt > 1200) {
           lastBreakToastAt = now;
           this.showToast(`SMASHED: ${label}!`);
         }
+      },
+      onStructureBlock: (pushOutDir, pitchKick) => {
+        this.tractor.applyStructureImpact(0.25, pitchKick, pushOutDir);
+        this.audio.playImpact(5.0, 'metal');
+        this.camShake = Math.min(0.35, this.camShake + 0.14);
       }
     });
 

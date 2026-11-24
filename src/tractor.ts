@@ -153,6 +153,7 @@ export class ClaasScorpion {
   private lastTipWarnAt = 0;
   private wasTipped = false;
   private uprightTimer = 2.0;
+  private wedgedTimer = 0;
   private rolloverCooldown = 0;
   private readonly comY = 0.78;
   private readonly comZ = 0.28;
@@ -420,6 +421,35 @@ export class ClaasScorpion {
       else kg += 420;
     }
     return kg;
+  }
+
+  /**
+   * Applies realistic momentum loss & cab pitch jolt when ramming through breakable walls/sheds/fences,
+   * or blocks the machine cleanly when bumping heavy masonry below breaking speed.
+   */
+  public applyStructureImpact(
+    speedKeepFrac: number,
+    pitchKick: number,
+    pushOutDir?: { x: number; z: number; overlap: number }
+  ): void {
+    this.chassisBody.velocity.x *= speedKeepFrac;
+    this.chassisBody.velocity.z *= speedKeepFrac;
+    if (pushOutDir && pushOutDir.overlap > 0) {
+      this.chassisBody.position.x += pushOutDir.x * pushOutDir.overlap;
+      this.chassisBody.position.z += pushOutDir.z * pushOutDir.overlap;
+      const vn = this.chassisBody.velocity.x * pushOutDir.x + this.chassisBody.velocity.z * pushOutDir.z;
+      if (vn < 0) {
+        this.chassisBody.velocity.x -= pushOutDir.x * vn * 1.15;
+        this.chassisBody.velocity.z -= pushOutDir.z * vn * 1.15;
+      }
+    }
+    if (pitchKick !== 0) {
+      const rightWorld = new CANNON.Vec3(1, 0, 0);
+      this.chassisBody.quaternion.vmult(rightWorld, rightWorld);
+      this.chassisBody.angularVelocity.x += rightWorld.x * pitchKick;
+      this.chassisBody.angularVelocity.y += (Math.random() - 0.5) * pitchKick * 0.25;
+      this.chassisBody.angularVelocity.z += rightWorld.z * pitchKick;
+    }
   }
 
   public rightTractorInPlace(): void {
@@ -765,10 +795,10 @@ export class ClaasScorpion {
     const maxSpeed = Math.min(baseMaxSpeed, boomCapMs);
 
     const restHubHeight = 0.92;
-    const kSpringFront = 136000;
-    const kSpringRear = 192000;
-    const cDamp = 26500;
-    const kAntiRoll = 34000;
+    const kSpringFront = 132000;
+    const kSpringRear = 186000;
+    const cDamp = 25000;
+    const kAntiRoll = 24000;
 
     let grounded = 0;
     const absForwardSpd = Math.abs(body.velocity.dot(fwdWorld));
@@ -793,8 +823,8 @@ export class ClaasScorpion {
       // Axle left-right roll differentials (wheel order: FL=0, FR=1, RL=2, RR=3)
       const frontRollDiff = comps[0] - comps[1];
       const rearRollDiff = comps[2] - comps[3];
-      // Progressive rear-axle steering taper at road speed (real CLAAS Varipower road stability!)
-      const rear4WSRatio = THREE.MathUtils.clamp(0.85 - Math.max(0, absForwardSpd - 3.5) * 0.13, 0.14, 0.85);
+      // Real CLAAS Varipower auto-tapers rear-axle 4WS above yard speed so 30-40 km/h steering stays crisp without plowing!
+      const rear4WSRatio = THREE.MathUtils.clamp(0.85 - Math.max(0, absForwardSpd - 3.2) * 0.14, 0.08, 0.85);
 
       for (let i = 0; i < this.wheelPivots.length; i++) {
         const w = this.wheelPivots[i];
@@ -837,14 +867,14 @@ export class ClaasScorpion {
           );
           wRight.normalize();
 
-          const vLong = vPt.dot(wFwd);
+          const vChassisFwd = vPt.dot(fwdWorld);
           const vLat = vPt.dot(wRight);
 
           // Progressive 136 hp Varipower hydrostatic drive with distinct acceleration, heavy coasting (~4.5 s from 37 km/h) & active brake!
           const targetSpeed = input.throttle * maxSpeed * 1.015;
-          const speedErr = targetSpeed - vLong;
+          const speedErr = targetSpeed - vChassisFwd;
           const isCoasting = Math.abs(input.throttle) < 0.02;
-          const isActiveBrake = !isCoasting && input.throttle * vLong < -0.18;
+          const isActiveBrake = !isCoasting && input.throttle * vChassisFwd < -0.18;
           let tractiveLimit: number;
           let driveGain: number;
           if (isActiveBrake) {
@@ -856,25 +886,31 @@ export class ClaasScorpion {
             tractiveLimit = 3900;
             driveGain = 1280;
           } else {
-            // Engine power taper at road speed (realistic 136 hp diesel tractive effort curve; boosted with All-Terrain upgrade)
+            // Engine power taper at road speed (realistic 136 hp diesel tractive effort curve; keeps speed through turns!)
             tractiveLimit =
-              THREE.MathUtils.lerp(4700, 3400, THREE.MathUtils.clamp(absForwardSpd / 11.1, 0, 1)) *
+              THREE.MathUtils.lerp(5200, 3900, THREE.MathUtils.clamp(absForwardSpd / 11.1, 0, 1)) *
               this.upgradeTractionScale;
-            driveGain = 6200 * this.upgradeTractionScale;
+            driveGain = 6600 * this.upgradeTractionScale;
           }
           const fDrive = THREE.MathUtils.clamp(speedErr * driveGain, -tractiveLimit, tractiveLimit);
 
-          // Realistic agricultural tire lateral grip: slight loose scrub & lean at 37+ km/h full lock!
+          // Realistic tire cornering force: strong lateral grip without slamming an invisible longitudinal brake!
+          // Cap rearward tire cornering scrub to <= 12% of lateral force so 40 km/h turns hold momentum & build real body roll!
           const maxLatGrip = Math.min(
-            16400 * this.upgradeTractionScale,
-            Math.max(4200, fUp * 0.45 * this.upgradeTractionScale)
+            18500 * this.upgradeTractionScale,
+            Math.max(4800, fUp * 0.56 * this.upgradeTractionScale)
           );
-          const fLat = THREE.MathUtils.clamp(-vLat * 9400, -maxLatGrip, maxLatGrip);
+          const fLat = THREE.MathUtils.clamp(-vLat * 8800, -maxLatGrip, maxLatGrip);
+          const rawLongFromLat = fLat * sinS;
+          const maxCornerDrag = Math.abs(fLat) * 0.10;
+          const clampedLatDrag = THREE.MathUtils.clamp(rawLongFromLat, -maxCornerDrag, maxCornerDrag);
+          const netLong = fDrive + clampedLatDrag;
+          const netLat = fLat * cosS;
 
           const totalHoriz = new CANNON.Vec3(
-            wFwd.x * fDrive + wRight.x * fLat,
-            wFwd.y * fDrive + wRight.y * fLat,
-            wFwd.z * fDrive + wRight.z * fLat
+            fwdWorld.x * netLong + rightWorld.x * netLat,
+            fwdWorld.y * netLong + rightWorld.y * netLat,
+            fwdWorld.z * netLong + rightWorld.z * netLat
           );
           body.applyForce(totalHoriz, contactRel);
         }
@@ -905,8 +941,11 @@ export class ClaasScorpion {
       const forwardSpd = body.velocity.dot(fwdWorld);
       const latAccel = forwardSpd * yawOmega;
 
-      // Baseline chassis body roll: noticeable 6-11 deg lean when cornering hard empty at 35+ km/h without flipping on flat ground!
-      const chassisRollTorque = THREE.MathUtils.clamp(7640 * latAccel * 1.48, -84000, 84000);
+      // Natural chassis body roll: noticeable 5-10 deg lean and inside wheel lift (>30 km/h full lock) so you feel weight shift & choose to back off!
+      // Softly eases past ~16 deg when empty & boom-low so flat-ground full-lock turns feel loose & lift an inside tire rather than flipping immediately.
+      const absRoll = Math.abs(this.rollDeg);
+      const emptyHighSpeedScale = carriedKg === 0 && this.boomPitch < 0.32 ? THREE.MathUtils.clamp(1.0 - (absRoll - 13) / 14, 0.25, 1.0) : 1.0;
+      const chassisRollTorque = THREE.MathUtils.clamp(7640 * latAccel * 1.95 * emptyHighSpeedScale, -125000, 125000);
 
       const highBoomFactor = THREE.MathUtils.clamp((this.boomPitch - 0.35) / 0.65, 0, 1);
       const highBoomKg = highBoomFactor * (5200 + this.boomExt * 2400);
@@ -974,17 +1013,20 @@ export class ClaasScorpion {
     props: FarmProp[],
     villageObjs: DynamicVillageObj[]
   ): void {
-    // 1. Speed-Sensitive Steer Angle (nimble in yard, calm & planted at road speed!) & Telescopic Boom Hydraulics
+    // 1. Speed-Sensitive Steer Angle (nimble in yard, controlled 30-40 km/h cornering) & Heavy Hydraulic Boom Speeds
     const absSpd = Math.abs(this.speed);
-    const speedSteerScale = THREE.MathUtils.clamp(1.0 - Math.max(0, absSpd - 2.8) / 11.5, 0.25, 1.0);
+    const speedSteerScale = THREE.MathUtils.clamp(1.0 - Math.max(0, absSpd - 2.6) / 13.0, 0.34, 1.0);
     const targetSteer = input.steer * (input.creep ? 0.44 : 0.56) * speedSteerScale;
-    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, dt * 7.2);
+    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, dt * 6.4);
 
+    // Authentic CLAAS Scorpion hydraulic cycle times (~5.4 s full raise at idle, ~4.3 s gravity-assisted lower, ~3.8 s extend)
     const fine = (input.creep ? 0.45 : 1.0) * this.upgradeHydroScale;
+    const liftRate = input.boomLift >= 0 ? 0.24 : 0.30;
+    const extRate = input.boomExtend >= 0 ? 0.95 : 1.15;
     this.prevHeadTilt = this.headTilt;
-    this.boomPitch = THREE.MathUtils.clamp(this.boomPitch + input.boomLift * 0.98 * fine * dt, -0.2, 1.1);
-    this.boomExt = THREE.MathUtils.clamp(this.boomExt + input.boomExtend * 2.9 * fine * dt, 0, 3.6);
-    this.headTilt = THREE.MathUtils.clamp(this.headTilt + input.headTilt * 1.9 * fine * dt, -0.78, 1.15);
+    this.boomPitch = THREE.MathUtils.clamp(this.boomPitch + input.boomLift * liftRate * fine * dt, -0.2, 1.1);
+    this.boomExt = THREE.MathUtils.clamp(this.boomExt + input.boomExtend * extRate * fine * dt, 0, 3.6);
+    this.headTilt = THREE.MathUtils.clamp(this.headTilt + input.headTilt * 1.15 * fine * dt, -0.78, 1.15);
 
     this.hydroLoad = Math.min(
       1,
@@ -1013,8 +1055,8 @@ export class ClaasScorpion {
     this.distanceMeters += Math.hypot(vel3.x, vel3.z) * dt;
 
     // Real tipping risk telemetry combining actual tilt angle + wheel liftoff + load moment!
-    const tiltFactor = Math.max(Math.abs(this.rollDeg) / 38, Math.abs(this.pitchDeg) / 34);
-    const wheelLiftFactor = this.wheelsOnGround <= 2 ? 0.95 : this.wheelsOnGround === 3 ? 0.68 : 0;
+    const tiltFactor = Math.max(Math.abs(this.rollDeg) / 36, Math.abs(this.pitchDeg) / 34);
+    const wheelLiftFactor = this.wheelsOnGround <= 2 ? 0.95 : this.wheelsOnGround === 3 ? 0.74 : 0;
     const carriedKg = this.getCarriedMassKg();
     const reachFactor =
       carriedKg > 0 ? (carriedKg * (1.8 + this.boomExt * 1.15) * Math.max(0.3, Math.cos(this.boomPitch))) / 4200 : 0;
@@ -1026,24 +1068,30 @@ export class ClaasScorpion {
       const blinkRed = idx === 5 && this.loadMoment > 0.82 ? (Math.sin(elapsed * 18) > 0 ? 1.8 : 0.1) : 1.3;
       mat.emissiveIntensity = isLit ? blinkRed : 0.06;
     });
-    if (this.loadMoment > 0.72 && !this.isTipped) {
+    if (this.loadMoment > 0.70 && !this.isTipped) {
       this.callbacks.onOverloadAlarm();
       const now = performance.now();
-      if (now - this.lastTipWarnAt > 2600) {
+      if (now - this.lastTipWarnAt > 2400) {
         this.lastTipWarnAt = now;
         const msg =
           this.boomPitch > 0.35 || this.boomExt > 0.8
             ? 'Stability warning: lower and retract boom!'
-            : this.wheelsOnGround <= 2
+            : this.wheelsOnGround <= 3
               ? 'Stability warning: wheel lift — slow down!'
               : 'Stability warning: approaching tip limit!';
         this.callbacks.onStabilityWarning?.(msg);
       }
     }
 
-    // GENUINE TIPPED-OVER / ROLLOVER CONSEQUENCE (debounced cleanly so it fires once per real rollover!)
+    // GENUINE TIPPED-OVER & WEDGED ROLLOVER DETECTION (also detects being wedged >= 30° on <= 2 wheels!)
     this.rolloverCooldown = Math.max(0, this.rolloverCooldown - dt);
-    this.isTipped = upWorld.y < 0.56;
+    const maxTiltDeg = Math.max(Math.abs(this.rollDeg), Math.abs(this.pitchDeg));
+    if (maxTiltDeg >= 30 && this.wheelsOnGround <= 2 && Math.abs(this.speed) < 2.8) {
+      this.wedgedTimer += dt;
+    } else {
+      this.wedgedTimer = Math.max(0, this.wedgedTimer - dt * 2.0);
+    }
+    this.isTipped = upWorld.y < 0.56 || this.wedgedTimer >= 1.35;
     if (this.isTipped) {
       this.uprightTimer = 0;
       if (!this.wasTipped && this.rolloverCooldown <= 0) {
@@ -1052,7 +1100,7 @@ export class ClaasScorpion {
         this.releaseAll(false);
         this.callbacks.onTippedOver(this.position.clone());
       }
-    } else if (upWorld.y > 0.84 && this.wheelsOnGround >= 3) {
+    } else if (upWorld.y > 0.84 && this.wheelsOnGround >= 3 && maxTiltDeg < 22) {
       this.uprightTimer += dt;
       if (this.uprightTimer > 1.2) {
         this.wasTipped = false;

@@ -534,3 +534,27 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 ### Verification & Screenshots (`.scratch/loop/21/`)
 - `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `public/` = **`4.8 MB`**.
 - Screenshots inspected: `.scratch/loop/21/chrome_01_muensing_church.png` .. `chrome_06_weipertshausen.png` and `.scratch/loop/21/endurance_01_wimpasing_roads.png` .. `endurance_06_weipertshausen_30min.png`.
+
+---
+
+## Iteration 22 — Round 3: Handling Overhaul (High-Speed Cornering Lean & Wheel Lift, Realistic Boom Speed, Structural Impact Slowdown & Wedged-Rollover Detection) (2026-11-24)
+
+**Goal**: Address all 4 Handling items from `.scratch/grades/round-2.md`: eliminate the 40→10 km/h high-speed steering scrub, produce believable 5–8° body lean with inside wheel lift and stability warning above 30 km/h, slow boom lift to ~5.4 s with faster gravity-assisted lowering, add real momentum loss + low-speed stopping resistance on demolition walls, and detect wedged `>= 30°` states on `<= 2` wheels.
+
+### Changes Made
+- **High-speed steering & body lean** ([src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts)):
+  - Removed excessive rearward braking projection of lateral tire forces (`clampedLatDrag <= 10%` of lateral cornering force) and smoothly tapered rear-axle 4WS (`0.85 → 0.08`) at road speed so full-lock turns at `38–40 km/h` retain momentum instead of scrubbing to `10 km/h`.
+  - Tuned anti-roll stiffness (`24,000`) and chassis roll torque (`1.95×` with high-angle soft taper) so full-lock empty turns at `35–40 km/h` lean visibly `5–6°`, lift an inside tire (`3/4`), and fire `"Stability warning: wheel lift — slow down!"`.
+- **Realistic hydraulic boom speeds** ([src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts)):
+  - Tuned boom lift to `0.24 rad/s` (`~5.4 s` full rise at idle) and gravity-assisted lowering to `0.30 rad/s` (`~4.3 s` full lower), with matched `0.95 / 1.15 m/s` telescope extension.
+- **Structural impact slowdown & solid low-speed blocking** ([src/destruction.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/destruction.ts), [src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Added `applyStructureImpact` + `onStructureBlock`: masonry walls require `>= 16.5 km/h` to shatter (slower bumps stop the machine cleanly), and high-speed brick wall hits absorb `~56%` of velocity (`40.2 → 20.2 km/h`) with cab pitch kick (`+7°`) and camera shake.
+- **Wedged-rollover detection** ([src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts)):
+  - Added `wedgedTimer`: sitting tilted `>= 30°` on `<= 2` wheels at low speed for `1.35 s` now triggers `isTipped = true` and opens the Recovery Winch banner.
+
+### Verification & Screenshots (`.scratch/loop/22/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Live telemetry verified:
+  - `Hare 40` full-lock turn on Münsinger Straße: speed held `39.6 → 36.8 km/h`, leaned **`-6°`**, lifted inside tire (`3/4`), fired `Stability warning: wheel lift — slow down!` (`.scratch/loop/22/01_high_speed_turn_lean.png`).
+  - Boom lift: `51%` at `2.5 s`, `100%` at `~5.4 s`; Boom lower: `43%` at `2.2 s`, `0%` at `~4.3 s`.
+  - Old Farmstead brick wall ram: `40.2 → 20.2 km/h` with `7°` pitch jolt (`.scratch/loop/22/02_demo_wall_impact.png`); low-speed wall bump stopped at `0.3 km/h` with `0` walls broken (`.scratch/loop/22/03_demo_low_speed_block.png`).

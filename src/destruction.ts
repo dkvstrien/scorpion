@@ -50,7 +50,15 @@ interface DebrisChunk {
 }
 
 export interface DestructionCallbacks {
-  onBreak: (label: string, pos: THREE.Vector3, soundMat: 'wood' | 'hay' | 'metal', colors: number[], shake: number) => void;
+  onBreak: (
+    label: string,
+    pos: THREE.Vector3,
+    soundMat: 'wood' | 'hay' | 'metal',
+    colors: number[],
+    shake: number,
+    impact?: { speedKeepFrac: number; pitchKick: number }
+  ) => void;
+  onStructureBlock?: (pushOutDir: { x: number; z: number; overlap: number }, pitchKick: number) => void;
 }
 
 /**
@@ -793,7 +801,12 @@ export class DestructionManager {
     }
   }
 
-  private shatterItem(item: BreakableItem, impactPos: THREE.Vector3, impactSpeed: number): void {
+  private shatterItem(
+    item: BreakableItem,
+    impactPos: THREE.Vector3,
+    impactSpeed: number,
+    isDirectChassisHit = false
+  ): void {
     if (item.broken) return;
     item.broken = true;
     item.mesh.visible = false;
@@ -858,13 +871,26 @@ export class DestructionManager {
       this.debris.push({ mesh, body, life: 0, maxLife: 14.0 });
     }
 
-    const shake = item.kind === 'brick_wall' || item.kind === 'shed' || item.kind === 'roof_slab' ? 0.42 : 0.22;
+    const isMasonry = item.kind === 'brick_wall' || item.kind === 'garden_wall';
+    const isBuilding = isMasonry || item.kind === 'shed';
+    const shake = isMasonry ? 0.62 : item.kind === 'shed' || item.kind === 'roof_slab' ? 0.45 : 0.22;
+    const impact = isDirectChassisHit
+      ? isMasonry
+        ? { speedKeepFrac: 0.44, pitchKick: 0.92 }
+        : item.kind === 'shed'
+          ? { speedKeepFrac: 0.58, pitchKick: 0.62 }
+          : item.kind === 'woodpile' || item.kind === 'bale_stack'
+            ? { speedKeepFrac: 0.76, pitchKick: 0.34 }
+            : { speedKeepFrac: 0.88, pitchKick: 0.16 }
+      : undefined;
+
     this.callbacks.onBreak(
       item.label,
       item.pos.clone().add(new THREE.Vector3(0, Math.min(1.5, item.height * 0.5), 0)),
       item.soundMat,
       item.chunkColors,
-      shake
+      shake,
+      impact
     );
 
     // Cascade roof-slab collapse when supporting brick barn wall breaks!
@@ -872,10 +898,11 @@ export class DestructionManager {
       for (const cid of item.collapseIds) {
         const linked = this.items.find((x) => x.id === cid);
         if (linked && !linked.broken) {
-          this.shatterItem(linked, impactPos, Math.max(4.5, impactSpeed * 0.7));
+          this.shatterItem(linked, impactPos, Math.max(4.5, impactSpeed * 0.7), false);
         }
       }
     }
+    void isBuilding;
   }
 
   public update(
@@ -891,16 +918,33 @@ export class DestructionManager {
       const dChassis = Math.hypot(item.pos.x - tractorPos.x, item.pos.z - tractorPos.z);
       const dTip = Math.hypot(item.pos.x - tipPos.x, item.pos.z - tipPos.z);
 
-      // 7,640 kg Scorpion ramming or telescopic boom swing shatters breakables cleanly!
-      if (dChassis < item.radius + 1.55 && absSpd > 2.1 && Math.abs(tractorPos.y - item.pos.y) < 3.6) {
-        this.shatterItem(item, tractorPos, absSpd);
+      // Minimum momentum required to smash through heavy structures vs light fences!
+      const minRamSpd =
+        item.kind === 'brick_wall' || item.kind === 'garden_wall'
+          ? 4.6 // ~16.5 km/h required to smash brick/stone walls; slower hits stop the machine!
+          : item.kind === 'shed'
+            ? 3.4 // ~12 km/h for timber sheds
+            : 2.1;
+      const hitRadius = item.radius + 1.55;
+
+      if (dChassis < hitRadius && Math.abs(tractorPos.y - item.pos.y) < 3.6) {
+        if (absSpd >= minRamSpd) {
+          this.shatterItem(item, tractorPos, absSpd, true);
+        } else if (item.kind !== 'roof_slab') {
+          // Below break threshold: solid physical resistance pushes & stops the Scorpion cleanly!
+          const dx = tractorPos.x - item.pos.x;
+          const dz = tractorPos.z - item.pos.z;
+          const len = Math.max(0.01, Math.hypot(dx, dz));
+          const overlap = Math.min(0.45, hitRadius - dChassis);
+          this.callbacks.onStructureBlock?.({ x: dx / len, z: dz / len, overlap }, 0.25);
+        }
       } else if (
         dTip < item.radius + 1.35 &&
         tipPos.y >= item.pos.y - 0.5 &&
         tipPos.y <= item.pos.y + item.height + 0.8 &&
-        tipSpeed > 2.4
+        tipSpeed > (item.kind === 'brick_wall' ? 3.4 : 2.4)
       ) {
-        this.shatterItem(item, tipPos, tipSpeed);
+        this.shatterItem(item, tipPos, tipSpeed, false);
       }
     }
 
