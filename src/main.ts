@@ -88,7 +88,7 @@ const BIND_LABELS: { action: BindAction; label: string }[] = [
   { action: 'tiltDown', label: 'Tilt Carriage Down' },
   { action: 'grab', label: 'Grab / Release' },
   { action: 'couple', label: 'Couple / Drop Tool' },
-  { action: 'gear', label: 'Cycle Gear (15/30/40)' },
+  { action: 'gear', label: 'Cycle Gear (Snail 15 / Turtle 30 / Hare 40)' },
   { action: 'steerMode', label: '4WS / 2WS / Crab' },
   { action: 'camera', label: 'Switch Camera' },
   { action: 'panel', label: 'Jobs / Travel Panel' },
@@ -609,7 +609,7 @@ class ScorpionGame {
       opt.value = c.id;
       const best = this.career.bestStars[c.id] ?? 0;
       const starBadge = best > 0 ? ` ${'★'.repeat(best)}` : '';
-      opt.textContent = `${c.title} (€${c.payoutEUR})${starBadge}`;
+      opt.textContent = `${c.shortTitle} (€${c.payoutEUR})${starBadge}`;
       this.contractSelect.appendChild(opt);
     }
     this.selectContract(this.activeContractId, false);
@@ -1163,8 +1163,20 @@ class ScorpionGame {
       if (!this.isToolUnlocked(c.recommendedTool)) {
         const tItem = WORKSHOP_TOOLS.find((t) => t.tool === c.recommendedTool);
         this.showToast(`Moved to ${c.shortTitle} — buy ${TOOL_META[c.recommendedTool].name} (€${tItem?.priceEUR ?? 0}) in Workshop [B]`);
+      } else if (c.id === 'yard_shift') {
+        this.showToast('Home Farm Yard: sort pallets, bales, logs, pumpkins, and scrap into their zones.');
       } else {
-        this.showToast(`Moved to ${c.shortTitle}`);
+        const cargoLabel =
+          c.requiredKind === 'crate' || c.requiredKind === 'yard_crates'
+            ? 'a Produce Pallet'
+            : c.requiredKind === 'log'
+              ? 'Pine Logs'
+              : c.requiredKind === 'hay'
+                ? 'Dry Hay Bales'
+                : c.requiredKind === 'pumpkin'
+                  ? 'Harvest Pumpkins'
+                  : 'Wrapped Silage Bales';
+        this.showToast(`Pick up ${cargoLabel} here, then follow the green arrow to ${c.village}.`);
       }
     });
     document.getElementById('btn-open-workshop')!.addEventListener('click', () => {
@@ -1220,23 +1232,23 @@ class ScorpionGame {
       this.showToast(toast);
     };
     document.getElementById('btn-tp-farm')!.addEventListener('click', () => {
-      fastTravel(FARM_SPAWN.x, FARM_SPAWN.z, FARM_SPAWN.heading, 'Home Farm (Wimpasing)');
+      fastTravel(FARM_SPAWN.x, FARM_SPAWN.z, FARM_SPAWN.heading, 'Home Farm');
     });
     document.getElementById('btn-tp-lake')!.addEventListener('click', () => {
       // Dead-center on flat paved Nördliche Seestraße (0–1° slope, 4/4 tires) with camera framing Schloss Ammerland & Starnberger See!
-      fastTravel(-998.0, 825.0, 2.94, 'Ammerland — Schloss & Sebald Pier', -1.22);
+      fastTravel(-998.0, 825.0, 2.94, 'Sebald & Schloss', -1.22);
     });
     document.getElementById('btn-tp-ried')!.addEventListener('click', () => {
       // Flat paved Graf-Pocci-Weg looking straight across Lagerhaus Ried Co-op & Service Bay!
-      fastTravel(-245.5, 380.0, 2.55, 'Lagerhaus Ried — Co-op & Service Bay', 0.22);
+      fastTravel(-245.5, 380.0, 2.55, 'Ried Co-op', 0.22);
     });
     document.getElementById('btn-tp-village')!.addEventListener('click', () => {
       // Dead-center on main paved Münsing village road facing east past St. Mariä Himmelfahrt, Maibaum & Zum Altwirt!
-      fastTravel(1370.0, 1004.5, -1.79, 'Münsing — Church & Altwirt');
+      fastTravel(1370.0, 1004.5, -1.79, 'Münsing Church');
     });
     document.getElementById('btn-tp-edeka')!.addEventListener('click', () => {
       // Flat paved Höhenrainer Straße facing northeast into the sunlit EDEKA Graf Bauernmarkt forecourt!
-      fastTravel(1574.0, 919.5, -0.78, 'EDEKA Münsing — Farmers Market', 0.14);
+      fastTravel(1574.0, 919.5, -0.78, 'EDEKA Market', 0.14);
     });
     document.getElementById('btn-tp-weipert')!.addEventListener('click', () => {
       // Right on Weipertshausen main street heading north into the hamlet!
@@ -1244,14 +1256,14 @@ class ScorpionGame {
     });
     document.getElementById('btn-career-tp-ried')!.addEventListener('click', () => {
       this.setPaused(false);
-      fastTravel(-245.5, 380.0, 2.55, 'Lagerhaus Ried — Co-op & Service Bay', 0.22);
+      fastTravel(-245.5, 380.0, 2.55, 'Ried Co-op', 0.22);
     });
     document.getElementById('btn-career-tp-edeka')!.addEventListener('click', () => {
       this.setPaused(false);
-      fastTravel(1574.0, 919.5, -0.78, 'EDEKA Münsing — Farmers Market', 0.14);
+      fastTravel(1574.0, 919.5, -0.78, 'EDEKA Market', 0.14);
     });
     document.getElementById('btn-tp-demo')!.addEventListener('click', () => {
-      fastTravel(DEMO_SITE_CENTER.x, DEMO_SITE_CENTER.z + 25, 0, 'Old Farmstead demolition area');
+      fastTravel(DEMO_SITE_CENTER.x, DEMO_SITE_CENTER.z + 25, 0, 'Old Farmstead');
     });
     document.getElementById('btn-reset-demo')!.addEventListener('click', () => {
       this.destruction.resetDemolitionSite();
@@ -1593,15 +1605,27 @@ class ScorpionGame {
   private getCurrentLocationName(): string {
     const { x, z } = this.tractor.position;
     if (Math.hypot(x - DEMO_SITE_CENTER.x, z - DEMO_SITE_CENTER.z) < 95) return 'Old Farmstead';
-    if (Math.hypot(x - REAL_SPOTS.sebaldPier.x, z - REAL_SPOTS.sebaldPier.z) < 90) return 'Fischerei Sebald';
-    if (Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 115) return 'Schloss Ammerland';
+    if (
+      Math.hypot(x - REAL_SPOTS.sebaldPier.x, z - REAL_SPOTS.sebaldPier.z) < 100 ||
+      Math.hypot(x - REAL_SPOTS.schlossAmmerland.x, z - REAL_SPOTS.schlossAmmerland.z) < 120
+    ) {
+      return 'Sebald & Schloss';
+    }
     if (Math.hypot(x - REAL_SPOTS.muensingChurch.x, z - REAL_SPOTS.muensingChurch.z) < 88) return 'Münsing Church';
-    if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 115) return 'Münsing Altwirt';
-    if (Math.hypot(x - this.realWorld.edekaMarketPos.x, z - this.realWorld.edekaMarketPos.z) < 42) return 'EDEKA Bauernmarkt';
-    if (Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 85) return 'Münsing EDEKA';
+    if (Math.hypot(x - REAL_SPOTS.muensingAltwirt.x, z - REAL_SPOTS.muensingAltwirt.z) < 105) return 'Münsing Altwirt';
+    if (
+      Math.hypot(x - this.realWorld.edekaMarketPos.x, z - this.realWorld.edekaMarketPos.z) < 55 ||
+      Math.hypot(x - REAL_SPOTS.edeka.x, z - REAL_SPOTS.edeka.z) < 85
+    ) {
+      return 'EDEKA Market';
+    }
     if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 220) return 'Weipertshausen';
-    if (Math.hypot(x - this.realWorld.riedDepotPos.x, z - this.realWorld.riedDepotPos.z) < 55) return 'Lagerhaus Ried';
-    if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 130) return 'Ried';
+    if (
+      Math.hypot(x - this.realWorld.riedDepotPos.x, z - this.realWorld.riedDepotPos.z) < 70 ||
+      Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 130
+    ) {
+      return 'Ried Co-op';
+    }
     if (Math.hypot(x - FARM_YARD_CENTER.x, z - FARM_YARD_CENTER.z) < 55 || Math.hypot(x - FARM_CENTER.x, z - FARM_CENTER.z) < 42)
       return 'Home Farm';
     if (Math.hypot(x - REAL_SPOTS.wimpasing.x, z - REAL_SPOTS.wimpasing.z) < 165) return 'Wimpasing';
@@ -1735,14 +1759,16 @@ class ScorpionGame {
 
       if (inBounds) {
         if (!p.isRegional) counts[p.targetZone]++;
-        const settled = p.body.velocity.length() < 1.5;
+        const settled = p.body.velocity.length() < 1.2;
 
-        if (!p.scored && settled) {
+        // Only award yard tidy payouts for props the player actually grabbed and placed (never ambient spawn/bumps!)
+        if (p.playerMoved && !p.scored && settled) {
           p.scored = true;
           const pos = new THREE.Vector3(p.body.position.x, p.body.position.y + 0.7, p.body.position.z);
           this.particles.spawnConfetti(pos);
           this.audio.playScoreChime(p.isWrappedSilage && !p.isPopped);
           this.career.bankEUR += p.isWrappedSilage && !p.isPopped ? 120 : 60;
+          saveCareer(this.career);
           this.refreshCareerUI();
           this.showToast(
             p.isWrappedSilage && !p.isPopped
@@ -1751,14 +1777,30 @@ class ScorpionGame {
           );
         }
 
-        const stackThreshold = p.targetZone === 'crates' ? this.farm.trailerDeckY + 1.25 : zone.minY + 1.45;
-        if (!p.stackAwarded && settled && p.body.position.y > stackThreshold) {
-          p.stackAwarded = true;
-          this.career.bankEUR += 150;
-          this.refreshCareerUI();
-          this.audio.playScoreChime(true);
-          this.particles.spawnConfetti(new THREE.Vector3(p.body.position.x, p.body.position.y + 0.6, p.body.position.z));
-          this.showToast(`CLEAN STACK BONUS! +€150`, 'trick');
+        // Only award stack bonus when genuinely stacked on top of another settled prop (never wedged against a wall!)
+        if (p.playerMoved && !p.stackAwarded && settled && p.targetZone !== 'scrap') {
+          const stackThreshold = p.targetZone === 'crates' ? this.farm.trailerDeckY + 1.25 : zone.minY + 1.35;
+          if (p.body.position.y > stackThreshold) {
+            const restingOnProp = this.propMgr.props.some(
+              (other) =>
+                other !== p &&
+                !other.heldByTractor &&
+                other.body.velocity.length() < 1.2 &&
+                Math.hypot(other.body.position.x - p.body.position.x, other.body.position.z - p.body.position.z) <
+                  p.radius + other.radius + 0.25 &&
+                other.body.position.y < p.body.position.y - 0.45 &&
+                other.body.position.y > p.body.position.y - (p.halfHeight + other.halfHeight + 0.55)
+            );
+            if (restingOnProp) {
+              p.stackAwarded = true;
+              this.career.bankEUR += 150;
+              saveCareer(this.career);
+              this.refreshCareerUI();
+              this.audio.playScoreChime(true);
+              this.particles.spawnConfetti(new THREE.Vector3(p.body.position.x, p.body.position.y + 0.6, p.body.position.z));
+              this.showToast(`CLEAN STACK BONUS! +€150`, 'trick');
+            }
+          }
         }
       }
       p.inZone = inBounds;
@@ -1920,23 +1962,32 @@ class ScorpionGame {
         promptMsg = `EDEKA Bauernmarkt: Drop pallets (€${Math.round(260 * bonusPct)}) or pumpkins (€${Math.round(140 * bonusPct)})`;
       }
     }
-    // Highlight nearest grabbable prop/log/bale with a glowing 3D ring & clear [Space] Grab prompt!
+    // Highlight nearest grabbable prop with a glowing 3D ring & accurate [Space] Grab / height prompt!
     const grabbable = this.tractor.findNearestGrabbable(this.propMgr.props, this.realWorld.objects);
     if (grabbable && !this.tractor.isTipped) {
       const gy = getDrivableGroundY(grabbable.pos.x, grabbable.pos.z);
       const pulse = 1.0 + Math.sin(this.elapsed * 6.5) * 0.08;
       const rad = Math.max(0.95, grabbable.radius * 1.25) * pulse;
+      const readyToGrab = grabbable.compatible && !grabbable.heightIssue;
       this.grabHighlightRing.position.set(grabbable.pos.x, gy + 0.16, grabbable.pos.z);
       this.grabHighlightRing.scale.set(rad, rad, 1);
       (this.grabHighlightRing.material as THREE.MeshBasicMaterial).color.setHex(
-        grabbable.compatible ? 0x9fd32e : 0xf5a623
+        readyToGrab ? 0x9fd32e : 0xf5a623
       );
       this.grabHighlightRing.visible = true;
       if (!promptMsg) {
-        const grabKey = formatKeyCode(this.settings.keybinds.grab);
-        promptMsg = grabbable.compatible
-          ? `[${grabKey}] Grab: ${grabbable.label} (${grabbable.massKg} kg)`
-          : `${grabbable.label} — swap to matching tool at Shed [T]`;
+        const kb = this.settings.keybinds;
+        if (!grabbable.compatible) {
+          promptMsg = `${grabbable.label} — swap to matching tool at Shed [${formatKeyCode(kb.couple)}]`;
+        } else if (grabbable.heightIssue === 'too_high') {
+          promptMsg = `Lower forks [${formatKeyCode(kb.boomDown)}] to grab ${grabbable.label}`;
+        } else if (grabbable.heightIssue === 'too_low') {
+          promptMsg = `Raise forks [${formatKeyCode(kb.boomUp)}] to grab ${grabbable.label}`;
+        } else if (grabbable.heightIssue === 'tilt') {
+          promptMsg = `Level forks [${formatKeyCode(kb.tiltDown)}/${formatKeyCode(kb.tiltUp)}] to grab ${grabbable.label}`;
+        } else {
+          promptMsg = `[${formatKeyCode(kb.grab)}] Grab: ${grabbable.label} (${grabbable.massKg} kg)`;
+        }
       }
     } else {
       this.grabHighlightRing.visible = false;
@@ -2047,6 +2098,9 @@ class ScorpionGame {
     const locName = this.getCurrentLocationName();
     if (this.locationReadout.textContent !== locName) {
       this.locationReadout.textContent = locName;
+      document.querySelectorAll<HTMLButtonElement>('.freeplay-quick-grid .hud-btn[data-loc]').forEach((b) => {
+        b.classList.toggle('active-toggle', b.dataset.loc === locName);
+      });
     }
 
     if (this.tractor.heldVillageObj) {
@@ -2222,7 +2276,7 @@ class ScorpionGame {
     this.world.step(1 / 60, dt, 3);
 
     this.tractor.update(dt, this.elapsed, input, this.propMgr.props, this.realWorld.objects);
-    this.propMgr.syncMeshes(dt);
+    this.propMgr.syncMeshes(dt, this.farm.trailerDeckY);
 
     this.farm.update(dt, this.elapsed);
     this.realWorld.update(

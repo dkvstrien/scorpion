@@ -121,7 +121,7 @@ export class MuensingMiniMap {
 
     drawLabel('Weipertshausen', REAL_SPOTS.weipertshausen.x, REAL_SPOTS.weipertshausen.z, '#f6faf0', 0, 11);
     drawLabel('Ried', REAL_SPOTS.ried.x, REAL_SPOTS.ried.z, '#f6faf0', 4, -5);
-    drawLabel('Ammerland', REAL_SPOTS.schlossAmmerland.x, REAL_SPOTS.schlossAmmerland.z, '#9ee5ff', 2, -9, 'center');
+    drawLabel('Ammerland', REAL_SPOTS.schlossAmmerland.x, REAL_SPOTS.schlossAmmerland.z, '#9ee5ff', -4, -12, 'center');
     drawLabel('Wimpasing', REAL_SPOTS.wimpasing.x, REAL_SPOTS.wimpasing.z, '#f6faf0', 10, 11, 'center');
     drawLabel('Münsing', REAL_SPOTS.muensingAltwirt.x, REAL_SPOTS.muensingAltwirt.z, '#ffe785', -6, -6);
     drawLabel('SEE', -1600, -140, '#9ee5ff', 0, 0);

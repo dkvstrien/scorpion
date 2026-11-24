@@ -45,6 +45,7 @@ export interface FarmProp {
   lastImpactAt: number;
   isRegional?: boolean;
   depotSold?: boolean;
+  playerMoved?: boolean;
 }
 
 export class PropManager {
@@ -607,8 +608,54 @@ export class PropManager {
     }
   }
 
-  public syncMeshes(dt = 0.016): void {
+  public syncMeshes(dt = 0.016, trailerDeckY = FARM_GROUND_Y + 1.02): void {
     for (const p of this.props) {
+      // Anti-wall-stick guard: if a released prop freezes mid-air against a barn/building wall without
+      // another prop or the trailer deck beneath it, wake it up and let gravity drop it cleanly!
+      if (!p.heldByTractor) {
+        const gy = getTerrainHeight(p.body.position.x, p.body.position.z);
+        const elevated = p.body.position.y > gy + p.halfHeight + 0.45;
+        if (elevated) {
+          const speed = p.body.velocity.length();
+          if (p.body.sleepState === CANNON.Body.SLEEPING || speed < 0.06) {
+            const onTrailer =
+              Math.abs(p.body.position.x - (FARM_YARD_CENTER.x + 17.5)) < 4.8 &&
+              Math.abs(p.body.position.z - (FARM_YARD_CENTER.z + 6.5)) < 2.2 &&
+              p.body.position.y <= trailerDeckY + p.halfHeight + 0.5;
+            let onOtherProp = false;
+            if (!onTrailer) {
+              for (const other of this.props) {
+                if (other === p || other.heldByTractor) continue;
+                const dHoriz = Math.hypot(
+                  other.body.position.x - p.body.position.x,
+                  other.body.position.z - p.body.position.z
+                );
+                if (
+                  dHoriz < p.radius + other.radius + 0.3 &&
+                  other.body.position.y < p.body.position.y - 0.35 &&
+                  other.body.position.y > p.body.position.y - (p.halfHeight + other.halfHeight + 0.65)
+                ) {
+                  onOtherProp = true;
+                  break;
+                }
+              }
+            }
+            if (!onTrailer && !onOtherProp) {
+              p.body.wakeUp();
+              // Gently nudge toward open yard center if stuck against a yard barn/clamp wall
+              const dxY = FARM_YARD_CENTER.x - p.body.position.x;
+              const dzY = FARM_YARD_CENTER.z - p.body.position.z;
+              const lenY = Math.max(1, Math.hypot(dxY, dzY));
+              if (lenY < 32) {
+                p.body.position.x += (dxY / lenY) * 0.14;
+                p.body.position.z += (dzY / lenY) * 0.14;
+              }
+              p.body.velocity.y = Math.min(p.body.velocity.y, -1.2);
+            }
+          }
+        }
+      }
+
       p.mesh.position.set(p.body.position.x, p.body.position.y, p.body.position.z);
       p.mesh.quaternion.set(
         p.body.quaternion.x,

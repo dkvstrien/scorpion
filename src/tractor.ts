@@ -65,6 +65,7 @@ export interface GrabbableCandidate {
   radius: number;
   compatible: boolean;
   massKg: number;
+  heightIssue?: 'too_high' | 'too_low' | 'tilt';
 }
 
 export const TOOL_META: Record<AttachmentType, { name: string; tip: string }> = {
@@ -90,7 +91,7 @@ export class ClaasScorpion {
   public steeringMode: SteeringMode = '4WS';
   public gear: VaripowerGear = 'turtle';
 
-  public boomPitch = 0.06;
+  public boomPitch = -0.1;
   public boomExt = 0;
   public headTilt = 0.0;
   public prevHeadTilt = 0.0;
@@ -541,7 +542,13 @@ export class ClaasScorpion {
           p.wasThrown = false;
         }
       } else {
-        p.body.velocity.set(0, -0.06, 0);
+        // Nudge slightly away from any wall/barn ahead of forks so a dropped pallet never wedges mid-air on a wall!
+        const toCabX = this.position.x - p.body.position.x;
+        const toCabZ = this.position.z - p.body.position.z;
+        const toCabLen = Math.max(0.01, Math.hypot(toCabX, toCabZ));
+        p.body.position.x += (toCabX / toCabLen) * 0.22;
+        p.body.position.z += (toCabZ / toCabLen) * 0.22;
+        p.body.velocity.set(0, -0.45, 0);
         p.body.angularVelocity.set(0, 0, 0);
         p.wasThrown = false;
       }
@@ -586,43 +593,57 @@ export class ClaasScorpion {
   public findNearestGrabbable(props: FarmProp[], villageObjs: DynamicVillageObj[]): GrabbableCandidate | null {
     if (this.heldProps.length > 0 || this.heldVillageObj) return null;
     const holdPos = this.getHoldWorldPos();
+    const tineY = this.activeTool === 'forks' ? holdPos.y - 0.58 : holdPos.y;
     const reach = this.getGrabReach();
 
     let best: { dist: number; cand: GrabbableCandidate } | null = null;
     for (const p of props) {
       if (p.heldByTractor) continue;
       const dp = new THREE.Vector3(p.body.position.x, p.body.position.y, p.body.position.z);
-      const dist = dp.distanceTo(holdPos);
-      if (dist < reach + p.radius * 0.65 && (!best || dist < best.dist)) {
+      const horizDist = Math.hypot(dp.x - holdPos.x, dp.z - holdPos.z);
+      const dy = dp.y - tineY;
+      const maxVert = this.activeTool === 'forks' ? 3.2 : 1.9;
+      if (horizDist < reach + p.radius * 0.65 && Math.abs(dy) < maxVert && (!best || horizDist < best.dist)) {
         const massKg =
           p.kind === 'silage_wrapped' ? 1350 : p.kind === 'crate' ? 1100 : p.kind === 'log' ? 900 : p.kind === 'hay_round' || p.kind === 'hay_square' ? 950 : 420;
+        const compatible = this.isPropCompatible(p);
+        let heightIssue: 'too_high' | 'too_low' | 'tilt' | undefined;
+        if (!this.freePlayMode && compatible && this.activeTool === 'forks') {
+          if (Math.abs(this.headTilt) > 0.42) heightIssue = 'tilt';
+          else if (dy < -0.78) heightIssue = 'too_high';
+          else if (dy > 0.85) heightIssue = 'too_low';
+        }
         best = {
-          dist,
+          dist: horizDist,
           cand: {
             label: p.label,
             pos: dp,
             radius: p.radius,
-            compatible: this.isPropCompatible(p),
-            massKg
+            compatible,
+            massKg,
+            heightIssue
           }
         };
       }
     }
-    for (const o of villageObjs) {
-      if (o.heldByTractor || (!this.freePlayMode && o.kind === 'car')) continue;
-      const dp = new THREE.Vector3(o.body.position.x, o.body.position.y, o.body.position.z);
-      const dist = dp.distanceTo(holdPos);
-      if (dist < 2.6 + o.radius * 0.7 && (!best || dist < best.dist)) {
-        best = {
-          dist,
-          cand: {
-            label: o.label,
-            pos: dp,
-            radius: o.radius,
-            compatible: true,
-            massKg: o.kind === 'car' ? 2750 : 750
-          }
-        };
+    // Only offer grabbable village props (streetlamps, tables, cars) in Open-World Free Play, never in Career!
+    if (this.freePlayMode) {
+      for (const o of villageObjs) {
+        if (o.heldByTractor) continue;
+        const dp = new THREE.Vector3(o.body.position.x, o.body.position.y, o.body.position.z);
+        const dist = dp.distanceTo(holdPos);
+        if (dist < 2.6 + o.radius * 0.7 && (!best || dist < best.dist)) {
+          best = {
+            dist,
+            cand: {
+              label: o.label,
+              pos: dp,
+              radius: o.radius,
+              compatible: true,
+              massKg: o.kind === 'car' ? 2750 : 750
+            }
+          };
+        }
       }
     }
     return best ? best.cand : null;
@@ -630,30 +651,34 @@ export class ClaasScorpion {
 
   private tryGrabNearest(props: FarmProp[], villageObjs: DynamicVillageObj[]): boolean {
     if (this.activeTool === 'none' && !this.freePlayMode) {
-      this.warnOnce('No attachment hitched — drive to the Tool Shed and press [T].');
+      this.callbacks.onWrongTool('No attachment hitched — drive to the Tool Shed and press [T].');
       return false;
     }
 
     const holdPos = this.getHoldWorldPos();
+    const tineY = this.activeTool === 'forks' ? holdPos.y - 0.58 : holdPos.y;
 
-    const vCandidates = villageObjs
-      .filter((o) => !o.heldByTractor)
-      .map((o) => {
-        const dp = new THREE.Vector3(o.body.position.x, o.body.position.y, o.body.position.z);
-        return { obj: o, dist: dp.distanceTo(holdPos) };
-      })
-      .filter((c) => c.dist < 2.6 + c.obj.radius * 0.7)
-      .sort((a, b) => a.dist - b.dist);
+    // Only allow grabbing village props (streetlamps, Biergarten tables, parked cars) in Free Play!
+    if (this.freePlayMode) {
+      const vCandidates = villageObjs
+        .filter((o) => !o.heldByTractor)
+        .map((o) => {
+          const dp = new THREE.Vector3(o.body.position.x, o.body.position.y, o.body.position.z);
+          return { obj: o, dist: dp.distanceTo(holdPos) };
+        })
+        .filter((c) => c.dist < 2.6 + c.obj.radius * 0.7)
+        .sort((a, b) => a.dist - b.dist);
 
-    if (vCandidates.length > 0 && (this.freePlayMode || vCandidates[0].obj.kind !== 'car')) {
-      const vo = vCandidates[0].obj;
-      vo.heldByTractor = true;
-      vo.cruiseActive = false;
-      vo.body.wakeUp();
-      this.heldVillageObj = vo;
-      this.clampClosed = true;
-      this.callbacks.onPropGrabbed(vo.label, this.activeTool, false);
-      return true;
+      if (vCandidates.length > 0) {
+        const vo = vCandidates[0].obj;
+        vo.heldByTractor = true;
+        vo.cruiseActive = false;
+        vo.body.wakeUp();
+        this.heldVillageObj = vo;
+        this.clampClosed = true;
+        this.callbacks.onPropGrabbed(vo.label, this.activeTool, false);
+        return true;
+      }
     }
 
     const maxCount = this.activeTool === 'bucket' ? 4 : 1;
@@ -663,9 +688,13 @@ export class ClaasScorpion {
       .filter((p) => !p.heldByTractor)
       .map((p) => {
         const dp = new THREE.Vector3(p.body.position.x, p.body.position.y, p.body.position.z);
-        return { prop: p, dist: dp.distanceTo(holdPos), dy: dp.y - holdPos.y };
+        return {
+          prop: p,
+          dist: Math.hypot(dp.x - holdPos.x, dp.z - holdPos.z),
+          dy: dp.y - tineY
+        };
       })
-      .filter((c) => c.dist < grabRadius + c.prop.radius * 0.65)
+      .filter((c) => c.dist < grabRadius + c.prop.radius * 0.65 && Math.abs(c.dy) < (this.activeTool === 'forks' ? 3.2 : 1.9))
       .sort((a, b) => a.dist - b.dist);
 
     if (candidates.length === 0) return false;
@@ -678,15 +707,19 @@ export class ClaasScorpion {
       if (!this.freePlayMode) {
         if (this.activeTool === 'forks') {
           if (prop.kind !== 'crate') {
-            this.warnOnce(`Forks won't grip a ${prop.label} — swap tools at the Shed!`);
+            this.callbacks.onWrongTool(`Forks won't grip a ${prop.label} — swap tools at the Shed!`);
             continue;
           }
-          if (Math.abs(this.headTilt) > 0.32) {
-            this.warnOnce('Level your forks [Z / C] before lifting a pallet!');
+          if (Math.abs(this.headTilt) > 0.42) {
+            this.callbacks.onWrongTool('Level your forks [Z / C] before lifting a pallet!');
             continue;
           }
-          if (Math.abs(c.dy) > 0.65) {
-            this.warnOnce('Adjust boom height [Q / E] to slide forks cleanly under the pallet!');
+          if (c.dy < -0.78) {
+            this.callbacks.onWrongTool('Lower forks [E] to slide cleanly under the pallet!');
+            continue;
+          }
+          if (c.dy > 0.85) {
+            this.callbacks.onWrongTool('Raise forks [Q] to lift the pallet!');
             continue;
           }
         } else if (this.activeTool === 'spike') {
@@ -733,6 +766,7 @@ export class ClaasScorpion {
       }
 
       prop.heldByTractor = true;
+      prop.playerMoved = true;
       prop.wasThrown = false;
       prop.body.wakeUp();
       this.heldProps.push(prop);

@@ -590,7 +590,7 @@ kbd {
   top: 14px;
   left: 14px;
   padding: 12px 14px;
-  width: 288px;
+  width: 316px;
 }
 
 .tidy-header {
@@ -1274,11 +1274,17 @@ kbd {
 }
 .contract-action-row {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   margin-bottom: 7px;
 }
 .contract-action-row .hud-btn {
   flex: 1;
+  white-space: nowrap;
+  padding: 5px 7px;
+  font-size: 0.72rem;
+}
+.hud-btn.demo-site-btn {
+  border-left: 3px solid #e08d42;
 }
 .rebind-header {
   display: flex;

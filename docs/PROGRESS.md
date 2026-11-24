@@ -558,3 +558,29 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
   - `Hare 40` full-lock turn on Münsinger Straße: speed held `39.6 → 36.8 km/h`, leaned **`-6°`**, lifted inside tire (`3/4`), fired `Stability warning: wheel lift — slow down!` (`.scratch/loop/22/01_high_speed_turn_lean.png`).
   - Boom lift: `51%` at `2.5 s`, `100%` at `~5.4 s`; Boom lower: `43%` at `2.2 s`, `0%` at `~4.3 s`.
   - Old Farmstead brick wall ram: `40.2 → 20.2 km/h` with `7°` pitch jolt (`.scratch/loop/22/02_demo_wall_impact.png`); low-speed wall bump stopped at `0.3 km/h` with `0` walls broken (`.scratch/loop/22/03_demo_low_speed_block.png`).
+
+---
+
+## Iteration 23 — Round 3: Stability (Money & Wall-Stick Bugs), First 5 Minutes Grab UX & Finish Consistency (2026-11-24)
+
+**Goal**: Address all Stability (phantom money + wall-stuck pallet), First-5-Minutes (grab height prompt, Career village-prop filter, Go-to-Job instructions), and Finish (job dropdown truncation, Workshop wrap, 1-to-1 travel names, Controls gear labels, neutral Old Farmstead button, minimap Ammerland label) points from `.scratch/grades/round-2.md`.
+
+### Changes Made
+- **Stability — bank integrity & anti-wall-stick** ([src/props.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/props.ts), [src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Added `playerMoved` flag on `FarmProp` (set only when grabbed by the player) so ambient prop settling or grazes can never trigger phantom `TIDY +€60` or `CLEAN STACK +€150` payouts.
+  - Restricted `CLEAN STACK BONUS (+€150)` strictly to player-moved non-scrap props genuinely resting on top of another settled prop.
+  - Added horizontal wall-clearance nudge on release + anti-wall-stick gravity wakeup in `PropManager.syncMeshes` so released pallets cannot freeze asleep high on a barn wall.
+- **First 5 minutes — accurate grab prompt & onboarding** ([src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Lowered default spawn boom height to realistic carry posture (`boomPitch = -0.10`), measured fork height against the actual fork tine elevation (`tineY`), and synchronized `findNearestGrabbable` with `tryGrabNearest`: amber prompt says `Lower forks [E]` / `Raise forks [Q]` / `Level forks [Z/C]` whenever height/tilt blocks a grab, and green `[Space] Grab` appears only when Space will succeed (with warnings shown every press, not suppressed by `warnOnce`).
+  - Restricted grabbing village props (streetlamps, tables, cars) strictly to Open-World Free Play.
+  - Added clear pickup + arrow direction toasts on `Go to Job` (`"Pick up a Produce Pallet here, then follow the green arrow to Ammerland / Lake."`).
+- **Finish UI consistency** ([index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css), [src/minimap.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/minimap.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts)):
+  - Widened expanded Jobs panel to `316px`, used concise dropdown labels (`4. Sebald Delivery (€1800)`), and kept `Go to Job`, `Workshop [B]`, and `↻ Replay` on one line (`white-space: nowrap`).
+  - Made all 7 fast-travel button names match `#location-readout` 1-to-1 (`Home Farm`, `Sebald & Schloss`, `Ried Co-op`, `Münsing Church`, `EDEKA Market`, `Weipertshausen`, `Old Farmstead`), removed permanent orange highlight from `Old Farmstead` in favor of live active-location highlighting, updated Controls gear text to `Cycle Gear (Snail 15 / Turtle 30 / Hare 40)`, and shifted minimap `Ammerland` label clear of the player marker.
+
+### Verification & Screenshots (`.scratch/loop/23/`)
+- `npx tsc --noEmit` and `npm run build`: clean pass (`0` errors). `agweb console error`: `0` console errors.
+- Live verification:
+  - `Go to Job` toast + clean non-truncated dropdown + single-line Workshop button → `.scratch/loop/23/01_jobs_dropdown_clean.png`.
+  - Forks too high → `Lower forks [E] to grab Produce Pallet` (`.scratch/loop/23/02_grab_height_prompt.png`); forks lowered → `[Space] Grab: Produce Pallet (1100 kg)` → lifted **`1,100 kg`** on first press (`.scratch/loop/23/02b_grab_ready_lifted.png`); Career bank remained strictly `€500`; Career yard exit prompt empty (`""`).
+  - All 7 fast-travel buttons matched `#location-readout` 1-to-1 with neutral `Old Farmstead` button (`.scratch/loop/23/03_travel_names_consistent.png`) and consistent Controls gear labels (`.scratch/loop/23/04_controls_gear_labels.png`).
