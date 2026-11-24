@@ -141,7 +141,7 @@ function createClockTexture(): THREE.CanvasTexture {
  * - 'landhaus': Warm ochre/cream village plaster with painted Alpine window trim (Lüftlmalerei) + dark timber eaves & shutters!
  */
 function createBavarianArchetypeTexture(
-  kind: 'einfirsthof' | 'timber' | 'barn' | 'landhaus'
+  kind: 'einfirsthof' | 'timber' | 'barn' | 'landhaus' | 'machine_hall' | 'detached'
 ): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 256;
@@ -284,6 +284,54 @@ function createBavarianArchetypeTexture(
     ctx.fillRect(104, 38, 48, 52);
     ctx.strokeStyle = '#8b5e36';
     ctx.strokeRect(104, 38, 48, 52);
+  } else if (kind === 'machine_hall') {
+    // Modern Bavarian agricultural machine hall / cattle shed: ribbed grey-sage steel cladding + translucent daylight band + roller bay!
+    ctx.fillStyle = '#8b9694';
+    ctx.fillRect(0, 0, 256, 232);
+    for (let x = 0; x < 256; x += 8) {
+      ctx.fillStyle = x % 16 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)';
+      ctx.fillRect(x, 0, 4, 232);
+    }
+    // Translucent polycarbonate daylight strip near roof eaves
+    ctx.fillStyle = '#d6e3e0';
+    ctx.fillRect(0, 18, 256, 36);
+    ctx.strokeStyle = '#5f6b69';
+    ctx.lineWidth = 3;
+    for (let x = 0; x < 256; x += 32) {
+      ctx.beginPath();
+      ctx.moveTo(x, 18);
+      ctx.lineTo(x, 54);
+      ctx.stroke();
+    }
+    // Concrete curb plinth
+    ctx.fillStyle = '#7c807e';
+    ctx.fillRect(0, 224, 256, 32);
+    // Wide sectional industrial roller door
+    ctx.fillStyle = '#5d6668';
+    ctx.fillRect(70, 108, 116, 118);
+    ctx.strokeStyle = '#3b4244';
+    ctx.lineWidth = 2;
+    for (let y = 122; y < 226; y += 16) {
+      ctx.beginPath();
+      ctx.moveTo(70, y);
+      ctx.lineTo(186, y);
+      ctx.stroke();
+    }
+    ctx.strokeRect(70, 108, 116, 118);
+  } else if (kind === 'detached') {
+    // Newer Bavarian detached home: clean light plaster, anthracite window frames, stone plinth
+    ctx.fillStyle = '#f2f0ea';
+    ctx.fillRect(0, 0, 256, 228);
+    for (let i = 0; i < 450; i++) {
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(0,0,0,0.025)' : 'rgba(255,255,255,0.04)';
+      ctx.fillRect(Math.random() * 256, Math.random() * 228, 2, 2);
+    }
+    ctx.fillStyle = '#737678';
+    ctx.fillRect(0, 228, 256, 28);
+    for (const wx of [44, 128, 212]) {
+      drawWindow(wx, 54, '#3d444a', false, false);
+      drawWindow(wx, 166, '', false, false);
+    }
   } else {
     // Warm ochre/cream village Landhaus with Alpine painted window borders & dark timber eaves
     ctx.fillStyle = '#f4ebd7';
@@ -306,6 +354,29 @@ function createBavarianArchetypeTexture(
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+function createNeutralRoofTileTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#eae6e0';
+  ctx.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 16) {
+    for (let x = 0; x < 256; x += 16) {
+      const v = 226 + (((x * 7 + y * 13) % 24) - 12);
+      ctx.fillStyle = `rgb(${v},${v - 2},${v - 5})`;
+      ctx.fillRect(x + 1, y + 1, 14, 13);
+    }
+    ctx.fillStyle = 'rgba(40,32,26,0.28)';
+    ctx.fillRect(0, y + 14, 256, 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
 
@@ -715,178 +786,116 @@ export class RealMuensingWorld {
   }
 
   /**
-   * Renders all ~850 real OSM buildings using 4 rich, authentic Upper Bavarian archetypes (predominantly brown-timber
-   * & red-gable-roof Einfirsthöfe, dark larch Bauernhäuser, weathered timber Stadel barns, and warm ochre Landhäuser)
-   * with true overhanging Satteldach gable roofs and chimneys — zero repetitive white boxes!
+   * Loads official Bavaria OpenData LoD2 CityGML 3D buildings (1,692 real survey-grade footprints, heights & roof
+   * shapes — gable, hip, half-hip, shed, flat, L/T roofs) compiled into 6 merged draw calls with DOP20-sampled roof
+   * colors and 5 Upper Bavarian architectural wall materials!
    */
   private buildRealBavarianBuildings(scene: THREE.Scene, world: CANNON.World, groundMat: CANNON.Material): void {
-    const pavedSegs: [number, number, number, number, number][] = [];
-    for (const r of OSM_DATA.roads) {
-      if (r.hw === 'track' || r.hw === 'service') continue;
-      const hw = r.hw === 'secondary' || r.hw === 'tertiary' ? 5.6 : 4.2;
-      for (let i = 0; i < r.pts.length - 1; i++) {
-        pavedSegs.push([r.pts[i][0], r.pts[i][1], r.pts[i + 1][0], r.pts[i + 1][1], hw]);
-      }
-    }
-
-    type BItem = { x: number; z: number; w: number; d: number; h: number; rot: number; arch: 'einfirsthof' | 'timber' | 'barn' | 'landhaus' };
-    const buckets: Record<BItem['arch'], BItem[]> = {
-      einfirsthof: [],
-      timber: [],
-      barn: [],
-      landhaus: []
-    };
-
-    OSM_DATA.buildings.forEach((b, idx) => {
-      if (Math.abs(b.x - FARM_CENTER.x) < 52 && Math.abs(b.z - FARM_CENTER.z) < 48) return;
-      if (b.type === 'church' || b.type === 'castle') return;
-      if (Math.hypot(b.x - REAL_SPOTS.muensingChurch.x, b.z - REAL_SPOTS.muensingChurch.z) < 28) return;
-      if (Math.hypot(b.x - REAL_SPOTS.muensingAltwirt.x, b.z - REAL_SPOTS.muensingAltwirt.z) < 24) return;
-      if (Math.hypot(b.x - REAL_SPOTS.schlossAmmerland.x, b.z - REAL_SPOTS.schlossAmmerland.z) < 32) return;
-      if (Math.hypot(b.x - REAL_SPOTS.sebaldPier.x, b.z - REAL_SPOTS.sebaldPier.z) < 36) return;
-      // Keep scenic paved fast-travel viewpoints completely clear
-      if (Math.hypot(b.x - 1352, b.z - 984) < 16) return;
-      if (Math.hypot(b.x - -978, b.z - 702) < 20) return;
-      if (Math.hypot(b.x - 496, b.z - -1189) < 18) return;
-
-      // True 1:1 meter building footprints matching real 1:1 UTM32 OSM streets!
-      const w = THREE.MathUtils.clamp(b.w * 0.96, 6.0, 32);
-      const d = THREE.MathUtils.clamp(b.d * 0.96, 5.2, 24);
-      const approxR = Math.min(w, d) * 0.45;
-
-      for (const [ax, az, bx, bz, hw] of pavedSegs) {
-        const minClear = hw + approxR;
-        if (pointToSegmentDistSq(b.x, b.z, ax, az, bx, bz) < minClear * minClear) return;
-      }
-
-      let arch: BItem['arch'];
-      if (b.type === 'barn') {
-        arch = 'barn';
-      } else {
-        const roll = (idx * 37 + Math.abs(Math.round(b.x))) % 100;
-        if (roll < 42) arch = 'einfirsthof'; // Signature Upper Bavarian brown-timber + cream-base farmhouse!
-        else if (roll < 70) arch = 'timber'; // Full warm dark-brown larch timber home!
-        else if (roll < 82) arch = 'barn'; // Timber outbuilding / Stadel
-        else arch = 'landhaus'; // Warm ochre / apricot village house
-      }
-
-      const h =
-        arch === 'barn'
-          ? 4.6 + (idx % 2) * 1.1
-          : arch === 'einfirsthof'
-            ? 5.6 + (idx % 3) * 0.85
-            : 5.0 + (idx % 3) * 0.95;
-
-      buckets[arch].push({ x: b.x, z: b.z, w, d, h, rot: b.rot, arch });
-    });
-
-    const wallGeo = new THREE.BoxGeometry(1, 1, 1);
-    const roofGeo = createBavarianGableRoofGeometry();
-    const chimneyGeo = new THREE.BoxGeometry(0.65, 1.4, 0.65);
-    const tileTex = createTileRoofTexture();
-
-    const roofPalette = [0xc25434, 0xb14528, 0xa23c24, 0x8f3a25, 0x623b2c];
-    const tintPalettes: Record<BItem['arch'], number[]> = {
-      einfirsthof: [0xffffff, 0xf8f0e2, 0xf5e8d4, 0xfff8ec],
-      timber: [0xffffff, 0xefd7be, 0xe4c7a8, 0xd9b998],
-      barn: [0xffffff, 0xe8d5c2, 0xdcc5af],
-      landhaus: [0xfff4df, 0xf6e2bc, 0xf2d9b8, 0xeee6d4]
-    };
-
-    const dummy = new THREE.Object3D();
-    const col = new THREE.Color();
-    const allChimneys: { x: number; y: number; z: number; rot: number }[] = [];
-
-    (Object.keys(buckets) as BItem['arch'][]).forEach((arch) => {
-      const list = buckets[arch];
-      if (list.length === 0) return;
-
-      const wallMat = new THREE.MeshStandardMaterial({
-        map: createBavarianArchetypeTexture(arch),
-        roughness: arch === 'barn' || arch === 'timber' ? 0.9 : 0.84,
+    const materials: THREE.MeshStandardMaterial[] = [
+      // 0: Einfirsthof (white plaster lower + rich dark brown timber upper + wooden balcony & geraniums)
+      new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('einfirsthof'),
+        vertexColors: true,
+        roughness: 0.86,
         metalness: 0.02
-      });
-      const roofMat = new THREE.MeshStandardMaterial({
-        map: tileTex,
+      }),
+      // 1: Traditional Bavarian village house (warm cream/ochre render + shutters + painted Alpine trim)
+      new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('landhaus'),
+        vertexColors: true,
+        roughness: 0.84,
+        metalness: 0.02
+      }),
+      // 2: Timber barn / Stadl (dark weathered vertical boards + X-braced sliding barn doors)
+      new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('barn'),
+        vertexColors: true,
+        roughness: 0.92,
+        metalness: 0.02
+      }),
+      // 3: Modern agricultural machine hall / cattle shed (ribbed steel cladding + daylight strip)
+      new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('machine_hall'),
+        vertexColors: true,
+        roughness: 0.62,
+        metalness: 0.25
+      }),
+      // 4: Newer detached home / garage (clean render + dark anthracite frames)
+      new THREE.MeshStandardMaterial({
+        map: createBavarianArchetypeTexture('detached'),
+        vertexColors: true,
+        roughness: 0.84,
+        metalness: 0.03
+      }),
+      // 5: ALL LoD2 Roofs — neutral tile relief multiplied by each building's REAL DOP20-sampled RGB roof color!
+      new THREE.MeshStandardMaterial({
+        map: createNeutralRoofTileTexture(),
+        vertexColors: true,
         roughness: 0.78,
-        metalness: 0.06
-      });
+        metalness: 0.06,
+        side: THREE.DoubleSide
+      })
+    ];
 
-      const wallInst = new THREE.InstancedMesh(wallGeo, wallMat, list.length);
-      const roofInst = new THREE.InstancedMesh(roofGeo, roofMat, list.length);
-      wallInst.castShadow = true;
-      wallInst.receiveShadow = true;
-      roofInst.castShadow = true;
+    fetch('./map/lod2_buildings.bin')
+      .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((buf) => {
+        const dv = new DataView(buf);
+        const magic =
+          String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3));
+        if (magic !== 'LOD2') throw new Error('Invalid LOD2 binary');
+        const groupCount = dv.getUint32(4, true);
+        let offset = 8;
 
-      const tints = tintPalettes[arch];
+        for (let g = 0; g < groupCount; g++) {
+          const styleId = dv.getUint32(offset, true);
+          const vCount = dv.getUint32(offset + 4, true);
+          offset += 8;
 
-      list.forEach((b, idx) => {
-        const gy = getTerrainHeight(b.x, b.z);
-        // Embed foundation 1.8m into sloped Bavarian terrain so NO house ever floats!
-        dummy.position.set(b.x, gy + b.h * 0.5 - 0.85, b.z);
-        dummy.rotation.set(0, b.rot, 0);
-        dummy.scale.set(b.w, b.h + 1.7, b.d);
-        dummy.updateMatrix();
-        wallInst.setMatrixAt(idx, dummy.matrix);
+          const posBytes = vCount * 3 * 4;
+          const normBytes = vCount * 3 * 4;
+          const uvBytes = vCount * 2 * 4;
+          const colBytes = vCount * 3;
+          const colPad = (4 - (colBytes % 4)) % 4;
 
-        col.setHex(tints[idx % tints.length]);
-        wallInst.setColorAt(idx, col);
+          const pos = new Float32Array(buf, offset, vCount * 3);
+          offset += posBytes;
+          const norm = new Float32Array(buf, offset, vCount * 3);
+          offset += normBytes;
+          const uv = new Float32Array(buf, offset, vCount * 2);
+          offset += uvBytes;
+          const col = new Uint8Array(buf, offset, vCount * 3);
+          offset += colBytes + colPad;
 
-        // True overhanging Bavarian gable roof aligned along the building's longer axis!
-        const roofH = Math.min(3.6, Math.min(b.w, b.d) * 0.34);
-        const ridgeRot = b.w >= b.d ? b.rot : b.rot + Math.PI / 2;
-        const rSpanX = Math.max(b.w, b.d);
-        const rSpanZ = Math.min(b.w, b.d);
+          if (vCount === 0) continue;
 
-        dummy.position.set(b.x, gy + b.h - 0.08, b.z);
-        dummy.rotation.set(0, ridgeRot, 0);
-        dummy.scale.set(rSpanX, roofH, rSpanZ);
-        dummy.updateMatrix();
-        roofInst.setMatrixAt(idx, dummy.matrix);
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+          geo.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
+          geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+          geo.setAttribute('color', new THREE.BufferAttribute(col, 3, true));
+          geo.computeBoundingSphere();
 
-        col.setHex(roofPalette[(idx * 3 + arch.length) % roofPalette.length]);
-        roofInst.setColorAt(idx, col);
-
-        if (arch !== 'barn' && idx % 2 === 0) {
-          allChimneys.push({
-            x: b.x + Math.cos(ridgeRot) * rSpanX * 0.22,
-            y: gy + b.h + roofH * 0.72,
-            z: b.z - Math.sin(ridgeRot) * rSpanX * 0.22,
-            rot: ridgeRot
-          });
+          const mesh = new THREE.Mesh(geo, materials[styleId] ?? materials[1]);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          scene.add(mesh);
         }
+      })
+      .catch((err) => {
+        console.error('Failed to load Bavaria LoD2 buildings:', err);
+      });
 
-        // Solid physics colliders for key hubs so driving feels genuinely physical
-        const nearHub =
-          Math.hypot(b.x - REAL_SPOTS.muensingAltwirt.x, b.z - REAL_SPOTS.muensingAltwirt.z) < 160 ||
-          Math.hypot(b.x - REAL_SPOTS.wimpasing.x, b.z - REAL_SPOTS.wimpasing.z) < 120 ||
-          Math.hypot(b.x - REAL_SPOTS.sebaldPier.x, b.z - REAL_SPOTS.sebaldPier.z) < 120 ||
-          Math.hypot(b.x - REAL_SPOTS.weipertshausen.x, b.z - REAL_SPOTS.weipertshausen.z) < 100;
-        if (nearHub) {
-          this.addStaticBox(world, groundMat, b.x, gy + b.h * 0.5, b.z, b.w, b.h, b.d, b.rot);
+    fetch('./map/lod2_colliders.json')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((boxes: [number, number, number, number, number, number][]) => {
+        for (const [x, y, z, w, h, d] of boxes) {
+          this.addStaticBox(world, groundMat, x, y, z, w, h, d, 0);
         }
+      })
+      .catch(() => {
+        // colliders optional fallback
       });
-
-      wallInst.instanceMatrix.needsUpdate = true;
-      roofInst.instanceMatrix.needsUpdate = true;
-      if (wallInst.instanceColor) wallInst.instanceColor.needsUpdate = true;
-      if (roofInst.instanceColor) roofInst.instanceColor.needsUpdate = true;
-      scene.add(wallInst, roofInst);
-    });
-
-    if (allChimneys.length > 0) {
-      const chimMat = new THREE.MeshStandardMaterial({ color: 0x8f4330, roughness: 0.88 });
-      const chimInst = new THREE.InstancedMesh(chimneyGeo, chimMat, allChimneys.length);
-      allChimneys.forEach((ch, idx) => {
-        dummy.position.set(ch.x, ch.y, ch.z);
-        dummy.rotation.set(0, ch.rot, 0);
-        dummy.scale.set(1, 1, 1);
-        dummy.updateMatrix();
-        chimInst.setMatrixAt(idx, dummy.matrix);
-      });
-      chimInst.instanceMatrix.needsUpdate = true;
-      scene.add(chimInst);
-    }
   }
 
   /**
