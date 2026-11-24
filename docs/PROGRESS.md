@@ -238,3 +238,29 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 
 ### Honest Scores Before → After
 `3/2/2/2/1/3/3/3/2/2` → `3/2/2/3/2/3/3/3/2/2` (Density 2→3, Look 1→2; Fix #2 complete).
+
+---
+
+## Iteration 11 — Fix #3: Compact Collapsible HUD (< 8% Screen Coverage) & `[U]` Hide-HUD Key (2026-11-24)
+
+**Goal**: Shrink the HUD from ~31% of the `1280×720` viewport so the 3D Bavarian world fills most of the screen by default; collapse top-left panels by default, move rarely used toggles into the `Esc` Pause Menu, compact the dashboard/toolbar/minimap, and add a hotkey (`[U]` / `[F1]`) to hide the whole HUD.
+
+### Changes Made
+- Redesigned HUD layout across [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css), and [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts):
+  - **Collapsible top-left Contracts & Fast Travel drawers**: collapsed by default to a single `268×37 px` status bar (`JOBS · 1. Yard Shift (0%) · €500 ▾` / `TRAVEL · Home Farm · 0.0 km ▾`); click or press `[J]` to expand/collapse cleanly (fixed 60 Hz `textContent` mutation so WebKit clicks fire reliably every time).
+  - **Shrunk top-right bar**: reduced from 9 buttons across 2 rows to 3 compact buttons in 1 row (`Career/Free Play`, `Cam: Chase`, `Menu [Esc]`), moving Time-of-Day, Lights, Hints, SFX, `+ Clutter`, Recovery Winch, and HUD toggle cleanly into the `Esc` Pause Menu (all keyboard shortcuts still active live).
+  - **Compact bottom row**: 2×2 mini-gauge dashboard (`192×114 px`), single-row tool pill (`274×35 px`), and `156×104 px` minimap with a `−` collapse button.
+  - **Hide entire HUD key**: `[U]` (and `[F1]`) toggles full HUD visibility (`0%` HUD) while keeping fading confirmation toasts outside `#hud`.
+
+### Verification & Weakest Things Observed (`.scratch/loop/11/`)
+- `npx tsc --noEmit && npm run build`: pass (`0` errors). `agweb console error`: `0` console errors.
+- Measured live at `1280×720`: total visible HUD panels = **`7.7%`** of viewport (`92.3%` open world!).
+- Screenshots inspected:
+  - `.scratch/loop/11/01_hud_default_compact.png`: Clean `7.7%` default HUD framing the Home Farm yard and village.
+  - `.scratch/loop/11/02_hud_contracts_expanded.png` & `.scratch/loop/11/03_hud_freeplay_expanded.png`: Both top-left drawers expand cleanly with zero overlap.
+  - `.scratch/loop/11/04_hud_hidden_key_u.png`: Pure `0%` HUD view via `[U]`.
+  - `.scratch/loop/11/05_pause_menu_toggles.png`: Moved toggles cleanly accessible in Pause Settings.
+- **Weakest things still visible**: Sebald & Schloss fast travel not yet audited/fixed (Fix #4 next); LoD2 buildings still look flat/boxy with uniform painted windows and flat eaves (Fix #5 after Fix #4).
+
+### Honest Scores Before → After
+`3/2/2/3/2/3/3/3/2/2` → `3/3/2/3/2/3/3/3/3/2` (First 5 min 2→3, Finish 2→3; Fix #3 complete).

@@ -109,6 +109,7 @@ class ScorpionGame {
   private prevGamepadButtons: boolean[] = [];
   private started = false;
   private paused = false;
+  private hudHidden = false;
   private settings: GameSettings = loadSettings();
   private mode: GameMode = 'farm';
   private timeOfDay: TimeOfDay = 'afternoon';
@@ -147,6 +148,8 @@ class ScorpionGame {
   private btnMode = document.getElementById('btn-mode')!;
   private btnTime = document.getElementById('btn-time')!;
   private btnLights = document.getElementById('btn-lights')!;
+  private btnToggleHud = document.getElementById('btn-toggle-hud')!;
+  private farmSummaryTitle = document.getElementById('farm-summary-title')!;
 
   private contractSelect = document.getElementById('contract-select') as HTMLSelectElement;
   private contractDesc = document.getElementById('contract-desc')!;
@@ -700,7 +703,7 @@ class ScorpionGame {
     this.pickFreeplayBtn.classList.toggle('selected', next === 'freeplay');
     this.farmPanel.classList.toggle('hidden', next !== 'farm');
     this.freeplayPanel.classList.toggle('hidden', next !== 'freeplay');
-    this.btnMode.textContent = next === 'freeplay' ? 'Mode: Free Play 🏔️' : 'Mode: Career';
+    this.btnMode.textContent = next === 'freeplay' ? 'Free Play' : 'Career';
     this.btnMode.classList.toggle('free-active', next === 'freeplay');
 
     const c = BAVARIAN_CONTRACTS.find((x) => x.id === this.activeContractId)!;
@@ -800,6 +803,19 @@ class ScorpionGame {
     this.activeToolTip.textContent = info.tip;
   }
 
+  private toggleHudVisibility(): void {
+    this.hudHidden = !this.hudHidden;
+    this.hud.classList.toggle('hud-hidden', this.hudHidden);
+    this.btnToggleHud.textContent = this.hudHidden ? 'HUD: Hidden [U]' : 'HUD: Shown [U]';
+    this.btnToggleHud.classList.toggle('active-toggle', this.hudHidden);
+    this.showToast(this.hudHidden ? 'HUD Hidden — press [U] to restore' : 'HUD Restored');
+  }
+
+  private toggleActiveSidePanel(): void {
+    const panel = this.mode === 'farm' ? this.farmPanel : this.freeplayPanel;
+    panel.classList.toggle('collapsed');
+  }
+
   private toggleHints(): void {
     this.hintsOn = !this.hintsOn;
     this.farm.setHintsVisible(this.hintsOn);
@@ -839,8 +855,23 @@ class ScorpionGame {
       this.audio.playHitch(true);
       this.showToast('Recovery Winch — Back on all 4 tires!');
     };
-    document.getElementById('btn-winch')!.addEventListener('click', doWinch);
+    document.getElementById('btn-winch')!.addEventListener('click', () => {
+      this.setPaused(false);
+      doWinch();
+    });
     document.getElementById('btn-banner-winch')!.addEventListener('click', doWinch);
+    this.btnToggleHud.addEventListener('click', () => this.toggleHudVisibility());
+    document.getElementById('btn-toggle-farm-panel')!.addEventListener('click', () => {
+      this.farmPanel.classList.toggle('collapsed');
+    });
+    document.getElementById('btn-toggle-freeplay-panel')!.addEventListener('click', () => {
+      this.freeplayPanel.classList.toggle('collapsed');
+    });
+    document.getElementById('btn-toggle-minimap')!.addEventListener('click', () => {
+      const wrap = document.getElementById('minimap-panel')!;
+      const collapsed = wrap.classList.toggle('minimap-collapsed');
+      document.getElementById('btn-toggle-minimap')!.textContent = collapsed ? '+' : '−';
+    });
     this.gearBadge.addEventListener('click', () => {
       const g = this.tractor.cycleGear();
       this.showToast(`Varipower Gear: ${VARIPOWER_GEARS[g].label} km/h`);
@@ -919,6 +950,11 @@ class ScorpionGame {
         this.cycleSteerUI();
       } else if (e.code === 'KeyV') {
         this.cycleCamera();
+      } else if (e.code === 'KeyU' || e.code === 'F1') {
+        e.preventDefault();
+        this.toggleHudVisibility();
+      } else if (e.code === 'KeyJ') {
+        this.toggleActiveSidePanel();
       }
     });
 
@@ -993,10 +1029,6 @@ class ScorpionGame {
       this.setPaused(false);
       document.getElementById('btn-replay-job')!.click();
     });
-    document.getElementById('btn-pause-winch')!.addEventListener('click', () => {
-      this.setPaused(false);
-      doWinch();
-    });
     document.getElementById('btn-pause-reset-save')!.addEventListener('click', () => {
       this.career = { bankEUR: 500, completedIds: [], bestStars: {}, totalKm: 0, rollovers: 0 };
       saveCareer(this.career);
@@ -1042,7 +1074,7 @@ class ScorpionGame {
 
   private cycleSteerUI(): void {
     const mode = this.tractor.cycleSteeringMode();
-    const label = mode === '4WS' ? '4WS [X]' : mode === '2WS' ? '2WS [X]' : 'Crab [X]';
+    const label = mode === '4WS' ? '4WS' : mode === '2WS' ? '2WS' : 'Crab';
     this.steerBadge.textContent = label;
     this.showToast(`Steering: ${mode}`);
   }
@@ -1275,6 +1307,20 @@ class ScorpionGame {
     const pct = totalItems > 0 ? Math.round((totalTidy / totalItems) * 100) : 0;
     this.tidyPctEl.textContent = `${pct}%`;
     this.tidyBarEl.style.width = `${pct}%`;
+    const nextSummary =
+      activeContract.id === 'yard_shift'
+        ? `1. Yard Shift (${pct}%)`
+        : `${activeContract.title.slice(0, 18)} (${
+            activeContract.requiredKind === 'yard_silage'
+              ? this.propMgr.props.filter((p) => p.kind === 'silage_wrapped' && p.inZone && !p.isPopped && !p.isDamaged)
+                  .length
+              : activeContract.requiredKind === 'yard_crates'
+                ? this.propMgr.props.filter((p) => p.kind === 'crate' && p.inZone && !p.isDamaged).length
+                : contractDelivered
+          }/${activeContract.requiredCount})`;
+    if (this.farmSummaryTitle.textContent !== nextSummary) {
+      this.farmSummaryTitle.textContent = nextSummary;
+    }
 
     const deliveredSilageIntact = this.propMgr.props.filter(
       (p) => p.kind === 'silage_wrapped' && p.inZone && !p.isPopped && !p.isDamaged
@@ -1346,12 +1392,12 @@ class ScorpionGame {
     this.elevEl.textContent = String(elevM);
 
     const activeGear = this.tractor.getActiveGear(this.latestInput);
-    this.gearBadge.textContent = `${VARIPOWER_GEARS[activeGear].label} [G]`;
+    this.gearBadge.textContent = VARIPOWER_GEARS[activeGear].label;
     this.gearBadge.classList.toggle('pill-hot', activeGear === 'hare');
     this.gearBadge.classList.toggle('pill-green', activeGear !== 'hare');
 
-    const dotX = THREE.MathUtils.clamp((this.tractor.rollDeg / 38) * 16, -16, 16);
-    const dotY = THREE.MathUtils.clamp((-this.tractor.pitchDeg / 38) * 16, -16, 16);
+    const dotX = THREE.MathUtils.clamp((this.tractor.rollDeg / 38) * 12, -12, 12);
+    const dotY = THREE.MathUtils.clamp((-this.tractor.pitchDeg / 38) * 12, -12, 12);
     this.tipDotEl.style.transform = `translate(${dotX.toFixed(1)}px, ${dotY.toFixed(1)}px)`;
     const maxTilt = Math.max(Math.abs(this.tractor.rollDeg), Math.abs(this.tractor.pitchDeg));
     this.tiltReadoutEl.textContent = `${maxTilt}°`;
@@ -1362,7 +1408,7 @@ class ScorpionGame {
     this.tipHorizonEl.classList.toggle('tip-warn', lm >= 0.5 && lm <= 0.8);
     this.tipHorizonEl.classList.toggle('tip-danger', lm > 0.8);
 
-    this.wheelsBadge.textContent = `${this.tractor.wheelsOnGround}/4 Tires`;
+    this.wheelsBadge.textContent = `${this.tractor.wheelsOnGround}/4`;
     this.wheelsBadge.classList.toggle('pill-hot', this.tractor.wheelsOnGround <= 2);
     this.tippedBanner.classList.toggle('hidden', !this.tractor.isTipped);
 
@@ -1398,19 +1444,25 @@ class ScorpionGame {
     }
 
     if (this.mode === 'freeplay') {
-      this.locationReadout.textContent = this.getCurrentLocationName();
+      const locName = this.getCurrentLocationName();
+      if (this.locationReadout.textContent !== locName) {
+        this.locationReadout.textContent = locName;
+      }
     }
 
     if (this.tractor.heldVillageObj) {
-      this.holdBadge.textContent = `Load: ${this.tractor.heldVillageObj.label}`;
+      this.holdBadge.textContent = this.tractor.heldVillageObj.label;
       this.holdBadge.classList.add('pill-hot');
+      this.holdBadge.classList.remove('hidden');
     } else if (this.tractor.heldProps.length > 0) {
       const names = this.tractor.heldProps.map((p) => p.label).join(', ');
-      this.holdBadge.textContent = `Load: ${names}`;
+      this.holdBadge.textContent = names;
       this.holdBadge.classList.add('pill-hot');
+      this.holdBadge.classList.remove('hidden');
     } else {
       this.holdBadge.textContent = 'No Load';
       this.holdBadge.classList.remove('pill-hot');
+      this.holdBadge.classList.add('hidden');
     }
 
     const showSqueeze =

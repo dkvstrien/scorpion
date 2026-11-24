@@ -1220,6 +1220,181 @@ kbd {
   font-size: 0.76rem;
 }
 
+/* Compact HUD Redesign (Iter 11): < 8% screen coverage at 1280x720, collapsible panels, [U] hides entire HUD */
+.hud.hud-hidden {
+  display: none !important;
+}
+.hud-panel {
+  border-radius: 12px;
+  background: rgba(25, 30, 33, 0.8);
+}
+.top-left.clipboard,
+.top-left.freeplay-panel {
+  top: 10px;
+  left: 10px;
+  padding: 6px 10px;
+  width: 268px;
+}
+.top-left.collapsed .panel-body {
+  display: none;
+}
+.top-left.collapsed .tidy-header {
+  margin-bottom: 0;
+}
+.panel-toggle-bar {
+  cursor: pointer;
+  gap: 6px;
+}
+.panel-toggle-bar:hover {
+  filter: brightness(1.08);
+}
+.mini-summary {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #eaf3e6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+.collapse-chevron {
+  font-size: 0.75rem;
+  color: var(--claas-green);
+  margin-left: 2px;
+  transition: transform 0.15s ease;
+}
+.top-left:not(.collapsed) .collapse-chevron {
+  transform: rotate(180deg);
+}
+.top-left .panel-body {
+  margin-top: 6px;
+}
+.top-right.compact-bar {
+  top: 10px;
+  right: 10px;
+  padding: 5px 6px;
+  gap: 0;
+}
+.top-right.compact-bar .hud-btn {
+  padding: 4px 9px;
+  font-size: 0.73rem;
+  border-radius: 8px;
+}
+.bottom-left.compact-dash {
+  bottom: 10px;
+  left: 10px;
+  padding: 7px 10px;
+  width: 192px;
+}
+.compact-dash .dash-top {
+  margin-bottom: 5px;
+  padding-bottom: 4px;
+  gap: 6px;
+}
+.compact-dash .dash-metric strong {
+  font-size: 1.02rem;
+}
+.compact-dash .dash-metric span {
+  font-size: 0.58rem;
+}
+.compact-dash .tip-horizon {
+  width: 36px;
+  height: 36px;
+}
+.compact-dash .tip-dot {
+  width: 7px;
+  height: 7px;
+}
+.compact-dash .tilt-mini {
+  font-size: 0.5rem;
+}
+.tele-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  margin-bottom: 6px;
+}
+.tele-grid .gauge {
+  gap: 5px;
+}
+.tele-grid .gauge-lbl {
+  width: 26px;
+  font-size: 0.56rem;
+}
+.tele-grid .gauge-track {
+  height: 5px;
+}
+.compact-dash .status-pills {
+  gap: 4px;
+}
+.compact-dash .pill {
+  font-size: 0.63rem;
+  padding: 2px 6px;
+}
+.bottom-center.compact-tool {
+  bottom: 10px;
+  padding: 5px 11px;
+  gap: 0;
+}
+.compact-tool .tool-status-bar {
+  gap: 9px;
+}
+.compact-tool #active-tool-name {
+  font-size: 0.86rem;
+}
+.hud-key-hint {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #a9bbb0;
+  white-space: nowrap;
+}
+.bottom-right.minimap-wrap {
+  bottom: 10px;
+  right: 10px;
+  padding: 5px;
+  gap: 0;
+}
+.minimap-min-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(18, 22, 25, 0.85);
+  color: #e6efe6;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+.minimap-wrap.minimap-collapsed #minimap-canvas {
+  display: none;
+}
+.minimap-wrap.minimap-collapsed {
+  padding: 4px 24px 4px 9px;
+}
+.minimap-wrap.minimap-collapsed::before {
+  content: 'Map';
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #d6e4d8;
+}
+.pause-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.pause-toggles .hud-btn {
+  padding: 4px 8px;
+  font-size: 0.73rem;
+}
+
 @media (max-width: 900px) {
   .mode-picker,
   .controls-grid {

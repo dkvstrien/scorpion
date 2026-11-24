@@ -49,7 +49,7 @@
               <h3>Drive, Gears &amp; World</h3>
               <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive · <kbd>G</kbd> Gears (15/30/40) · <kbd>Shift</kbd> Hare</div>
               <div><kbd>Alt</kbd> Creep + Fork Laser · <kbd>X</kbd> 4WS / 2WS / Crab · <kbd>⌫</kbd> Winch</div>
-              <div><kbd>V</kbd> Camera · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights · <kbd>H</kbd> Horn · <kbd>Esc</kbd> Pause</div>
+              <div><kbd>V</kbd> Camera · <kbd>J</kbd> Jobs/Travel · <kbd>U</kbd> Hide HUD · <kbd>Esc</kbd> Menu</div>
               <div>🎮 Xbox / PlayStation Gamepad supported automatically</div>
             </div>
             <div class="ctrl-group">
@@ -58,7 +58,7 @@
               <div><kbd>R</kbd><kbd>F</kbd> Extend / Retract Telescopic Arm</div>
               <div><kbd>←</kbd><kbd>→</kbd> or <kbd>Z</kbd><kbd>C</kbd> Level / Tilt Carriage</div>
               <div><kbd>Space</kbd> Grab / Set Down (Spin + Release = Throw!)</div>
-              <div><kbd>T</kbd> Couple / Drop Tool at Shed · <kbd>M</kbd> Hints</div>
+              <div><kbd>T</kbd> Couple / Drop Tool · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights · <kbd>H</kbd> Horn</div>
             </div>
           </div>
 
@@ -69,130 +69,125 @@
         </div>
       </div>
 
-      <!-- In-Game HUD -->
+      <!-- Floating Toasts (outside #hud so HUD-hide toast remains visible briefly) -->
+      <div id="toast-container" class="toast-container"></div>
+
+      <!-- In-Game HUD (Compact by default; press [U] or [F1] to hide/show entire HUD) -->
       <div id="hud" class="hud hidden">
-        <!-- Top Left: Bavarian Contracting Panel -->
-        <div class="hud-panel top-left clipboard" id="farm-panel">
-          <div class="tidy-header">
+        <!-- Top Left: Collapsible Bavarian Contracting Panel (collapsed by default!) -->
+        <div class="hud-panel top-left clipboard collapsed" id="farm-panel">
+          <div class="tidy-header panel-toggle-bar" id="btn-toggle-farm-panel" title="Expand / Collapse Contracts [J]">
             <div class="title-row">
-              <span class="mini-claas">CLAAS</span>
-              <span class="mini-model">CONTRACTS</span>
+              <span class="mini-claas">JOBS</span>
+              <span id="farm-summary-title" class="mini-summary">1. Home Farm Yard (0%)</span>
             </div>
             <div class="score-pill">
               <span id="career-bank" class="bank-val">€500</span>
-              <span id="stars-val" class="stars">★★★</span>
+              <span id="stars-val" class="stars hidden">★★★</span>
+              <span class="collapse-chevron" id="farm-chevron">▾</span>
             </div>
           </div>
 
-          <div class="contract-selector">
-            <select id="contract-select" title="Choose Bavarian Contract (10 Jobs)"></select>
-          </div>
-          <p id="contract-desc" class="contract-desc"></p>
-          <div class="contract-meta-row">
-            <span id="contract-tool-hint" class="pill pill-green">Tool: Pallet Forks</span>
-            <span id="contract-timer" class="pill">0:00</span>
-            <button id="btn-replay-job" class="hud-btn small-btn" title="Respawn job cargo & restart timer">↻ Replay</button>
-          </div>
+          <div class="panel-body">
+            <div class="contract-selector">
+              <select id="contract-select" title="Choose Bavarian Contract (10 Jobs)"></select>
+            </div>
+            <p id="contract-desc" class="contract-desc"></p>
+            <div class="contract-meta-row">
+              <span id="contract-tool-hint" class="pill pill-green">Tool: Pallet Forks</span>
+              <span id="contract-timer" class="pill">0:00</span>
+              <button id="btn-replay-job" class="hud-btn small-btn" title="Respawn job cargo & restart timer">↻ Replay</button>
+            </div>
 
-          <div id="yard-progress-block">
-            <div class="progress-wrap">
-              <div class="progress-label-row">
-                <span>Home Farm Yard Shift</span>
-                <span id="tidy-pct">0%</span>
+            <div id="yard-progress-block">
+              <div class="progress-wrap">
+                <div class="progress-label-row">
+                  <span>Home Farm Yard Shift</span>
+                  <span id="tidy-pct">0%</span>
+                </div>
+                <div class="progress-bar">
+                  <div id="tidy-bar-fill" class="progress-fill" style="width: 0%"></div>
+                </div>
               </div>
-              <div class="progress-bar">
-                <div id="tidy-bar-fill" class="progress-fill" style="width: 0%"></div>
+
+              <div class="chore-list" id="chore-list">
+                <div class="chore-item" data-zone="logs">
+                  <span class="chore-check">○</span>
+                  <span class="chore-text">Logs → rack</span>
+                  <strong id="count-logs">0/3</strong>
+                </div>
+                <div class="chore-item" data-zone="crates">
+                  <span class="chore-check">○</span>
+                  <span class="chore-text">Pallets → trailer</span>
+                  <strong id="count-crates">0/4</strong>
+                </div>
+                <div class="chore-item" data-zone="hay">
+                  <span class="chore-check">○</span>
+                  <span class="chore-text">Hay → barn</span>
+                  <strong id="count-hay">0/4</strong>
+                </div>
+                <div class="chore-item" data-zone="silage">
+                  <span class="chore-check">○</span>
+                  <span class="chore-text">Silage → clamp</span>
+                  <strong id="count-silage">0/4</strong>
+                </div>
+                <div class="chore-item" data-zone="harvest">
+                  <span class="chore-check">○</span>
+                  <span class="chore-text">Pumpkins → bin</span>
+                  <strong id="count-harvest">0/4</strong>
+                </div>
+                <div class="chore-item" data-zone="scrap">
+                  <span class="chore-check">○</span>
+                  <span class="chore-text">Scrap → skip</span>
+                  <strong id="count-scrap">0/4</strong>
+                </div>
               </div>
             </div>
 
-            <div class="chore-list" id="chore-list">
-              <div class="chore-item" data-zone="logs">
-                <span class="chore-check">○</span>
-                <span class="chore-text">Logs → firewood rack</span>
-                <strong id="count-logs">0/3</strong>
-              </div>
-              <div class="chore-item" data-zone="crates">
-                <span class="chore-check">○</span>
-                <span class="chore-text">Pallets → flatbed trailer</span>
-                <strong id="count-crates">0/4</strong>
-              </div>
-              <div class="chore-item" data-zone="hay">
-                <span class="chore-check">○</span>
-                <span class="chore-text">Dry hay → red barn</span>
-                <strong id="count-hay">0/4</strong>
-              </div>
-              <div class="chore-item" data-zone="silage">
-                <span class="chore-check">○</span>
-                <span class="chore-text">Wrapped silage → clamp</span>
-                <strong id="count-silage">0/4</strong>
-              </div>
-              <div class="chore-item" data-zone="harvest">
-                <span class="chore-check">○</span>
-                <span class="chore-text">Pumpkins → shop bin</span>
-                <strong id="count-harvest">0/4</strong>
-              </div>
-              <div class="chore-item" data-zone="scrap">
-                <span class="chore-check">○</span>
-                <span class="chore-text">Drums &amp; scrap → skip</span>
-                <strong id="count-scrap">0/4</strong>
-              </div>
+            <div id="delivery-status-block" class="delivery-box hidden">
+              <div id="delivery-progress" style="font-weight:800;color:#d8ff7a;margin-bottom:3px;">Progress: 0 / 1</div>
+              <div id="delivery-dist">Distance to target: 0m</div>
+              <div class="delivery-hint">Follow the green GPS beacon on the mini-map.</div>
             </div>
-          </div>
 
-          <div id="delivery-status-block" class="delivery-box hidden">
-            <div id="delivery-progress" style="font-weight:800;color:#d8ff7a;margin-bottom:3px;">Progress: 0 / 1</div>
-            <div id="delivery-dist">Distance to target: 0m</div>
-            <div class="delivery-hint">Follow the green GPS beacon on the satellite mini-map!</div>
-          </div>
-
-          <div class="damage-row">
-            <span>Damaged: <strong id="damaged-val" class="ok">0</strong></span>
-            <span>Rollovers: <strong id="rollover-val">0</strong></span>
-            <span>Odo: <strong id="odo-val">0.0 km</strong></span>
+            <div class="damage-row">
+              <span>Damaged: <strong id="damaged-val" class="ok">0</strong></span>
+              <span>Rollovers: <strong id="rollover-val">0</strong></span>
+              <span>Odo: <strong id="odo-val">0.0 km</strong></span>
+            </div>
           </div>
         </div>
 
-        <!-- Top Left: Clean Minimal Open-World Free Play Card -->
-        <div class="hud-panel top-left freeplay-panel hidden" id="freeplay-panel">
-          <div class="tidy-header">
+        <!-- Top Left: Collapsible Open-World Free Play / Fast-Travel Drawer (collapsed by default!) -->
+        <div class="hud-panel top-left freeplay-panel collapsed hidden" id="freeplay-panel">
+          <div class="tidy-header panel-toggle-bar" id="btn-toggle-freeplay-panel" title="Expand / Collapse Fast Travel [J]">
             <div class="title-row">
-              <span class="mini-claas free-tag">FREE PLAY</span>
-              <span class="mini-model">STARNBERGER SEE</span>
+              <span class="mini-claas free-tag">TRAVEL</span>
+              <span class="mini-summary" id="location-readout">📍 Home Farm</span>
             </div>
-            <span id="freeplay-odo" class="bank-val">0.0 km</span>
+            <div class="score-pill">
+              <span id="freeplay-odo" class="bank-val">0.0 km</span>
+              <span class="collapse-chevron" id="freeplay-chevron">▾</span>
+            </div>
           </div>
-          <div class="freeplay-location" id="location-readout">📍 Home Farm</div>
-          <p class="freeplay-desc">
-            Real OpenStreetMap terrain &amp; roads: drive west to <strong>Schloss Ammerland</strong> &amp;
-            <strong>Fischerei Sebald</strong>, climb east into <strong>Münsing</strong>, or head north to
-            <strong>Weipertshausen</strong>!
-          </p>
-          <div class="freeplay-quick-grid">
-            <button id="btn-tp-farm" class="hud-btn">Home Farm</button>
-            <button id="btn-tp-lake" class="hud-btn">Sebald &amp; Schloss</button>
-            <button id="btn-tp-village" class="hud-btn">Münsing Altwirt</button>
-            <button id="btn-tp-weipert" class="hud-btn">Weipertshausen</button>
-            <button id="btn-tp-demo" class="hud-btn accent">Old Farmstead (Demo)</button>
-            <button id="btn-reset-demo" class="hud-btn">↻ Reset Demo Site</button>
+          <div class="panel-body">
+            <div class="freeplay-quick-grid">
+              <button id="btn-tp-farm" class="hud-btn">Home Farm</button>
+              <button id="btn-tp-lake" class="hud-btn">Sebald &amp; Schloss</button>
+              <button id="btn-tp-village" class="hud-btn">Münsing Altwirt</button>
+              <button id="btn-tp-weipert" class="hud-btn">Weipertshausen</button>
+              <button id="btn-tp-demo" class="hud-btn accent">Old Farmstead (Demo)</button>
+              <button id="btn-reset-demo" class="hud-btn">↻ Reset Demo Site</button>
+            </div>
           </div>
         </div>
 
-        <!-- Top Right: Mode, Time-of-Day, Lights & Utilities -->
-        <div class="hud-panel top-right">
+        <!-- Top Right: Sleek Minimal 3-Button Bar (rare toggles live cleanly inside Menu [Esc]!) -->
+        <div class="hud-panel top-right compact-bar">
           <div class="btn-row">
-            <button id="btn-mode" class="hud-btn mode-toggle-btn" title="Switch Career / Free Play">
-              Mode: Career
-            </button>
-            <button id="btn-time" class="hud-btn" title="Cycle Time of Day (N)">☀ Afternoon</button>
-            <button id="btn-lights" class="hud-btn" title="Toggle LED Worklights (L)">Lights: Off</button>
-            <button id="btn-camera" class="hud-btn" title="Switch Camera (V)">Cam: Chase</button>
-          </div>
-          <div class="btn-row">
-            <button id="btn-winch" class="hud-btn" title="Right Tipped Tractor (Backspace)">Winch [⌫]</button>
-            <button id="btn-hints" class="hud-btn" title="Destination Hints (M)">Hints: Off</button>
-            <button id="btn-sound" class="hud-btn" title="Toggle Audio">SFX: On</button>
-            <button id="btn-mess" class="hud-btn accent" title="Spawn Extra Clutter Nearby">+ Clutter</button>
-            <button id="btn-help" class="hud-btn" title="Pause, Settings & Credits (Esc)">Menu [Esc]</button>
+            <button id="btn-mode" class="hud-btn mode-toggle-btn" title="Switch Career / Free Play">Career</button>
+            <button id="btn-camera" class="hud-btn" title="Switch Camera [V]">Cam: Chase</button>
+            <button id="btn-help" class="hud-btn" title="Pause, World Toggles, Settings & Credits [Esc]">Menu [Esc]</button>
           </div>
         </div>
 
@@ -202,9 +197,6 @@
           <span>Your load shifted past the tipping point — try pushing with the boom or winch upright!</span>
           <button id="btn-banner-winch" class="primary-btn small">Recovery Winch [Backspace]</button>
         </div>
-
-        <!-- Center Toasts / Meters / Prompt -->
-        <div id="toast-container" class="toast-container"></div>
 
         <div id="squeeze-meter" class="squeeze-meter hidden">
           <span class="squeeze-lbl">CLAMP PRESSURE</span>
@@ -216,15 +208,15 @@
 
         <div id="interact-prompt" class="interact-prompt hidden"></div>
 
-        <!-- Bottom Left: Real Automotive Dashboard + Tip-O-Meter + Boom Telemetry -->
-        <div class="hud-panel bottom-left">
+        <!-- Bottom Left: Compact Automotive Dashboard + Tip-O-Meter + 2x2 Boom Gauges -->
+        <div class="hud-panel bottom-left compact-dash">
           <div class="dash-top">
             <div class="dash-metric">
               <strong id="speed-val">0</strong>
               <span>km/h</span>
             </div>
             <div class="dash-metric">
-              <strong id="elev-val">585</strong>
+              <strong id="elev-val">633</strong>
               <span>m ü.NN</span>
             </div>
             <div id="tip-horizon" class="tip-horizon tip-safe" title="Live Pitch & Roll Tip-O-Meter (Green = Safe, Yellow = Limit, Red = Over)">
@@ -233,54 +225,49 @@
             </div>
           </div>
 
-          <div class="tele-row">
+          <div class="tele-grid">
             <div class="gauge">
-              <span class="gauge-lbl">BOOM LIFT</span>
+              <span class="gauge-lbl">LIFT</span>
               <div class="gauge-track"><div id="gauge-lift" class="gauge-fill"></div></div>
             </div>
             <div class="gauge">
-              <span class="gauge-lbl">TELESCOPE</span>
+              <span class="gauge-lbl">EXT</span>
               <div class="gauge-track"><div id="gauge-ext" class="gauge-fill green"></div></div>
             </div>
             <div class="gauge">
-              <span class="gauge-lbl">CARRIAGE</span>
+              <span class="gauge-lbl">TILT</span>
               <div class="gauge-track center-mark"><div id="gauge-tilt" class="gauge-fill orange"></div></div>
             </div>
             <div class="gauge">
-              <span class="gauge-lbl">TIP RISK</span>
+              <span class="gauge-lbl">TIP</span>
               <div class="gauge-track"><div id="gauge-stab" class="gauge-fill stab"></div></div>
             </div>
           </div>
           <div class="status-pills">
-            <span id="gear-badge" class="pill pill-green clickable" title="Cycle Varipower Gear [G]: Snail 15 / Turtle 30 / Hare 40 km/h">Turtle 30 [G]</span>
-            <span id="steer-badge" class="pill pill-green">4WS [X]</span>
-            <span id="wheels-badge" class="pill">4/4 Tires</span>
-            <span id="creep-badge" class="pill hidden">Laser [Alt]</span>
-            <span id="hold-badge" class="pill">No Load</span>
+            <span id="gear-badge" class="pill pill-green clickable" title="Cycle Varipower Gear [G]">Turtle 30</span>
+            <span id="steer-badge" class="pill pill-green" title="Steering Mode [X]">4WS</span>
+            <span id="wheels-badge" class="pill">4/4</span>
+            <span id="creep-badge" class="pill hidden">Creep</span>
+            <span id="hold-badge" class="pill hidden">No Load</span>
           </div>
         </div>
 
-        <!-- Bottom Center: Active Attachment Readout -->
-        <div class="hud-panel bottom-center">
+        <!-- Bottom Center: Sleek Compact Single-Row Tool Pill -->
+        <div class="hud-panel bottom-center compact-tool">
           <div class="tool-status-bar">
-            <div class="active-tool-readout">
-              <span class="tool-readout-lbl">HITCHED TOOL</span>
-              <strong id="active-tool-name">Pallet Forks</strong>
-              <span id="active-tool-tip" class="tool-tip">Keep heavy loads low on slopes &amp; turns!</span>
-            </div>
-            <button id="btn-hitch-action" class="hud-btn hitch-btn" title="Couple or drop attachment (T)">
-              [T] Drop / Couple
+            <strong id="active-tool-name">Pallet Forks</strong>
+            <span id="active-tool-tip" class="tool-tip hidden"></span>
+            <button id="btn-hitch-action" class="hud-btn hitch-btn small-btn" title="Couple or drop attachment [T]">
+              [T] Swap
             </button>
-          </div>
-          <div class="mini-controls-hint">
-            <kbd>WASD</kbd> Drive · <kbd>Alt</kbd> Creep · <kbd>Q/E</kbd> Lift · <kbd>R/F</kbd> Extend · <kbd>Z/C</kbd> Tilt · <kbd>Space</kbd> Grab/Release · <kbd>⌫</kbd> Winch
+            <span class="hud-key-hint" title="Hide or show HUD">[U] HUD · [J] Panel</span>
           </div>
         </div>
 
-        <!-- Bottom Right: Aerial Satellite GPS Mini-Map -->
-        <div class="hud-panel bottom-right minimap-wrap">
-          <canvas id="minimap-canvas" width="204" height="136"></canvas>
-          <div class="minimap-caption">Münsing · Starnberger See (DOP20)</div>
+        <!-- Bottom Right: Compact Collapsible Aerial GPS Mini-Map -->
+        <div class="hud-panel bottom-right minimap-wrap" id="minimap-panel">
+          <button id="btn-toggle-minimap" class="minimap-min-btn" title="Toggle Mini-Map">−</button>
+          <canvas id="minimap-canvas" width="156" height="104"></canvas>
         </div>
       </div>
 
@@ -318,9 +305,20 @@
               <label for="set-ambience">Area Ambience (Birds, Cowbells, Lake Waves)</label>
               <input id="set-ambience" type="checkbox" checked />
             </div>
+            <div class="setting-row">
+              <label>World &amp; HUD Toggles</label>
+              <div class="pause-toggles">
+                <button id="btn-time" class="hud-btn" title="Cycle Time of Day [N]">☀ Afternoon</button>
+                <button id="btn-lights" class="hud-btn" title="Toggle LED Worklights [L]">Lights: Off</button>
+                <button id="btn-hints" class="hud-btn" title="Destination Hints [M]">Hints: Off</button>
+                <button id="btn-sound" class="hud-btn" title="Toggle Audio">SFX: On</button>
+                <button id="btn-toggle-hud" class="hud-btn" title="Hide/Show Entire HUD [U]">HUD: Shown [U]</button>
+                <button id="btn-mess" class="hud-btn accent" title="Spawn Extra Clutter Nearby">+ Clutter</button>
+              </div>
+            </div>
             <div class="pause-actions">
               <button id="btn-pause-replay" class="hud-btn">↻ Restart Current Job</button>
-              <button id="btn-pause-winch" class="hud-btn">Recovery Winch</button>
+              <button id="btn-winch" class="hud-btn" title="Right Tipped Tractor [Backspace]">Recovery Winch [⌫]</button>
               <button id="btn-pause-reset-save" class="hud-btn accent">Reset Career Save</button>
             </div>
           </div>
@@ -333,7 +331,7 @@
                 <div><kbd>G</kbd> Varipower Gears (15 / 30 / 40 km/h) · <kbd>Shift</kbd> Hare</div>
                 <div><kbd>Alt</kbd> Precision Creep + Fork Laser</div>
                 <div><kbd>X</kbd> 4WS / 2WS / Crab · <kbd>Backspace</kbd> Recovery Winch</div>
-                <div><kbd>V</kbd> Chase / Cab / Boom · Mouse Drag Orbit &amp; Scroll Zoom</div>
+                <div><kbd>V</kbd> Chase / Cab / Boom · <kbd>J</kbd> Toggle Panel · <kbd>U</kbd> / <kbd>F1</kbd> Hide HUD</div>
               </div>
               <div class="ctrl-group">
                 <h3>Telescopic Boom &amp; Tools</h3>
