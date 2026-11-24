@@ -276,71 +276,71 @@ export function createBarrelTexture(hueColor = '#b34329'): THREE.CanvasTexture {
 export function createFarmGroundTexture(): THREE.CanvasTexture {
   const [c, ctx] = makeCanvas(1024, 1024);
 
-  // Authentic British/European countryside pasture grass (more natural, less neon)
-  ctx.fillStyle = '#5e8742';
-  ctx.fillRect(0, 0, 1024, 1024);
+  // Transparent outer margin so gravel farmyard blends organically into Bavarian meadow terrain!
+  ctx.clearRect(0, 0, 1024, 1024);
 
-  for (let i = 0; i < 3200; i++) {
-    ctx.fillStyle =
-      i % 3 === 0
-        ? 'rgba(104,142,66,0.35)'
-        : i % 3 === 1
-          ? 'rgba(72,108,48,0.34)'
-          : 'rgba(130,152,78,0.22)';
-    ctx.beginPath();
-    ctx.arc(Math.random() * 1024, Math.random() * 1024, 6 + Math.random() * 24, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Main farmyard hardcore / weathered concrete & compacted gravel apron
-  ctx.fillStyle = '#9d978c';
+  // Soft feathered grass/dirt border transition
+  const outerGrad = ctx.createRadialGradient(512, 512, 340, 512, 512, 505);
+  outerGrad.addColorStop(0, 'rgba(128, 121, 108, 0.98)');
+  outerGrad.addColorStop(0.74, 'rgba(120, 114, 101, 0.94)');
+  outerGrad.addColorStop(0.88, 'rgba(98, 102, 74, 0.55)');
+  outerGrad.addColorStop(1, 'rgba(74, 108, 48, 0.0)');
+  ctx.fillStyle = outerGrad;
   ctx.beginPath();
-  ctx.roundRect(150, 145, 724, 710, 95);
+  ctx.roundRect(24, 34, 976, 956, 150);
   ctx.fill();
 
-  // Weathered asphalt/gravel mottling
-  for (let i = 0; i < 4200; i++) {
-    const x = 145 + Math.random() * 734;
-    const y = 140 + Math.random() * 720;
+  // Main Bavarian farmyard compacted gravel & weathered concrete courtyard
+  ctx.fillStyle = '#8b8477';
+  ctx.beginPath();
+  ctx.roundRect(78, 86, 868, 852, 110);
+  ctx.fill();
+
+  // Natural crushed-limestone gravel grain & subtle dark earth mottling
+  for (let i = 0; i < 6500; i++) {
+    const x = 70 + Math.random() * 884;
+    const y = 78 + Math.random() * 868;
     ctx.fillStyle =
-      i % 3 === 0
-        ? 'rgba(128,122,110,0.32)'
-        : i % 3 === 1
-          ? 'rgba(182,175,160,0.25)'
-          : 'rgba(92,86,76,0.22)';
-    ctx.fillRect(x, y, 4 + Math.random() * 6, 4 + Math.random() * 6);
+      i % 4 === 0
+        ? 'rgba(110,104,92,0.34)'
+        : i % 4 === 1
+          ? 'rgba(154,148,134,0.28)'
+          : i % 4 === 2
+            ? 'rgba(78,73,65,0.25)'
+            : 'rgba(94,104,70,0.12)';
+    ctx.fillRect(x, y, 3 + Math.random() * 6, 3 + Math.random() * 6);
   }
 
-  // Muddy tractor ruts & farm lane leading from north gate through yard to trailer & barn
-  ctx.strokeStyle = 'rgba(116, 94, 68, 0.52)';
+  // Main East-West tractor driveway & cross-yard ruts leading straight to East & West exits
+  ctx.strokeStyle = 'rgba(96, 82, 62, 0.48)';
   ctx.lineCap = 'round';
-  ctx.lineWidth = 44;
+  ctx.lineWidth = 52;
   ctx.beginPath();
-  ctx.moveTo(512, 865);
-  ctx.lineTo(512, 220);
-  ctx.moveTo(220, 500);
-  ctx.lineTo(800, 500);
-  ctx.moveTo(512, 500);
-  ctx.lineTo(310, 240);
-  ctx.moveTo(512, 500);
-  ctx.lineTo(750, 320);
+  ctx.moveTo(45, 420);
+  ctx.lineTo(980, 420);
+  ctx.moveTo(512, 175);
+  ctx.lineTo(512, 860);
+  ctx.moveTo(512, 420);
+  ctx.lineTo(340, 820);
+  ctx.moveTo(512, 420);
+  ctx.lineTo(720, 760);
   ctx.stroke();
 
-  // Darker tire rut lines
-  ctx.strokeStyle = 'rgba(84, 68, 48, 0.34)';
+  // Darker paired tire ruts along the main exit lane
+  ctx.strokeStyle = 'rgba(66, 56, 42, 0.36)';
   ctx.lineWidth = 10;
-  for (const off of [-14, 14]) {
+  for (const off of [-16, 16]) {
     ctx.beginPath();
-    ctx.moveTo(512 + off, 860);
-    ctx.lineTo(512 + off, 230);
+    ctx.moveTo(60, 420 + off);
+    ctx.lineTo(965, 420 + off);
     ctx.stroke();
   }
 
-  // Subtle straw scatter right in front of the Hay Barn (natural visual clue!)
-  for (let i = 0; i < 420; i++) {
-    const sx = 435 + Math.random() * 190;
-    const sy = 155 + Math.random() * 155;
-    ctx.strokeStyle = i % 2 === 0 ? 'rgba(218, 178, 72, 0.65)' : 'rgba(182, 142, 48, 0.5)';
+  // Subtle straw scatter in front of the South Hay Barn
+  for (let i = 0; i < 480; i++) {
+    const sx = 540 + Math.random() * 220;
+    const sy = 690 + Math.random() * 170;
+    ctx.strokeStyle = i % 2 === 0 ? 'rgba(208, 170, 68, 0.58)' : 'rgba(170, 134, 44, 0.45)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(sx, sy);

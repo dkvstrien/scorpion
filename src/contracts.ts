@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getTerrainHeight, REAL_SPOTS } from './terrain';
+import { FARM_YARD_CENTER, getTerrainHeight, REAL_SPOTS } from './terrain';
 import { PropKind } from './props';
 import { AttachmentType } from './scorpionModel';
 
@@ -46,44 +46,44 @@ const SAVE_KEY = 'openworld_scorpion_741_career_v1';
 export const BAVARIAN_CONTRACTS: BavarianContract[] = [
   {
     id: 'yard_shift',
-    title: '1. Wimpasing Morning Yard Shift',
-    village: 'Wimpasing',
+    title: '1. Home Farm Morning Yard Shift',
+    village: 'Home Farm',
     subtitle: 'Organize the home farmyard — stack produce pallets on the trailer, dry hay in the barn, sealed silage in the clamp.',
     recommendedTool: 'forks',
     payoutEUR: 1200,
     parSeconds: 260,
-    targetX: REAL_SPOTS.farm.x,
-    targetZ: REAL_SPOTS.farm.z,
-    targetRadius: 30,
+    targetX: FARM_YARD_CENTER.x,
+    targetZ: FARM_YARD_CENTER.z,
+    targetRadius: 28,
     requiredKind: 'any_yard',
     requiredCount: 1
   },
   {
     id: 'silage_clamp_6',
     title: '2. Silage Precision: 6 Sealed Bales',
-    village: 'Wimpasing Clamp',
+    village: 'Home Farm Clamp',
     subtitle: 'Place 6 intact wrapped silage bales inside the concrete silage clamp using the Bale Grabber — zero torn plastic!',
     recommendedTool: 'grabber',
     payoutEUR: 1600,
     parSeconds: 210,
-    targetX: REAL_SPOTS.farm.x - 10,
-    targetZ: REAL_SPOTS.farm.z - 22,
+    targetX: FARM_YARD_CENTER.x - 6.5,
+    targetZ: FARM_YARD_CENTER.z + 16.5,
     targetRadius: 11,
     requiredKind: 'yard_silage',
     requiredCount: 6,
     requireIntact: true,
-    pickupSpawn: { x: REAL_SPOTS.farm.x - 14, z: REAL_SPOTS.farm.z + 6, kind: 'silage_wrapped', count: 2 }
+    pickupSpawn: { x: FARM_YARD_CENTER.x - 6, z: FARM_YARD_CENTER.z + 4, kind: 'silage_wrapped', count: 2 }
   },
   {
     id: 'flatbed_stack_4',
     title: '3. Flatbed Weight-Limit Load',
-    village: 'Wimpasing Trailer',
+    village: 'Home Farm Trailer',
     subtitle: 'Stack 4 intact produce pallets neatly onto the flatbed trailer deck without tipping or damaging cargo.',
     recommendedTool: 'forks',
     payoutEUR: 1500,
     parSeconds: 180,
-    targetX: REAL_SPOTS.farm.x + 21,
-    targetZ: REAL_SPOTS.farm.z + 2,
+    targetX: FARM_YARD_CENTER.x + 17.5,
+    targetZ: FARM_YARD_CENTER.z + 6.5,
     targetRadius: 10,
     requiredKind: 'yard_crates',
     requiredCount: 4,

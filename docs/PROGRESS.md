@@ -181,3 +181,31 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 
 ### Final Scorecard (All 10 Items at 3/3)
 `Perf=3, First5m=3, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=3, Finish=3, Stability=3`
+
+---
+
+## Iteration 9 — Fix #1: Real Home Farm Spawn Point & Yard Layout at (-313, 909) (2026-11-24)
+
+**Goal**: Move `spots.farm`, the Home Farm yard, tool shed, silos, default spawn, first fast-travel button, and default respawn from the wrong meadow (`[-80, 770]`) to the real Wimpasing Home Farm (`lat 47.90445, lon 11.34424` → `[-312.5, 909.6]`), keeping every real LoD2 building intact and laying out the working yard directly beside the real farmhouse from LoD2 + DOP20 imagery.
+
+### Honest Baseline After External Review (before Iter 9)
+`Perf=3, First5m=2, Recog=2, Density=2, Look=1, Handling=3, Sound=3, Content=3, Finish=2, Stability=2`
+- Outside review identified: wrong spawn point (`[-80, 770]`), melting-snow ground smears in villages, HUD covering ~1/3 of `1280×720`, Sebald & Schloss fast-travel dropping onto 1/4 tires at water's edge, and overly simple identical-window boxes for buildings.
+
+### Changes Made
+- Updated `spots.farm` to `[-312.5, 909.6]` in [src/data/muensingData.json](file:///Users/danielvanstrien/Projects/Scorpion/src/data/muensingData.json) and [scripts/build-bavaria-terrain.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/build-bavaria-terrain.mjs).
+- Removed the Home Farm LoD2 exclusion box in [scripts/compile-lod2-bavaria.mjs](file:///Users/danielvanstrien/Projects/Scorpion/scripts/compile-lod2-bavaria.mjs) and recompiled `public/map/lod2_buildings.bin` + `lod2_colliders.json` so the real 12×10 m farmhouse (`-313, 909`), real 27×15 m Einfirsthof/barn (`-305, 881`), and real 31×23 m farmstead cluster (`-300, 942`) all stand intact around the yard.
+- Added `FARM_YARD_CENTER` (`-346, 926`) and `FARM_SPAWN` (`-342, 922`, heading East toward the village road exit) in [src/terrain.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/terrain.ts), refined terrain mesh subdivisions (`160×122` per quadrant), and rebuilt [src/farm.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/farm.ts) + [src/textures.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/textures.ts) with a terrain-conformed gravel yard, 5-bay North Tool Shed, South Timber Hay Barn & Silage Clamp, twin grain silos, Flatbed Trailer, Produce Bin, Firewood Rack, Scrap Skip, and stone exit pillars.
+- Updated spawn, default respawn, first fast-travel button (`Home Farm`), Yard Shift / Silage / Flatbed contracts, props, access lanes, orchard trees, and breakables across [src/tractor.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/tractor.ts), [src/props.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/props.ts), [src/contracts.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/contracts.ts), [src/realWorld.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/realWorld.ts), [src/worldDetails.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/worldDetails.ts), [src/destruction.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/destruction.ts), [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts), and [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html).
+
+### Verification & Weakest Things Observed (`.scratch/loop/9/`)
+- `npx tsc --noEmit && npm run build`: pass (`0` errors).
+- Live `agweb` (`1280×720`) screenshots inspected:
+  - `.scratch/loop/9/01_home_farm_spawn.png`: Scorpion spawns level (`0°`, `4/4` tires, `x=-342, z=922`, `633 m ü.NN`) facing East past the real farmhouse and Einfirsthof toward the village road, with Tool Shed, Produce Bin, Trailer, and Job 1 cargo immediately visible.
+  - `.scratch/loop/9/02_home_farm_overview.png`: Clean gravel yard conformed to terrain, Hay Barn & Silage Clamp facing into yard, real LoD2 village buildings all grounded.
+  - `.scratch/loop/9/03_home_farm_exit_drive.png`: Straight `W` drive exits cleanly out the stone gate onto the village street with `0` cargo damaged and `4/4` tires.
+  - `.scratch/loop/9/04_home_farm_fast_travel.png`: First fast-travel button (`Home Farm`) lands at `(-342, 922)`, `0°`, `4/4` tires.
+- **Weakest things still visible**: HUD occupies ~1/3 of screen; blurry pale grey/white DOP20 smears on village ground; buildings still read as uniform boxes with identical windows; distant Alps cones look jagged.
+
+### Honest Scores Before → After
+`3/2/2/2/1/3/3/3/2/2` → `3/2/2/2/1/3/3/3/2/2` (Recog moving up once ground & building polish land; Fix #1 complete).

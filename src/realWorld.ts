@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import {
-  FARM_CENTER,
+  FARM_YARD_CENTER,
   getShorelineX,
   getTerrainHeight,
   OSM_DATA,
@@ -655,22 +655,22 @@ export class RealMuensingWorld {
       }
     }
 
-    // Crisp farm access driveway linking Wimpasing Home Farm west to Sterzenweg & south toward Münsinger Straße!
+    // Home Farm access lanes linking the courtyard east past the farmhouse to the village road, and west to the farm lane
     villagePaved.push({
       pts: [
-        [FARM_CENTER.x, FARM_CENTER.z + 29],
-        [FARM_CENTER.x - 16, FARM_CENTER.z + 82],
-        [-207.9, 852.3]
+        [FARM_YARD_CENTER.x + 23, FARM_YARD_CENTER.z - 4],
+        [-305, 921.5],
+        [-277.6, 922.2]
       ],
-      halfWidth: 3.6
+      halfWidth: 2.7
     });
     villagePaved.push({
       pts: [
-        [FARM_CENTER.x - 30, FARM_CENTER.z + 8],
-        [-148, 808],
-        [-211.5, 843.3]
+        [FARM_YARD_CENTER.x - 21, FARM_YARD_CENTER.z - 5],
+        [-379, 914],
+        [-395.1, 904.6]
       ],
-      halfWidth: 3.4
+      halfWidth: 2.6
     });
 
     const asphaltTex = createAsphaltTexture();
@@ -1321,7 +1321,8 @@ export class RealMuensingWorld {
     }
 
     const isClearForTree = (tx: number, tz: number): boolean => {
-      if (Math.abs(tx - FARM_CENTER.x) < 54 && Math.abs(tz - FARM_CENTER.z) < 52) return false;
+      if (Math.abs(tx - FARM_YARD_CENTER.x) < 34 && Math.abs(tz - FARM_YARD_CENTER.z) < 32) return false;
+      if (tx > -330 && tx < -274 && Math.abs(tz - 922) < 10) return false;
       if (tx < getShorelineX(tz) + 4) return false;
       if (getTerrainHeight(tx, tz) < WATER_LEVEL + 0.6) return false;
       // Keep Sebald Pier corridor & Münsing central intersection cleanly framed
@@ -1510,7 +1511,7 @@ export class RealMuensingWorld {
       [ax + 4.5, az - 4.5, 0],
       [sx - 4, sz + 9, Math.PI / 2],
       [sx - 4, sz - 6, Math.PI / 2],
-      [REAL_SPOTS.wimpasing.x + 8, REAL_SPOTS.wimpasing.z - 6, 0.3]
+      [-283, 906, 0.3]
     ];
     for (const [bx, bz, rot] of benchSpots) {
       const g = new THREE.Group();
@@ -1545,10 +1546,10 @@ export class RealMuensingWorld {
       { name: 'Deutsche Post Van', color: 0xf5c414, x: REAL_SPOTS.muensingAltwirt.x + 28, z: REAL_SPOTS.muensingAltwirt.z - 18, rotY: Math.PI / 2, isVan: true },
       { name: 'Silver Bavarian Touring', color: 0xb6bec4, x: REAL_SPOTS.edeka.x - 10, z: REAL_SPOTS.edeka.z + 12, rotY: 0.1 },
       { name: 'Red Compact', color: 0xc93126, x: sx + 14, z: sz + 18, rotY: 0.15 },
-      { name: 'Forest Green SUV', color: 0x2d5e3a, x: REAL_SPOTS.wimpasing.x + 18, z: REAL_SPOTS.wimpasing.z - 12, rotY: Math.PI / 2 },
+      { name: 'Forest Green SUV', color: 0x2d5e3a, x: -275, z: 902, rotY: 0.1 },
       { name: 'Blue Sedan', color: 0x244878, x: 491, z: -1206, rotY: 0.2 },
-      // Parked right outside Wimpasing Home Farm gate so you can immediately test lifting a 1.4-ton vehicle!
-      { name: 'Old Farm Pickup', color: 0x9c3d28, x: FARM_CENTER.x + 16, z: FARM_CENTER.z + 35, rotY: 1.3 }
+      // Parked right outside the west farm lane so you can test lifting a 1.4-ton vehicle!
+      { name: 'Old Farm Pickup', color: 0x9c3d28, x: FARM_YARD_CENTER.x - 28, z: FARM_YARD_CENTER.z - 1, rotY: 1.45 }
     ];
 
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x1d2d36, roughness: 0.1, metalness: 0.55 });
@@ -1635,8 +1636,8 @@ export class RealMuensingWorld {
       [REAL_SPOTS.muensingChurch.x - 16, REAL_SPOTS.muensingChurch.z - 8],
       [REAL_SPOTS.sebaldPier.x - 2, REAL_SPOTS.sebaldPier.z + 18],
       [REAL_SPOTS.schlossAmmerland.x + 22, REAL_SPOTS.schlossAmmerland.z - 22],
-      [REAL_SPOTS.wimpasing.x + 14, REAL_SPOTS.wimpasing.z + 12],
-      [FARM_CENTER.x + 28, FARM_CENTER.z + 42]
+      [REAL_SPOTS.wimpasing.x - 42, REAL_SPOTS.wimpasing.z + 20],
+      [FARM_YARD_CENTER.x - 29, FARM_YARD_CENTER.z + 22]
     ];
     for (const [tx, tz] of treeSpots) {
       const ty = getTerrainHeight(tx, tz);
@@ -1667,8 +1668,8 @@ export class RealMuensingWorld {
       [REAL_SPOTS.muensingAltwirt.x - 8, REAL_SPOTS.muensingAltwirt.z - 18],
       [REAL_SPOTS.muensingAltwirt.x + 20, REAL_SPOTS.muensingAltwirt.z - 22],
       [REAL_SPOTS.sebaldPier.x + 8, REAL_SPOTS.sebaldPier.z + 10],
-      [REAL_SPOTS.wimpasing.x + 10, REAL_SPOTS.wimpasing.z],
-      [FARM_CENTER.x + 10, FARM_CENTER.z + 32]
+      [REAL_SPOTS.wimpasing.x + 60, REAL_SPOTS.wimpasing.z - 5],
+      [FARM_YARD_CENTER.x + 24, FARM_YARD_CENTER.z - 11]
     ];
     for (const [lx, lz] of lampSpots) {
       const ly = getTerrainHeight(lx, lz);
@@ -1712,8 +1713,8 @@ export class RealMuensingWorld {
       [REAL_SPOTS.sebaldPier.x - 4, REAL_SPOTS.sebaldPier.z + 8],
       [REAL_SPOTS.sebaldPier.x + 4, REAL_SPOTS.sebaldPier.z - 6],
       [REAL_SPOTS.schlossAmmerland.x + 18, REAL_SPOTS.schlossAmmerland.z + 4],
-      [REAL_SPOTS.wimpasing.x + 6, REAL_SPOTS.wimpasing.z + 4],
-      [REAL_SPOTS.wimpasing.x - 8, REAL_SPOTS.wimpasing.z - 6],
+      [-278, 932],
+      [-282, 888],
       [488, -1200]
     ];
 

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { FARM_CENTER, getTerrainHeight, REAL_SPOTS } from './terrain';
+import { FARM_YARD_CENTER, getTerrainHeight, REAL_SPOTS } from './terrain';
 
 export const DEMO_SITE_CENTER = { x: 165, z: 620 };
 
@@ -283,9 +283,9 @@ export class DestructionManager {
   private buildWorldBreakables(): void {
     // Roadside fences & wooden pasture gates near farms & open meadows
     const fenceSpots: [number, number, number][] = [
-      [FARM_CENTER.x + 28, FARM_CENTER.z + 34, 0.05],
-      [FARM_CENTER.x + 34, FARM_CENTER.z + 34, 0.05],
-      [FARM_CENTER.x - 28, FARM_CENTER.z + 34, -0.05],
+      [FARM_YARD_CENTER.x - 24, FARM_YARD_CENTER.z + 24, 0.05],
+      [FARM_YARD_CENTER.x - 16, FARM_YARD_CENTER.z + 28, 0.05],
+      [FARM_YARD_CENTER.x - 6, FARM_YARD_CENTER.z + 28, -0.05],
       [448, 958, -1.1],
       [458, 962, -1.1],
       [REAL_SPOTS.ried.x + 18, REAL_SPOTS.ried.z + 24, 0.4],
@@ -312,7 +312,7 @@ export class DestructionManager {
 
     // Wooden farm gates
     const gateSpots: [number, number, number][] = [
-      [FARM_CENTER.x + 42, FARM_CENTER.z + 24, Math.PI / 2],
+      [FARM_YARD_CENTER.x - 32, FARM_YARD_CENTER.z + 8, Math.PI / 2],
       [REAL_SPOTS.ried.x + 28, REAL_SPOTS.ried.z + 12, 0.3],
       [476, -1185, 0.1]
     ];
@@ -336,7 +336,7 @@ export class DestructionManager {
 
     // Stacked hay bale pyramids & cordwood piles
     const baleSpots: [number, number, number][] = [
-      [FARM_CENTER.x + 46, FARM_CENTER.z - 6, 0.4],
+      [FARM_YARD_CENTER.x - 30, FARM_YARD_CENTER.z + 22, 0.4],
       [430, 945, -0.5],
       [REAL_SPOTS.ried.x - 20, REAL_SPOTS.ried.z + 22, 0.8]
     ];
@@ -359,7 +359,7 @@ export class DestructionManager {
     }
 
     const woodSpots: [number, number, number][] = [
-      [FARM_CENTER.x - 42, FARM_CENTER.z + 18, 0.2],
+      [FARM_YARD_CENTER.x - 30, FARM_YARD_CENTER.z - 12, 0.2],
       [1318, 996, -0.3],
       [-946, 755, 1.1]
     ];
@@ -406,7 +406,7 @@ export class DestructionManager {
     }
 
     const shedSpots: [number, number, number][] = [
-      [FARM_CENTER.x + 56, FARM_CENTER.z - 22, 0.25],
+      [FARM_YARD_CENTER.x - 36, FARM_YARD_CENTER.z + 16, 0.25],
       [REAL_SPOTS.ried.x + 36, REAL_SPOTS.ried.z - 16, -0.4]
     ];
     for (const [x, z, rot] of shedSpots) {
@@ -428,7 +428,7 @@ export class DestructionManager {
     }
 
     const signSpots: [number, number, number][] = [
-      [FARM_CENTER.x - 12, FARM_CENTER.z + 36, 0.1],
+      [FARM_YARD_CENTER.x - 34, FARM_YARD_CENTER.z - 4, 0.1],
       [472, 954, -0.8],
       [1395, 1018, 0.4],
       [-972, 742, Math.PI / 2],

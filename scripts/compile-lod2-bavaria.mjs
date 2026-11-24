@@ -320,8 +320,7 @@ async function main() {
 
       // Keep only buildings inside our 3.8 km x 2.9 km playable world
       if (cx < WORLD_MIN_X + 20 || cx > WORLD_MAX_X - 20 || cz < WORLD_MIN_Z + 20 || cz > WORLD_MAX_Z - 20) continue;
-      // Skip Wimpasing Home Farmyard & our 4 custom hero landmark footprints (so zero z-fighting/doubles!)
-      if (Math.abs(cx - farmSpot[0]) < 56 && Math.abs(cz - farmSpot[1]) < 54) continue;
+      // Keep ALL real Home Farm LoD2 buildings intact! Skip only our 4 custom hero landmark footprints (zero z-fighting/doubles)
       if (Math.hypot(cx - churchSpot[0], cz - churchSpot[1]) < 24) continue;
       if (Math.hypot(cx - altwirtSpot[0], cz - altwirtSpot[1]) < 18) continue;
       if (Math.hypot(cx - schlossSpot[0], cz - schlossSpot[1]) < 46) continue;

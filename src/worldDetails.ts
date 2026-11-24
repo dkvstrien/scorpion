@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  FARM_CENTER,
+  FARM_YARD_CENTER,
   getShorelineX,
   getTerrainHeight,
   OSM_DATA,
@@ -78,7 +78,7 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
             prevPole = null;
             continue;
           }
-          if (Math.abs(px - FARM_CENTER.x) < 55 && Math.abs(pz - FARM_CENTER.z) < 52) {
+          if (Math.abs(px - FARM_YARD_CENTER.x) < 34 && Math.abs(pz - FARM_YARD_CENTER.z) < 32) {
             prevPole = null;
             continue;
           }
@@ -205,7 +205,8 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
     const bx = -960 + ((i * 317) % 2680);
     const bz = -1240 + ((i * 541) % 2480);
     if (bx < getShorelineX(bz) + 12) continue;
-    if (Math.abs(bx - FARM_CENTER.x) < 48 && Math.abs(bz - FARM_CENTER.z) < 46) continue;
+    if (Math.abs(bx - FARM_YARD_CENTER.x) < 34 && Math.abs(bz - FARM_YARD_CENTER.z) < 32) continue;
+    if (bx > -330 && bx < -274 && Math.abs(bz - 922) < 9) continue;
     bushes.push({
       x: bx,
       z: bz,
@@ -349,7 +350,7 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
     [1362, 1002],
     [1444, 1028],
     [-976, 708],
-    [-318, 916],
+    [-281, 918],
     [486, -1198]
   ];
   for (const [px, pz] of postboxSpots) {
@@ -365,7 +366,7 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
   // === 4. NEIGHBORING BAVARIAN FARM CLUTTER (NOT JUST THE HOME FARM!) ===
   // Round hay & wrapped silage bale stacks, tarped silage clamps under tires, green slurry tanks & woodpiles
   const neighborFarms: [number, number][] = [
-    [REAL_SPOTS.wimpasing.x + 28, REAL_SPOTS.wimpasing.z - 22],
+    [-175, 815],
     [REAL_SPOTS.ried.x + 22, REAL_SPOTS.ried.z + 18],
     [474, -1202], // Weipertshausen farmyard right beside the road!
     [482, 938], // Open country meadow hay bale stack along Münsinger Straße!
@@ -467,11 +468,11 @@ export function buildBavarianWorldDetails(scene: THREE.Scene): void {
 
   // === 6. BAVARIAN ORCHARD FRUIT TREES NEAR FARMS (Streuobstwiese) ===
   const orchardSpots: [number, number, number][] = [
-    [FARM_CENTER.x + 36, FARM_CENTER.z - 28, 1.0],
-    [FARM_CENTER.x + 44, FARM_CENTER.z - 22, 0.9],
-    [FARM_CENTER.x + 39, FARM_CENTER.z - 12, 1.05],
-    [FARM_CENTER.x - 42, FARM_CENTER.z - 22, 0.95],
-    [FARM_CENTER.x - 48, FARM_CENTER.z - 12, 1.1],
+    [FARM_YARD_CENTER.x - 30, FARM_YARD_CENTER.z + 12, 1.0],
+    [FARM_YARD_CENTER.x - 36, FARM_YARD_CENTER.z + 22, 0.92],
+    [FARM_YARD_CENTER.x - 24, FARM_YARD_CENTER.z + 28, 1.05],
+    [FARM_YARD_CENTER.x - 6, FARM_YARD_CENTER.z + 31, 0.95],
+    [FARM_YARD_CENTER.x + 10, FARM_YARD_CENTER.z + 31, 1.08],
     [REAL_SPOTS.ried.x - 24, REAL_SPOTS.ried.z + 18, 1.0],
     [REAL_SPOTS.ried.x - 16, REAL_SPOTS.ried.z + 26, 0.88],
     [REAL_SPOTS.ried.x + 30, REAL_SPOTS.ried.z - 14, 1.05],

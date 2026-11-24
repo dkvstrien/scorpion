@@ -6,7 +6,7 @@ import {
   createHayTexture,
   createWrappedSilageTexture
 } from './textures';
-import { FARM_CENTER, FARM_GROUND_Y, getTerrainHeight } from './terrain';
+import { FARM_GROUND_Y, FARM_YARD_CENTER, getTerrainHeight } from './terrain';
 
 export type PropKind =
   | 'hay_round'
@@ -82,47 +82,48 @@ export class PropManager {
   }
 
   public spawnInitialMess(): void {
-    const ox = FARM_CENTER.x;
+    const ox = FARM_YARD_CENTER.x;
     const oy = FARM_GROUND_Y;
-    const oz = FARM_CENTER.z;
+    const oz = FARM_YARD_CENTER.z;
 
-    // 1. Storm-fallen pine logs blocking the farmyard lanes
-    this.spawnProp('log', new THREE.Vector3(ox - 1.4, oy + 0.65, oz + 0.2), 0.12);
-    this.spawnProp('log', new THREE.Vector3(ox + 2.8, oy + 0.65, oz - 8.8), -0.22);
-    this.spawnProp('log', new THREE.Vector3(ox - 7.6, oy + 0.65, oz - 2.5), 1.35);
+    // Leave main East exit drive (z = oz - 4, x = ox + 1..ox + 24) cleanly navigable from spawn!
+    // 1. Storm-fallen pine logs on the west side near the Firewood Rack
+    this.spawnProp('log', new THREE.Vector3(ox - 8.2, oy + 0.65, oz - 8.5), 0.25);
+    this.spawnProp('log', new THREE.Vector3(ox - 5.4, oy + 0.65, oz + 3.2), -0.35);
+    this.spawnProp('log', new THREE.Vector3(ox - 10.6, oy + 0.65, oz - 2.0), 1.35);
 
-    // 2. Heavy Produce Pallets (650kg each — stack 2-high on flatbed trailer or deliver down to Lake Starnberg!)
-    this.spawnProp('crate', new THREE.Vector3(ox + 6.8, oy + 0.85, oz - 1.8), 0.35);
-    this.spawnProp('crate', new THREE.Vector3(ox + 9.4, oy + 0.85, oz + 1.4), -0.45);
-    this.spawnProp('crate', new THREE.Vector3(ox + 5.2, oy + 0.85, oz + 5.6), 0.8);
-    this.spawnProp('crate', new THREE.Vector3(ox + 10.8, oy + 0.85, oz - 8.4), 0.18);
+    // 2. Heavy Produce Pallets near the central yard & Flatbed Trailer
+    this.spawnProp('crate', new THREE.Vector3(ox + 9.4, oy + 0.85, oz + 3.8), 0.25);
+    this.spawnProp('crate', new THREE.Vector3(ox + 12.2, oy + 0.85, oz + 7.2), -0.35);
+    this.spawnProp('crate', new THREE.Vector3(ox + 6.4, oy + 0.85, oz + 7.4), 0.7);
+    this.spawnProp('crate', new THREE.Vector3(ox + 12.8, oy + 0.85, oz - 9.8), 0.18);
 
-    // 3. Dry golden hay bales (-> Red Hay Barn)
-    this.spawnProp('hay_round', new THREE.Vector3(ox - 3.8, oy + 1.0, oz - 9.2), 0.5);
-    this.spawnProp('hay_round', new THREE.Vector3(ox + 7.4, oy + 1.0, oz - 12.6), -0.4);
-    this.spawnProp('hay_square', new THREE.Vector3(ox + 1.2, oy + 0.65, oz - 13.2), 0.25);
-    this.spawnProp('hay_square', new THREE.Vector3(ox - 6.4, oy + 0.65, oz + 5.2), 1.1);
+    // 3. Dry golden hay bales near the South Hay Barn
+    this.spawnProp('hay_round', new THREE.Vector3(ox + 3.8, oy + 1.0, oz + 8.6), 0.5);
+    this.spawnProp('hay_round', new THREE.Vector3(ox + 8.6, oy + 1.0, oz + 10.4), -0.4);
+    this.spawnProp('hay_square', new THREE.Vector3(ox + 1.4, oy + 0.65, oz + 9.2), 0.25);
+    this.spawnProp('hay_square', new THREE.Vector3(ox + 5.6, oy + 0.65, oz - 9.6), 1.1);
 
-    // 4. Heavy plastic-wrapped silage bales (~850kg — handle carefully with Bale Grabber!)
-    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 10.2, oy + 0.95, oz - 10.5), 0.2);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 12.5, oy + 0.95, oz - 6.4), 0.9);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 6.2, oy + 0.95, oz - 13.8), -0.3);
-    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 11.4, oy + 0.95, oz + 3.8), 0.6);
+    // 4. Heavy plastic-wrapped silage bales near the SW Concrete Silage Clamp
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 5.2, oy + 0.95, oz + 7.8), 0.2);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 8.8, oy + 0.95, oz + 9.4), 0.9);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 2.4, oy + 0.95, oz + 10.2), -0.3);
+    this.spawnProp('silage_wrapped', new THREE.Vector3(ox - 10.4, oy + 0.95, oz + 4.8), 0.6);
 
-    // 5. Loose pumpkins rolled across the east lane
-    this.spawnProp('pumpkin', new THREE.Vector3(ox + 4.2, oy + 0.72, oz + 11.4), 0);
-    this.spawnProp('pumpkin', new THREE.Vector3(ox + 7.1, oy + 0.72, oz + 10.1), 0.5);
-    this.spawnProp('pumpkin', new THREE.Vector3(ox + 9.6, oy + 0.72, oz + 12.6), 1.2);
-    this.spawnProp('pumpkin', new THREE.Vector3(ox + 11.8, oy + 0.72, oz + 8.6), 2.1);
+    // 5. Harvest pumpkins near the NE Produce Bin (clear of main East exit driveway!)
+    this.spawnProp('pumpkin', new THREE.Vector3(ox + 8.6, oy + 0.72, oz - 11.2), 0);
+    this.spawnProp('pumpkin', new THREE.Vector3(ox + 10.8, oy + 0.72, oz - 13.4), 0.5);
+    this.spawnProp('pumpkin', new THREE.Vector3(ox + 12.6, oy + 0.72, oz - 10.6), 1.2);
+    this.spawnProp('pumpkin', new THREE.Vector3(ox + 13.2, oy + 0.72, oz - 12.8), 2.1);
 
-    // 6. Rusty oil drums & old tractor tires (-> Yellow Scrap Skip)
-    this.spawnProp('barrel', new THREE.Vector3(ox - 9.8, oy + 0.85, oz + 8.8), 0.2);
-    this.spawnProp('barrel', new THREE.Vector3(ox - 7.4, oy + 0.85, oz + 12.2), 1.1);
-    this.spawnProp('tire', new THREE.Vector3(ox - 12.8, oy + 0.45, oz + 12.8), 0.4);
-    this.spawnProp('tire', new THREE.Vector3(ox - 4.8, oy + 0.45, oz + 14.8), 0.9);
+    // 6. Rusty oil drums & old tractor tires near the West Scrap Skip
+    this.spawnProp('barrel', new THREE.Vector3(ox - 10.2, oy + 0.85, oz + 1.8), 0.2);
+    this.spawnProp('barrel', new THREE.Vector3(ox - 8.6, oy + 0.85, oz + 5.6), 1.1);
+    this.spawnProp('tire', new THREE.Vector3(ox - 12.4, oy + 0.45, oz + 7.4), 0.4);
+    this.spawnProp('tire', new THREE.Vector3(ox - 6.8, oy + 0.45, oz - 10.2), 0.9);
   }
 
-  public spawnExtraChaosWave(aroundX = FARM_CENTER.x, aroundZ = FARM_CENTER.z): void {
+  public spawnExtraChaosWave(aroundX = FARM_YARD_CENTER.x, aroundZ = FARM_YARD_CENTER.z): void {
     const kinds: PropKind[] = ['crate', 'hay_round', 'silage_wrapped', 'pumpkin', 'log', 'barrel', 'tire'];
     for (let i = 0; i < 6; i++) {
       const kind = kinds[Math.floor(Math.random() * kinds.length)];

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import {
-  FARM_CENTER,
   FARM_GROUND_Y,
+  FARM_SPAWN,
   getDrivableGroundY,
   getShorelineX,
   SEBALD_PIER,
@@ -73,8 +73,8 @@ export class ClaasScorpion {
   public chassisBody: CANNON.Body;
   public headBody: CANNON.Body;
 
-  public position = new THREE.Vector3(FARM_CENTER.x - 2, FARM_GROUND_Y, FARM_CENTER.z + 14.5);
-  public heading = 0.18;
+  public position = new THREE.Vector3(FARM_SPAWN.x, FARM_GROUND_Y, FARM_SPAWN.z);
+  public heading = FARM_SPAWN.heading;
   public speed = 0;
   public yawRate = 0;
   public steerAngle = 0;
@@ -416,7 +416,7 @@ export class ClaasScorpion {
   }
 
   public resetPosition(): void {
-    this.teleportTo(FARM_CENTER.x - 2, FARM_CENTER.z + 14.5, 0.18);
+    this.teleportTo(FARM_SPAWN.x, FARM_SPAWN.z, FARM_SPAWN.heading);
   }
 
   public releaseAll(allowMomentum = true): void {

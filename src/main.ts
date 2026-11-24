@@ -21,6 +21,8 @@ import { MiniMapMarker, MuensingMiniMap } from './minimap';
 import { createSkyEnvTexture } from './textures';
 import {
   FARM_CENTER,
+  FARM_SPAWN,
+  FARM_YARD_CENTER,
   getDrivableGroundY,
   getRealElevationMeters,
   getShorelineX,
@@ -129,8 +131,8 @@ class ScorpionGame {
   private isDragging = false;
   private lastMouseX = 0;
   private lastMouseY = 0;
-  private smoothCamPos = new THREE.Vector3(FARM_CENTER.x, 12, FARM_CENTER.z + 28);
-  private smoothLookAt = new THREE.Vector3(FARM_CENTER.x, 3, FARM_CENTER.z + 10);
+  private smoothCamPos = new THREE.Vector3(FARM_SPAWN.x - 16, 60, FARM_SPAWN.z + 4);
+  private smoothLookAt = new THREE.Vector3(FARM_SPAWN.x + 6, 52, FARM_SPAWN.z);
   private camShake = 0;
 
   // DOM Elements
@@ -224,7 +226,7 @@ class ScorpionGame {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.15, 4800);
-    this.camera.position.set(FARM_CENTER.x + 8, 12, FARM_CENTER.z + 28);
+    this.camera.position.set(FARM_SPAWN.x - 14, 58, FARM_SPAWN.z + 8);
 
     this.setupLightingAndSky();
 
@@ -852,7 +854,7 @@ class ScorpionGame {
       this.showToast(toast);
     };
     document.getElementById('btn-tp-farm')!.addEventListener('click', () => {
-      fastTravel(FARM_CENTER.x - 2, FARM_CENTER.z + 14.5, 0.18, 'Wimpasing Home Farm');
+      fastTravel(FARM_SPAWN.x, FARM_SPAWN.z, FARM_SPAWN.heading, 'Wimpasing Home Farm');
     });
     document.getElementById('btn-tp-lake')!.addEventListener('click', () => {
       // Right on Nördliche Seestraße facing west straight down Fischerei Sebald Pier over Starnberger See!
@@ -960,6 +962,7 @@ class ScorpionGame {
         this.tractor.equipTool('grapple', false);
         this.updateToolReadout();
       }
+      this.snapCameraToTractor();
     });
 
     document.getElementById('btn-help')!.addEventListener('click', () => {
@@ -1155,7 +1158,8 @@ class ScorpionGame {
     if (Math.hypot(x - REAL_SPOTS.weipertshausen.x, z - REAL_SPOTS.weipertshausen.z) < 220)
       return '🌲 Weipertshausen';
     if (Math.hypot(x - REAL_SPOTS.ried.x, z - REAL_SPOTS.ried.z) < 130) return '🌾 Ried';
-    if (Math.abs(x - FARM_CENTER.x) < 55 && Math.abs(z - FARM_CENTER.z) < 52) return '🚜 Wimpasing Home Farm';
+    if (Math.hypot(x - FARM_YARD_CENTER.x, z - FARM_YARD_CENTER.z) < 55 || Math.hypot(x - FARM_CENTER.x, z - FARM_CENTER.z) < 42)
+      return '🚜 Home Farm';
     if (Math.hypot(x - REAL_SPOTS.wimpasing.x, z - REAL_SPOTS.wimpasing.z) < 165) return '🏘️ Wimpasing';
     if (x > 160 && x < 1200) return '⛰️ Münsinger Straße (Open Country)';
     return '🏔️ Starnberger See Valley';
@@ -1644,7 +1648,7 @@ class ScorpionGame {
     const viewpoints: Record<string, { x: number; z: number; heading: number; yawOff?: number }> = {
       '01_muensing_church': { x: 1336.0, z: 993.5, heading: -Math.PI / 2 + 0.14, yawOff: 0.12 },
       '02_zum_altwirt': { x: 1435.8, z: 1055.9, heading: -0.45, yawOff: 0.15 },
-      '03_wimpasing_farm': { x: FARM_CENTER.x - 2, z: FARM_CENTER.z + 14.5, heading: 0.18, yawOff: 0.22 },
+      '03_wimpasing_farm': { x: FARM_SPAWN.x, z: FARM_SPAWN.z, heading: FARM_SPAWN.heading, yawOff: 0.16 },
       '04_ammerland_schloss': { x: -999.3, z: 832.1, heading: Math.PI / 2 + 0.18, yawOff: 0.16 },
       '05_open_country': { x: 462.9, z: 965.0, heading: -1.12, yawOff: 0.14 },
       '06_weipertshausen': { x: 496.0, z: -1189.0, heading: 0.14, yawOff: 0.16 }

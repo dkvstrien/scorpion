@@ -61,10 +61,18 @@ export const WORLD_MAX_Z = OSM_DATA.meta.maxZ;
 export const LAKE_ELEV_M = OSM_DATA.meta.lakeElevationM;
 
 export const FARM_CENTER = new THREE.Vector3(OSM_DATA.spots.farm[0], 0, OSM_DATA.spots.farm[1]);
+// Open working gravel farmyard immediately west/southwest of the real farmhouse (-312.5, 909.6), clear of all LoD2 footprints
+export const FARM_YARD_CENTER = new THREE.Vector3(OSM_DATA.spots.farm[0] - 33.5, 0, OSM_DATA.spots.farm[1] + 16.4);
+// Default Scorpion spawn & respawn in the Home Farm yard, facing east toward the farmhouse & village road exit
+export const FARM_SPAWN = {
+  x: FARM_YARD_CENTER.x + 4.0,
+  z: FARM_YARD_CENTER.z - 4.0,
+  heading: -Math.PI / 2
+};
 export const WATER_LEVEL = 0.0;
 
 export const REAL_SPOTS = {
-  farm: { x: OSM_DATA.spots.farm[0], z: OSM_DATA.spots.farm[1], label: 'Wimpasing Home Farm' },
+  farm: { x: OSM_DATA.spots.farm[0], z: OSM_DATA.spots.farm[1], label: 'Home Farm' },
   wimpasing: { x: OSM_DATA.spots.wimpasing[0], z: OSM_DATA.spots.wimpasing[1], label: 'Wimpasing' },
   sebaldPier: {
     x: OSM_DATA.spots.sebaldPier[0],
@@ -135,7 +143,7 @@ export async function initDgm1Heightmap(): Promise<void> {
   } catch (err) {
     console.warn('DGM1 binary fallback to JSON preview grid:', err);
   }
-  FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_CENTER.x, FARM_CENTER.z) - LAKE_ELEV_M);
+  FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_YARD_CENTER.x, FARM_YARD_CENTER.z) - LAKE_ELEV_M);
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
@@ -201,7 +209,7 @@ export function getRealElevationMeters(x: number, z: number): number {
 }
 
 // Initialize fallback FARM_GROUND_Y before async binary finishes
-FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_CENTER.x, FARM_CENTER.z) - LAKE_ELEV_M);
+FARM_GROUND_Y = Math.max(1.2, getRealElevationMeters(FARM_YARD_CENTER.x, FARM_YARD_CENTER.z) - LAKE_ELEV_M);
 
 /**
  * True 1:1 vertical world Y (meters above Starnberger See 584.2 m ü.NN) directly from road-graded Bavaria DGM1 LiDAR!
@@ -217,11 +225,11 @@ export function getTerrainHeight(x: number, z: number): number {
     y = y * (1 - lakeDrop) + (WATER_LEVEL - 3.8) * lakeDrop;
   }
 
-  // Flat level farmyard terrace at Wimpasing Home Farm for realistic pallet & bale stacking
-  const fdx = Math.abs(x - FARM_CENTER.x);
-  const fdz = Math.abs(z - FARM_CENTER.z);
-  if (fdx < 66 && fdz < 64) {
-    const farmFlat = (1 - smoothstep(35, 65, fdx)) * (1 - smoothstep(33, 63, fdz));
+  // Gentle level working terrace over the open Home Farm courtyard (fades out cleanly before surrounding real LoD2 buildings)
+  const fdx = Math.abs(x - FARM_YARD_CENTER.x);
+  const fdz = Math.abs(z - FARM_YARD_CENTER.z);
+  if (fdx < 30 && fdz < 27) {
+    const farmFlat = (1 - smoothstep(22, 30, fdx)) * (1 - smoothstep(19, 27, fdz));
     y = y * (1 - farmFlat) + FARM_GROUND_Y * farmFlat;
   }
 
@@ -252,8 +260,8 @@ export function getTerrainNormal(x: number, z: number, target = new THREE.Vector
 export function getSurfaceType(x: number, z: number): SurfaceType {
   const y = getTerrainHeight(x, z);
   if (y < WATER_LEVEL + 0.2) return 'water';
-  if (Math.abs(x - FARM_CENTER.x) < 30 && Math.abs(z - FARM_CENTER.z) < 28) {
-    if (Math.abs(x - FARM_CENTER.x) < 4.5 || Math.abs(z - FARM_CENTER.z) < 4.5) return 'mud';
+  if (Math.abs(x - FARM_YARD_CENTER.x) < 25 && Math.abs(z - FARM_YARD_CENTER.z) < 23) {
+    if (Math.abs(z - (FARM_YARD_CENTER.z - 4)) < 3.6) return 'mud';
     return 'gravel';
   }
   return 'grass';
@@ -294,9 +302,9 @@ export function buildRealMuensingTerrain(
     { file: './map/dop_se.jpg', minX: midX, maxX: WORLD_MAX_X, minZ: midZ, maxZ: WORLD_MAX_Z }
   ];
 
-  // Crisp 100x76 mesh per quadrant (200x152 across 3.8km x 2.9km -> ~19m quads matching road corridors cleanly!)
-  const segX = 100;
-  const segZ = 76;
+  // Crisp 160x122 mesh per quadrant (320x244 across 3.8km x 2.9km -> ~11.8m quads hugging DGM1 slopes & road corridors!)
+  const segX = 160;
+  const segZ = 122;
 
   for (const q of quads) {
     const cx = (q.minX + q.maxX) * 0.5;

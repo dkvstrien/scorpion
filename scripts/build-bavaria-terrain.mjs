@@ -478,7 +478,7 @@ async function main() {
 
   // Exact verified real 1:1 GPS spots projected directly into UTM32 meters!
   const spots = {
-    farm: utmToWorld(675420, 5308480), // Open Bavarian meadow between Wimpasing & Münsinger Straße!
+    farm: projectLatLon(47.90445, 11.34424), // Real Wimpasing Home Farm (~[-312.5, 909.6])
     wimpasing: projectLatLon(47.9043, 11.3439),
     sebaldPier: projectLatLon(47.9065, 11.3352),
     schlossAmmerland: projectLatLon(47.9052, 11.3344),
