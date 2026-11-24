@@ -41,6 +41,40 @@ import {
 type CameraMode = 'chase' | 'cab' | 'boom';
 type GameMode = 'farm' | 'freeplay';
 type TimeOfDay = 'afternoon' | 'sunset' | 'dusk' | 'morning';
+type GraphicsQuality = 'high' | 'medium' | 'low';
+
+interface GameSettings {
+  quality: GraphicsQuality;
+  volume: number; // 0..100
+  ambience: boolean;
+}
+
+const SETTINGS_KEY = 'openworld_scorpion_settings_v1';
+
+function loadSettings(): GameSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<GameSettings>;
+      return {
+        quality: p.quality === 'low' || p.quality === 'medium' || p.quality === 'high' ? p.quality : 'high',
+        volume: typeof p.volume === 'number' ? Math.max(0, Math.min(100, p.volume)) : 85,
+        ambience: typeof p.ambience === 'boolean' ? p.ambience : true
+      };
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return { quality: 'high', volume: 85, ambience: true };
+}
+
+function saveSettings(s: GameSettings): void {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 class ScorpionGame {
   private renderer: THREE.WebGLRenderer;
@@ -72,6 +106,8 @@ class ScorpionGame {
   private keys = new Set<string>();
   private prevGamepadButtons: boolean[] = [];
   private started = false;
+  private paused = false;
+  private settings: GameSettings = loadSettings();
   private mode: GameMode = 'farm';
   private timeOfDay: TimeOfDay = 'afternoon';
   private activeContractId: ContractId = 'yard_shift';
@@ -99,6 +135,7 @@ class ScorpionGame {
 
   // DOM Elements
   private startOverlay = document.getElementById('start-overlay')!;
+  private pauseOverlay = document.getElementById('pause-overlay')!;
   private hud = document.getElementById('hud')!;
   private farmPanel = document.getElementById('farm-panel')!;
   private freeplayPanel = document.getElementById('freeplay-panel')!;
@@ -345,6 +382,7 @@ class ScorpionGame {
 
     this.populateContractsUI();
     this.refreshCareerUI();
+    this.applySettings();
     this.applyTimeOfDay('afternoon');
     this.updateToolReadout();
     this.bindEvents();
@@ -480,6 +518,48 @@ class ScorpionGame {
     this.yardProgressBlock.classList.toggle('hidden', !isYard);
     this.deliveryStatusBlock.classList.toggle('hidden', isYard);
     positionWaypointBeacon(this.waypointBeacon, c.targetX, c.targetZ, !isYard && this.mode === 'farm');
+  }
+
+  private applySettings(): void {
+    const q = this.settings.quality;
+    const maxDpr = q === 'high' ? 2 : q === 'medium' ? 1.5 : 1;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
+    const shadowSize = q === 'high' ? 2048 : q === 'medium' ? 1024 : 512;
+    if (this.sunLight.shadow.mapSize.width !== shadowSize) {
+      this.sunLight.shadow.mapSize.set(shadowSize, shadowSize);
+      if (this.sunLight.shadow.map) {
+        this.sunLight.shadow.map.dispose();
+        this.sunLight.shadow.map = null;
+      }
+    }
+    for (const c of this.clouds) c.visible = q !== 'low';
+
+    this.audio.setMasterVolume(this.settings.volume / 100);
+    this.audio.setAmbienceEnabled(this.settings.ambience);
+
+    const qSel = document.getElementById('set-quality') as HTMLSelectElement | null;
+    const vRange = document.getElementById('set-volume') as HTMLInputElement | null;
+    const vVal = document.getElementById('set-volume-val');
+    const ambChk = document.getElementById('set-ambience') as HTMLInputElement | null;
+    if (qSel) qSel.value = q;
+    if (vRange) vRange.value = String(this.settings.volume);
+    if (vVal) vVal.textContent = `${this.settings.volume}%`;
+    if (ambChk) ambChk.checked = this.settings.ambience;
+  }
+
+  private setPaused(next: boolean, tab?: 'settings' | 'controls' | 'credits'): void {
+    if (!this.started) return;
+    this.paused = next;
+    this.pauseOverlay.classList.toggle('hidden', !next);
+    if (next && tab) this.showPauseTab(tab);
+  }
+
+  private showPauseTab(tab: 'settings' | 'controls' | 'credits'): void {
+    const tabs = document.querySelectorAll<HTMLButtonElement>('.pause-tab');
+    tabs.forEach((b) => b.classList.toggle('active-toggle', b.dataset.tab === tab));
+    document.getElementById('pause-pane-settings')!.classList.toggle('hidden', tab !== 'settings');
+    document.getElementById('pause-pane-controls')!.classList.toggle('hidden', tab !== 'controls');
+    document.getElementById('pause-pane-credits')!.classList.toggle('hidden', tab !== 'credits');
   }
 
   private refreshCareerUI(): void {
@@ -807,6 +887,13 @@ class ScorpionGame {
 
       if (!this.started) return;
 
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        this.setPaused(!this.paused);
+        return;
+      }
+      if (this.paused) return;
+
       if (e.code === 'Backspace') {
         e.preventDefault();
         doWinch();
@@ -876,7 +963,44 @@ class ScorpionGame {
     });
 
     document.getElementById('btn-help')!.addEventListener('click', () => {
-      this.startOverlay.classList.remove('hidden');
+      this.setPaused(!this.paused, 'settings');
+    });
+    document.getElementById('btn-pause-resume')!.addEventListener('click', () => this.setPaused(false));
+    document.querySelectorAll<HTMLButtonElement>('.pause-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.showPauseTab((btn.dataset.tab as 'settings' | 'controls' | 'credits') ?? 'settings');
+      });
+    });
+    (document.getElementById('set-quality') as HTMLSelectElement).addEventListener('change', (e) => {
+      this.settings.quality = (e.target as HTMLSelectElement).value as GraphicsQuality;
+      saveSettings(this.settings);
+      this.applySettings();
+    });
+    (document.getElementById('set-volume') as HTMLInputElement).addEventListener('input', (e) => {
+      this.settings.volume = Number((e.target as HTMLInputElement).value);
+      saveSettings(this.settings);
+      this.applySettings();
+    });
+    (document.getElementById('set-ambience') as HTMLInputElement).addEventListener('change', (e) => {
+      this.settings.ambience = (e.target as HTMLInputElement).checked;
+      saveSettings(this.settings);
+      this.applySettings();
+    });
+    document.getElementById('btn-pause-replay')!.addEventListener('click', () => {
+      this.setPaused(false);
+      document.getElementById('btn-replay-job')!.click();
+    });
+    document.getElementById('btn-pause-winch')!.addEventListener('click', () => {
+      this.setPaused(false);
+      doWinch();
+    });
+    document.getElementById('btn-pause-reset-save')!.addEventListener('click', () => {
+      this.career = { bankEUR: 500, completedIds: [], bestStars: {}, totalKm: 0, rollovers: 0 };
+      saveCareer(this.career);
+      this.contractCompletedThisRun.clear();
+      this.populateContractsUI();
+      this.refreshCareerUI();
+      this.showToast('Career save reset to €500');
     });
 
     this.btnCamera.addEventListener('click', () => this.cycleCamera());
@@ -906,6 +1030,10 @@ class ScorpionGame {
 
     document.getElementById('btn-victory-close')!.addEventListener('click', () => {
       this.victoryBanner.classList.add('hidden');
+      const idx = BAVARIAN_CONTRACTS.findIndex((c) => c.id === this.activeContractId);
+      const next = BAVARIAN_CONTRACTS[(idx + 1) % BAVARIAN_CONTRACTS.length];
+      this.selectContract(next.id, true);
+      this.showToast(`Next Job: ${next.title}`);
     });
   }
 
@@ -1426,6 +1554,10 @@ class ScorpionGame {
     const now = performance.now();
     const dt = Math.min(0.04, (now - this.lastTime) / 1000);
     this.lastTime = now;
+    if (this.paused) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
     this.elapsed += dt;
 
     const input = this.readInput();
@@ -1537,6 +1669,8 @@ class ScorpionGame {
       },
       resetDemoSite: () => this.destruction.resetDemolitionSite(),
       getDestructionStats: () => this.destruction.getBrokenCount(),
+      openPause: (tab?: 'settings' | 'controls' | 'credits') => this.setPaused(true, tab),
+      closePause: () => this.setPaused(false),
       setGear: (g: VaripowerGear) => {
         this.tractor.gear = g;
       },

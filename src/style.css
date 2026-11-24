@@ -1094,6 +1094,132 @@ kbd {
   margin-left: auto;
 }
 
+/* Compact top-left contract panel + 2-column chore list so ZERO overlap with bottom-left dashboard at 1280x720! */
+.start-card {
+  padding: 16px 22px;
+}
+.start-card h1 {
+  font-size: 1.85rem;
+  margin: 6px 0 6px;
+}
+.start-card .subtitle {
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+.start-card .mode-picker,
+.start-card .controls-grid {
+  margin-bottom: 10px;
+}
+.clipboard {
+  padding: 9px 12px;
+  width: 298px;
+  max-height: calc(100vh - 275px);
+  overflow-y: auto;
+}
+.clipboard .tidy-header {
+  margin-bottom: 5px;
+}
+.clipboard .contract-desc {
+  margin-bottom: 6px;
+  font-size: 0.69rem;
+  line-height: 1.28;
+}
+.clipboard .chore-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 5px;
+  margin: 5px 0 6px;
+}
+.clipboard .chore-item {
+  padding: 3px 6px;
+  font-size: 0.68rem;
+}
+.clipboard .damage-row {
+  padding-top: 5px;
+  font-size: 0.7rem;
+}
+
+/* Pause / Settings / Credits Modal */
+.pause-card {
+  width: min(620px, 92vw);
+  background: rgba(24, 30, 34, 0.96);
+  border: 2px solid rgba(159, 211, 46, 0.55);
+  border-radius: 20px;
+  padding: 18px 22px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  color: #eef5ec;
+}
+.pause-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.pause-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.pause-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 0.84rem;
+}
+.setting-row select {
+  background: #171c1f;
+  color: #eef5ec;
+  border: 1px solid rgba(159, 211, 46, 0.45);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+.setting-row input[type='range'] {
+  width: 170px;
+  accent-color: #9fd32e;
+}
+.setting-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: #9fd32e;
+}
+.pause-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.credits-block h4 {
+  margin: 0 0 6px;
+  color: #c8f264;
+  font-family: 'Fredoka', sans-serif;
+  font-size: 1.05rem;
+}
+.credits-block p {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  line-height: 1.48;
+  color: #d6e2d6;
+}
+.credits-block code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.76rem;
+}
+
 @media (max-width: 900px) {
   .mode-picker,
   .controls-grid {

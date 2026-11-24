@@ -150,3 +150,34 @@ Scorecard scale: 0–3 per area (`Perf` / `First5m` / `Recog` / `Density` / `Loo
 `Perf=3, First5m=2, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=3, Finish=1, Stability=2`
 
 **Next**: Iteration 8 — Finish & Final Polish (Pause menu on `Esc`, Settings for Graphics Quality / Master Volume / Ambience / Controls, Credits screen with OpenData Bayern & Bayerische Vermessungsverwaltung attribution, crisp First-5-Minutes onboarding, full stability stress test, final 6-viewpoint audit, and `docs/FINAL_REPORT.md`).
+
+---
+
+## Iteration 8 — Final Polish, Pause/Settings/Credits & Full 10/10 Scorecard Audit (2026-11-24)
+
+**Goal**: Bring First 5 Minutes, Finish, and Stability to `3/3`, eliminate any HUD overlap at `1280×720`, and run a complete end-to-end verification across load timing, all 6 fixed viewpoints, sunset/dusk, Pause/Settings/Credits, handling regression, and stability.
+
+### Changes Made
+- Added complete **Pause / Settings / Credits Modal** (`Esc` or top-right `Menu [Esc]` button) in [index.html](file:///Users/danielvanstrien/Projects/Scorpion/index.html), [src/style.css](file:///Users/danielvanstrien/Projects/Scorpion/src/style.css), and [src/main.ts](file:///Users/danielvanstrien/Projects/Scorpion/src/main.ts):
+  - Pauses physics simulation cleanly while open (`this.paused`).
+  - **Settings** (persisted in `localStorage`): Graphics Quality (`High` / `Medium` / `Low` updating shadow map resolution, DPR, and clouds live), Master Volume (`0–100%`), Area Ambience toggle, plus quick actions (`Restart Current Job`, `Recovery Winch`, `Reset Career Save`).
+  - **Controls** tab with full driving, Varipower gears, steering, camera, and boom reference.
+  - **Credits & Data** tab attributing **OpenData Bayern — Bayerische Vermessungsverwaltung (`DGM1`, `LoD2`, `DOP20`, CC BY 4.0)** and **OpenStreetMap contributors (ODbL)**.
+- Tightened Start Screen & compacted Top-Left Contracting panel (2-column chore grid + `max-height`) so there is zero HUD overlap at `1280×720`.
+- Wired Victory Banner `Next Contract` button to automatically advance to the next contract.
+
+### Final Verification & Evidence (`.scratch/loop/8/`)
+- `npx tsc --noEmit && npm run build`: clean pass (`0` errors). `public/map` = **`6.4 MB`**, total `dist/` = **`8.0 MB`**.
+- Cold load timing: **`3.54 s`** to Title Screen, **`4.54 s`** to Live Driving (`00_start_screen.png`).
+- **6 Fixed Viewpoints FPS & Grounding (`0` console errors)**:
+  - `01_muensing_church`: **`60 fps`**, `4/4` tires, `663 m ü.NN`
+  - `02_zum_altwirt`: **`60 fps`**, `4/4` tires, `662 m ü.NN`
+  - `03_wimpasing_farm`: **`61 fps`**, `4/4` tires, `632 m ü.NN`
+  - `04_ammerland_schloss`: **`60 fps`**, `4/4` tires, `593 m ü.NN`
+  - `05_open_country`: **`60 fps`**, `4/4` tires, `632 m ü.NN`
+  - `06_weipertshausen`: **`60 fps`**, `4/4` tires, `650 m ü.NN`
+- Sunset (`07_sunset_muensing.png`), Dusk (`08_dusk_ammerland.png`), Pause Settings (`09_pause_settings.png`), and Credits (`10_pause_credits.png`) verified visually.
+- Handling & Stability regression: `25 km/h` empty boom-down full-lock turn = **`4/4` tires, `1°` max roll**; demolition site run = `validPos: true`, `4/4` tires, `0` console errors.
+
+### Final Scorecard (All 10 Items at 3/3)
+`Perf=3, First5m=3, Recog=3, Density=3, Look=3, Handling=3, Sound=3, Content=3, Finish=3, Stability=3`

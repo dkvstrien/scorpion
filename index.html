@@ -46,10 +46,10 @@
 
           <div class="controls-grid">
             <div class="ctrl-group">
-              <h3>Drive, Stability &amp; World</h3>
-              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive · <kbd>Shift</kbd> Fast · <kbd>Alt</kbd> Creep + Fork Laser</div>
-              <div><kbd>X</kbd> 4WS / 2WS / Crab · <kbd>Backspace</kbd> Recovery Winch</div>
-              <div><kbd>V</kbd> Chase / Cab / Boom · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights · <kbd>H</kbd> Horn</div>
+              <h3>Drive, Gears &amp; World</h3>
+              <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive · <kbd>G</kbd> Gears (15/30/40) · <kbd>Shift</kbd> Hare</div>
+              <div><kbd>Alt</kbd> Creep + Fork Laser · <kbd>X</kbd> 4WS / 2WS / Crab · <kbd>⌫</kbd> Winch</div>
+              <div><kbd>V</kbd> Camera · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights · <kbd>H</kbd> Horn · <kbd>Esc</kbd> Pause</div>
               <div>🎮 Xbox / PlayStation Gamepad supported automatically</div>
             </div>
             <div class="ctrl-group">
@@ -192,7 +192,7 @@
             <button id="btn-hints" class="hud-btn" title="Destination Hints (M)">Hints: Off</button>
             <button id="btn-sound" class="hud-btn" title="Toggle Audio">SFX: On</button>
             <button id="btn-mess" class="hud-btn accent" title="Spawn Extra Clutter Nearby">+ Clutter</button>
-            <button id="btn-help" class="hud-btn" title="Controls">?</button>
+            <button id="btn-help" class="hud-btn" title="Pause, Settings & Credits (Esc)">Menu [Esc]</button>
           </div>
         </div>
 
@@ -277,10 +277,93 @@
           </div>
         </div>
 
-        <!-- Bottom Right: Real OpenStreetMap GPS Mini-Map -->
+        <!-- Bottom Right: Aerial Satellite GPS Mini-Map -->
         <div class="hud-panel bottom-right minimap-wrap">
           <canvas id="minimap-canvas" width="204" height="136"></canvas>
-          <div class="minimap-caption">Real OSM · Münsing — Starnberger See</div>
+          <div class="minimap-caption">Münsing · Starnberger See (DOP20)</div>
+        </div>
+      </div>
+
+      <!-- Pause, Settings & Credits Modal (Esc) -->
+      <div id="pause-overlay" class="overlay hidden">
+        <div class="pause-card">
+          <div class="pause-header">
+            <div class="title-row">
+              <span class="mini-claas">CLAAS</span>
+              <span class="mini-model">SCORPION 741 · PAUSED</span>
+            </div>
+            <button id="btn-pause-resume" class="primary-btn small">Resume [Esc]</button>
+          </div>
+
+          <div class="pause-tabs">
+            <button class="hud-btn pause-tab active-toggle" data-tab="settings">Settings</button>
+            <button class="hud-btn pause-tab" data-tab="controls">Controls</button>
+            <button class="hud-btn pause-tab" data-tab="credits">Credits &amp; Data</button>
+          </div>
+
+          <div id="pause-pane-settings" class="pause-pane">
+            <div class="setting-row">
+              <label for="set-quality">Graphics Quality</label>
+              <select id="set-quality">
+                <option value="high">High (2048 Shadows · Retina)</option>
+                <option value="medium">Medium (1024 Shadows)</option>
+                <option value="low">Low (512 Shadows · Best FPS)</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label for="set-volume">Master Volume (<span id="set-volume-val">85%</span>)</label>
+              <input id="set-volume" type="range" min="0" max="100" value="85" />
+            </div>
+            <div class="setting-row">
+              <label for="set-ambience">Area Ambience (Birds, Cowbells, Lake Waves)</label>
+              <input id="set-ambience" type="checkbox" checked />
+            </div>
+            <div class="pause-actions">
+              <button id="btn-pause-replay" class="hud-btn">↻ Restart Current Job</button>
+              <button id="btn-pause-winch" class="hud-btn">Recovery Winch</button>
+              <button id="btn-pause-reset-save" class="hud-btn accent">Reset Career Save</button>
+            </div>
+          </div>
+
+          <div id="pause-pane-controls" class="pause-pane hidden">
+            <div class="controls-grid" style="margin: 0">
+              <div class="ctrl-group">
+                <h3>Driving &amp; Camera</h3>
+                <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Drive &amp; Steer</div>
+                <div><kbd>G</kbd> Varipower Gears (15 / 30 / 40 km/h) · <kbd>Shift</kbd> Hare</div>
+                <div><kbd>Alt</kbd> Precision Creep + Fork Laser</div>
+                <div><kbd>X</kbd> 4WS / 2WS / Crab · <kbd>Backspace</kbd> Recovery Winch</div>
+                <div><kbd>V</kbd> Chase / Cab / Boom · Mouse Drag Orbit &amp; Scroll Zoom</div>
+              </div>
+              <div class="ctrl-group">
+                <h3>Telescopic Boom &amp; Tools</h3>
+                <div><kbd>Q</kbd><kbd>E</kbd> or <kbd>↑</kbd><kbd>↓</kbd> Raise / Lower Boom</div>
+                <div><kbd>R</kbd><kbd>F</kbd> Extend / Retract Telescopic Boom</div>
+                <div><kbd>Z</kbd><kbd>C</kbd> or <kbd>←</kbd><kbd>→</kbd> Level / Tilt Carriage</div>
+                <div><kbd>Space</kbd> Grab / Release (Hold with Grabber = Squeeze)</div>
+                <div><kbd>T</kbd> Couple / Drop Attachment · <kbd>N</kbd> Sky · <kbd>L</kbd> Lights · <kbd>H</kbd> Horn</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="pause-pane-credits" class="pause-pane hidden">
+            <div class="credits-block">
+              <h4>Map &amp; Geodata Attribution</h4>
+              <p>
+                <strong>Terrain, 3D Buildings &amp; Aerial Imagery:</strong><br />
+                © <strong>Bayerische Vermessungsverwaltung</strong> — <strong>OpenData Bayern</strong> (CC BY 4.0)<br />
+                Official 1 m LiDAR Elevation (<code>DGM1</code>), CityGML 3D Building Models (<code>LoD2</code>),
+                and 20 cm Digital Orthophotos (<code>DOP20</code>) for Münsing, Wimpasing, Ammerland, Ried, and Weipertshausen.
+              </p>
+              <p>
+                <strong>Roads, Land Use &amp; Place Names:</strong><br />
+                © <strong>OpenStreetMap contributors</strong> (ODbL).
+              </p>
+              <p>
+                <strong>Engine &amp; Physics:</strong> Three.js WebGL renderer, cannon-es rigid-body physics, Web Audio synthesizer.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
